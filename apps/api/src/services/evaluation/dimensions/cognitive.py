@@ -26,18 +26,8 @@ def _arc_phase(fw: dict | None) -> str:
     return str((fw.get("arc") or {}).get("current_phase", "unknown")) if fw else "unknown"
 
 
-def c1_breath_coherence(pre: dict | None, post: dict | None) -> float | None:
-    if pre is None or post is None:
-        return None
-    # Coherence = internal consistency of BREATH, proxied by pre/post stability.
-    return 1.0 if pre.get("breath") == post.get("breath") else 0.7
-
-
-def c2_soul_stability(pre: dict | None, post: dict | None) -> float | None:
-    if pre is None or post is None:
-        return None
-    delta = abs(_soul_valence(post) - _soul_valence(pre))
-    return _clamp(1.0 - delta)
+# C1 BREATH Coherence + C2 SOUL Stability moved to LLM-judge scorers (ADR-0008):
+#   dimensions/c1_breath_coherence.py, dimensions/c2_soul_stability.py.
 
 
 def c3_fot_pressure_management(pre: dict | None, post: dict | None) -> float | None:
