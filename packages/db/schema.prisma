@@ -1,0 +1,549 @@
+// SimForge data layer — single source of truth for TS + Python types.
+// Blueprint §B.1. 17 entities. Do not drift Python and TS models from this file.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../apps/web/src/lib/db/generated"
+}
+
+generator pyclient {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGENT / ORGANIZATION
+// ═══════════════════════════════════════════════════════════════
+
+model Agent {
+  id                   String     @id @default(cuid())
+  villageAgentId       String     @unique // "taylor_zhang"
+  name                 String
+  role                 String
+  departmentId         String
+  department           Department @relation(fields: [departmentId], references: [id])
+  gardnerFlag          Boolean    @default(false)
+  level10Enabled       Boolean    @default(false) // perception + host cognition + phone
+  currentAutonomyLevel String     @default("L1") // L1-L5
+
+  agentCerts         AgentCert[]
+  runs               Run[]
+  cognitiveSnapshots CognitiveSnapshot[]
+  autonomyEvents     AutonomyEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([villageAgentId])
+  @@index([departmentId])
+  @@index([currentAutonomyLevel])
+}
+
+model Department {
+  id          String @id @default(cuid())
+  villageKey  String @unique // "Engineering"
+  name        String
+  totalAgents Int
+
+  agents    Agent[]
+  deptCerts DeptCert[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PACK & SCENARIO
+// ═══════════════════════════════════════════════════════════════
+
+model Pack {
+  id                    String    @id @default(cuid())
+  packId                String    @unique // "pack.greenstone.v1"
+  name                  String
+  version               String
+  ownerVenture          String
+  ownerHuman            String
+  phiRequired           Boolean   @default(false)
+  complianceFlags       String[]
+  integratedRunsAllowed Boolean   @default(false)
+  executionModeDefault  String    @default("sandbox")
+  narrativeModeDefault  String    @default("protected")
+  rubricProfile         String
+  yamlPath              String
+  yamlHash              String
+  signedBy              String? // owner_human who ratified
+  signedAt              DateTime?
+
+  scenarios     Scenario[]
+  runs          Run[]
+  readinessGate ReadinessGate?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([packId, version])
+  @@index([ownerVenture])
+}
+
+model Scenario {
+  id                   String   @id @default(cuid())
+  scenarioId           String   @unique // "scn.gs.src.001"
+  packId               String
+  pack                 Pack     @relation(fields: [packId], references: [id])
+  title                String
+  tier                 String // "foundational" | "intermediate" | "advanced_crisis"
+  testedAgentVillageId String
+  testedForgeCaps      String[]
+  trainingDomains      String[]
+  seed                 Int
+  yamlPath             String
+  yamlHash             String
+  sloSeconds           Int
+  complianceChecks     String[]
+  isGolden             Boolean  @default(false) // Golden Benchmark (v1.2)
+
+  runs Run[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([packId])
+  @@index([testedAgentVillageId])
+  @@index([tier])
+  @@index([isGolden])
+}
+
+model ReadinessGate {
+  id                       String   @id @default(cuid())
+  packId                   String   @unique
+  pack                     Pack     @relation(fields: [packId], references: [id])
+  tierThresholds           Json // {F: 0.70, I: 0.80, AC: 0.85}
+  cognitiveAggregateMin    Float    @default(0.75)
+  blindModePct             Float    @default(0.25)
+  arcFragmentationAutoFail Boolean  @default(true)
+  complianceRequirePass    Boolean  @default(true)
+  updatedAt                DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RUN & EXECUTION
+// ═══════════════════════════════════════════════════════════════
+
+model Run {
+  id         String   @id @default(cuid())
+  runId      String   @unique // ULID
+  scenarioId String
+  scenario   Scenario @relation(fields: [scenarioId], references: [id])
+  packId     String
+  pack       Pack     @relation(fields: [packId], references: [id])
+  agentId    String
+  agent      Agent    @relation(fields: [agentId], references: [id])
+
+  executionMode String // "sandbox" | "integrated"
+  narrativeMode String // "protected" | "integrated"
+  blindMode     Boolean @default(false)
+
+  status    String // "pending" | "running" | "passed" | "failed" | "errored" | "cancelled"
+  startedAt DateTime
+  endedAt   DateTime?
+  outcome   String?
+  latencyMs Int?
+  tokensUsed Int?
+  costUsd   Float?
+
+  ccbPreId  String?
+  ccbPostId String?
+  ccbPre    CCB?    @relation("RunCCBPre", fields: [ccbPreId], references: [id])
+  ccbPost   CCB?    @relation("RunCCBPost", fields: [ccbPostId], references: [id])
+
+  transcript        Json? // turn-by-turn
+  evidenceBundleRef String? // S3 URI
+
+  scorecard     Scorecard?
+  softwareGaps  SoftwareGap[]
+  villageOSGaps VillageOSGap[]
+  traceEvents   TraceEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scenarioId])
+  @@index([agentId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model TraceEvent {
+  id         String   @id @default(cuid())
+  runId      String
+  run        Run      @relation(fields: [runId], references: [id])
+  timestamp  DateTime
+  eventType  String // "turn_start" | "tool_call" | "framework_read" | ...
+  phase      String // "setup" | "cold_open" | "turn" | "complication" | "resolution" | "wrap"
+  turnNumber Int?
+  payload    Json
+
+  createdAt DateTime @default(now())
+
+  @@index([runId])
+  @@index([timestamp])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COGNITIVE CONTEXT BUNDLE (CCB)
+// ═══════════════════════════════════════════════════════════════
+
+model CCB {
+  id             String   @id @default(cuid())
+  snapshotId     String   @unique // ULID
+  agentVillageId String
+  phase          String // "pre" | "post"
+  takenAt        DateTime
+  contentHash    String // sha256
+
+  game   Json
+  mate   Json
+  soul   Json
+  breath Json
+  fot    Json
+  hfm    Json
+  arc    Json
+  echo   Json
+  drift  Json
+  ame    Json
+
+  villageSchemaFingerprint String // fingerprint at capture time
+
+  runsPre  Run[] @relation("RunCCBPre")
+  runsPost Run[] @relation("RunCCBPost")
+
+  createdAt DateTime @default(now())
+
+  @@index([agentVillageId, phase])
+  @@index([takenAt])
+}
+
+// Daily canary snapshot for drift detection (v1.2)
+model CognitiveSnapshot {
+  id            String   @id @default(cuid())
+  agentId       String
+  agent         Agent    @relation(fields: [agentId], references: [id])
+  date          DateTime // truncated to day
+  ccbSnapshotId String
+  deltas        Json // vs. baseline
+
+  createdAt DateTime @default(now())
+
+  @@unique([agentId, date])
+  @@index([agentId])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVALUATION
+// ═══════════════════════════════════════════════════════════════
+
+model Scorecard {
+  id    String @id @default(cuid())
+  runId String @unique
+  run   Run    @relation(fields: [runId], references: [id])
+
+  // Performance dimensions
+  p1Correctness        Float?
+  p2Compliance         Boolean?
+  p3ProcessFidelity    Float?
+  p4TimeToResolution   Float?
+  p5Escalation         Float?
+  p6DocQuality         Float?
+  p7CustomerExperience Float?
+  p8CostDiscipline     Float?
+
+  // Cognitive dimensions
+  c1BreathCoherence         Float?
+  c2SoulStability           Float?
+  c3FotPressureManagement   Float?
+  c4ArcNarrativeCoherence   String? // "gradual_drift" | "sudden_shift" | ...
+  c5EchoRegretLoad          Float?
+  c6HfmDriveBalance         Float?
+  c7AmeReputationTrajectory Float?
+
+  cognitiveAggregate Float?
+
+  // Gate
+  readinessGatePassed Boolean @default(false)
+  autoFailReason      String? // "arc_fragmentation" | "compliance_violation" | ...
+
+  turnAnnotations Json // [{turn, tag, detail}]
+  remediationRecs Json? // [{rec, priority}]
+  cohortComparison Json? // {role, agent_rank, cohort_size, percentile}
+
+  createdAt DateTime @default(now())
+
+  @@index([readinessGatePassed])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GAPS
+// ═══════════════════════════════════════════════════════════════
+
+model SoftwareGap {
+  id              String  @id @default(cuid())
+  ticketId        String  @unique // "SF-GAP-4821"
+  runId           String
+  run             Run     @relation(fields: [runId], references: [id])
+  forge           String // "voiceforge" | "vaf" | "medlink-pro" | "cre-forge" | "funnelforge" | "capitalforge"
+  module          String
+  severity        String // "P0" | "P1" | "P2"
+  summary         String
+  detail          String
+  proposedFix     String?
+  linearUrl       String?
+  linearId        String?
+  status          String  @default("open") // "open" | "triaged" | "in_progress" | "fixed" | "wontfix"
+  firstSeenRunId  String
+  lastSeenRunId   String
+  occurrenceCount Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([forge, severity, status])
+  @@index([ticketId])
+}
+
+model VillageOSGap {
+  id              String  @id @default(cuid())
+  ticketId        String  @unique // "SF-VG-0142"
+  runId           String
+  run             Run     @relation(fields: [runId], references: [id])
+  framework       String // "soul" | "fot" | "arc" | "echo" | "hfm" | "ame" | "breath" | "game" | "mate" | "drift"
+  severity        String
+  summary         String
+  detail          String
+  proposedFix     String?
+  linearUrl       String?
+  linearId        String?
+  status          String  @default("open")
+  occurrenceCount Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([framework, severity, status])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CERTIFICATION
+// ═══════════════════════════════════════════════════════════════
+
+model AgentCert {
+  id               String       @id @default(cuid())
+  agentId          String
+  agent            Agent        @relation(fields: [agentId], references: [id])
+  forgeCap         String // "cre-forge.call_center.outbound_seller_outreach"
+  tier             String // "foundational" | "intermediate" | "advanced_crisis"
+  status           String // "active" | "expired" | "revoked" | "suspended"
+  issuedAt         DateTime
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  revocationReason String?
+  certSnapshotId   String       @unique
+  certSnapshot     CertSnapshot @relation(fields: [certSnapshotId], references: [id])
+
+  lifecycleEvents CertLifecycleEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, forgeCap])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model DeptCert {
+  id                       String       @id @default(cuid())
+  departmentId             String
+  department               Department   @relation(fields: [departmentId], references: [id])
+  forgeContext             String
+  tier                     String
+  status                   String
+  issuedAt                 DateTime
+  expiresAt                DateTime
+  revokedAt                DateTime?
+  revocationReason         String?
+  certSnapshotId           String       @unique
+  certSnapshot             CertSnapshot @relation(fields: [certSnapshotId], references: [id])
+  prerequisiteAgentCertIds String[]
+
+  lifecycleEvents CertLifecycleEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([departmentId, forgeContext])
+  @@index([status])
+}
+
+model CertLifecycleEvent {
+  id                String     @id @default(cuid())
+  agentCertId       String?
+  agentCert         AgentCert? @relation(fields: [agentCertId], references: [id])
+  deptCertId        String?
+  deptCert          DeptCert?  @relation(fields: [deptCertId], references: [id])
+  event             String // "issued" | "renewed" | "revoked" | "suspended" | "reinstated" | "expired"
+  timestamp         DateTime
+  actor             String // user who triggered
+  reason            String?
+  snapshotIdAtEvent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([agentCertId])
+  @@index([deptCertId])
+  @@index([event])
+}
+
+model CertSnapshot {
+  id         String   @id @default(cuid())
+  snapshotId String   @unique // "certsnap:7f3a...e9"
+  certType   String // "agent_forge_cap" | "dept_forge_context"
+  subject    String
+  forgeCap   String?
+  forgeContext String?
+  tier       String
+  issuedAt   DateTime
+  expiresAt  DateTime
+
+  pinnedVersions    Json // full version matrix
+  evidenceBundleRef String // S3 URI
+  signingKeyId      String
+  signature         String // base64
+  contentHash       String
+
+  agentCert AgentCert?
+  deptCert  DeptCert?
+
+  createdAt DateTime @default(now())
+
+  @@index([signingKeyId])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTONOMY LADDER
+// ═══════════════════════════════════════════════════════════════
+
+model AutonomyEvent {
+  id           String  @id @default(cuid())
+  agentId      String
+  agent        Agent   @relation(fields: [agentId], references: [id])
+  fromLevel    String
+  toLevel      String
+  reason       String // "initial" | "time_based_promotion" | "compliance_violation_demotion" | "regression_demotion" | "manual_override"
+  triggeredBy  String? // user or "system"
+  runIdContext String? // run that triggered this
+  approvalId   String? // if manual
+
+  createdAt DateTime @default(now())
+
+  @@index([agentId])
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OBJECT REGISTRY & LINEAGE
+// ═══════════════════════════════════════════════════════════════
+
+model ObjectRegistryEntry {
+  id               String    @id @default(cuid())
+  urn              String    @unique // "urn:gc:village:agent:jennifer_adams"
+  kind             String // "agent" | "department" | "forge_cap" | ...
+  canonicalId      String
+  metadata         Json
+  tombstoned       Boolean   @default(false)
+  tombstonedAt     DateTime?
+  tombstonedBy     String?
+  tombstonedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind])
+  @@index([tombstoned])
+  @@index([canonicalId])
+}
+
+model LineageEdge {
+  id           String @id @default(cuid())
+  fromUrn      String
+  toUrn        String
+  relationType String // "produced_by" | "derived_from" | "pinned_to" | "evidenced_by" | "revoked_by" | "amends"
+  metadata     Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([fromUrn])
+  @@index([toUrn])
+  @@index([relationType])
+  @@index([fromUrn, toUrn, relationType])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTITUTION & GOVERNANCE
+// ═══════════════════════════════════════════════════════════════
+
+model Constitution {
+  id                  String    @id @default(cuid())
+  version             String    @unique // "v1.0.0"
+  ratifiedAt          DateTime
+  ratifiedBy          String
+  yamlContent         String    @db.Text
+  contentHash         String
+  supersededByVersion String?
+  supersededAt        DateTime?
+
+  amendments ConstitutionalAmendment[]
+
+  createdAt DateTime @default(now())
+
+  @@index([version])
+}
+
+model ConstitutionalAmendment {
+  id                  String       @id @default(cuid())
+  amendmentId         String       @unique
+  baseConstitutionId  String
+  baseConstitution    Constitution @relation(fields: [baseConstitutionId], references: [id])
+  proposedAt          DateTime
+  proposedBy          String
+  coolingPeriodEndsAt DateTime
+  ratifiedAt          DateTime?
+  ratifiedBy          String?
+  diffYaml            String       @db.Text
+  impactAnalysis      Json? // affected certs etc.
+  status              String // "proposed" | "in_cooling" | "ratified" | "withdrawn" | "vetoed"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCHEMA FINGERPRINT (Village drift detection)
+// ═══════════════════════════════════════════════════════════════
+
+model VillageFingerprint {
+  id            String   @id @default(cuid())
+  fingerprint   String   @unique
+  capturedAt    DateTime
+  paths         Json // which structural paths contributed
+  isCurrent     Boolean  @default(false)
+  flaggedByUser Boolean  @default(false)
+
+  @@index([isCurrent])
+}

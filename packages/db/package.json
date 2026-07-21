@@ -1,0 +1,25 @@
+{
+  "name": "@simforge/db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SimForge Prisma schema — single source of truth for TS + Python types",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "studio": "prisma studio",
+    "seed": "tsx seed.ts",
+    "validate": "prisma validate"
+  },
+  "prisma": {
+    "schema": "schema.prisma"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0"
+  }
+}

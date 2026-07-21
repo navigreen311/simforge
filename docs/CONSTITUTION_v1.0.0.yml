@@ -1,0 +1,72 @@
+# SimForge Constitution — v1.0.0
+# The governing document for agent certification and autonomy. Ratified records
+# are stored in the Constitution table (schema §B); this YAML is the canonical
+# source seeded by scripts/seed-constitution.py.
+#
+# WEEK 1: skeleton articles. Full articles land with Phase 8 (governance).
+
+version: v1.0.0
+ratified_by: ivan
+status: draft # -> ratified on seed via scripts/seed-constitution.py
+
+preamble: >
+  SimForge governs the autonomy of Village OS agents. No agent operates in
+  production beyond the autonomy level justified by current, signed,
+  version-pinned evidence of competence. Certification is earned, revocable,
+  and auditable.
+
+articles:
+  - id: A1
+    title: Certification is evidence-bound
+    text: >
+      An AgentCert or DeptCert may only be issued when a Readiness Gate passes
+      for the pinned Pack version, and every referenced version is recorded in
+      the CertSnapshot. No pass, no cert.
+
+  - id: A2
+    title: Hard compliance and coherence floors
+    text: >
+      Any compliance violation (P2 = false) or ARC fragmentation
+      (sudden_shift / regression / fragmentation) auto-fails the gate,
+      regardless of all other dimension scores.
+
+  - id: A3
+    title: Autonomy is laddered and reversible
+    text: >
+      Agents advance L1→L5 only via the promotion criteria and are auto-demoted
+      on compliance violation, regression, cognitive alert, or unpinned upstream
+      version change.
+
+  - id: A4
+    title: Drift invalidates prior evidence
+    text: >
+      A change to the Village schema fingerprint or to any pinned upstream
+      (model, Forge, prompt, rubric, constitution) suspends affected certs
+      pending re-certification.
+
+  - id: A5
+    title: Amendment requires cooling and quorum
+    text: >
+      Constitutional amendments enter a cooling period (default 7 days), require
+      Ivan approval plus the named per-article quorum, and re-evaluate all
+      in-flight certs on ratification.
+
+  - id: A6
+    title: Human authority is reserved and audited
+    text: >
+      Cert issue/revoke/suspend, autonomy promotion/demotion, Pack ratification,
+      amendment ratification/veto, and safe-mode activation are Ivan-only and
+      recorded in the append-only audit log.
+
+  - id: A7
+    title: No real regulated data
+    text: >
+      SimForge fixtures contain only synthetic data. The Pack validator rejects
+      real SSN/DOB patterns. PHI-adjacent evidence is retained and redacted per
+      policy.
+
+amendment_quorum:
+  default: [ivan]
+  compliance_articles: [ivan, compliance_analyst]
+
+cooling_period_days: 7
