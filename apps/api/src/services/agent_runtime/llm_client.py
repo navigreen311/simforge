@@ -438,6 +438,44 @@ class CachedLLMProvider(LLMProvider):
 # ═══════════════════════════════════════════════════════════════
 
 
+# Reachability probe for `auto` mode. Cached per-process so we probe at most once per base_url —
+# never in the hot path of every judge call. A short timeout keeps a down Ollama from stalling.
+_reachable_cache: dict[str, bool] = {}
+
+
+def _ollama_reachable(base_url: str, *, timeout: float = 1.5) -> bool:
+    """True if an Ollama server answers at base_url (GET /api/tags 200). Cached per base_url."""
+    if base_url in _reachable_cache:
+        return _reachable_cache[base_url]
+    ok = False
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(f"{base_url.rstrip('/')}/api/tags", timeout=timeout) as r:
+            ok = r.status == 200
+    except Exception:  # noqa: BLE001 — any error (down, refused, timeout) = not reachable
+        ok = False
+    _reachable_cache[base_url] = ok
+    return ok
+
+
+def reset_reachability_cache() -> None:
+    """Clear the cached probe result (tests that flip reachability)."""
+    _reachable_cache.clear()
+
+
+def resolve_provider(provider: str) -> str:
+    """Resolve a provider name, expanding `auto` → ollama-if-reachable-else-stub (ADR-0023).
+
+    `auto` is the setting to use for real-signal runs: it prefers the live Ollama judge when
+    `OLLAMA_BASE_URL` answers, and falls back to the deterministic StubProvider otherwise — so the
+    same config is safe in CI (Ollama unreachable → stub → hermetic) and locally (Ollama up → real).
+    """
+    if provider == "auto":
+        return "ollama" if _ollama_reachable(settings.ollama_base_url) else "stub"
+    return provider
+
+
 def _concrete(provider: str, *, agent_model: str, judge_model: str, is_judge: bool) -> LLMProvider:
     model = judge_model if is_judge else agent_model
     if provider == "ollama":
@@ -458,19 +496,16 @@ def _concrete(provider: str, *, agent_model: str, judge_model: str, is_judge: bo
 
 
 def get_agent_llm() -> LLMProvider:
-    inner = _concrete(
-        settings.llm_provider,
-        agent_model=settings.ollama_agent_model
-        if settings.llm_provider == "ollama"
-        else settings.anthropic_agent_model,
-        judge_model="",
-        is_judge=False,
+    provider = resolve_provider(settings.llm_provider)
+    agent_model = (
+        settings.ollama_agent_model if provider == "ollama" else settings.anthropic_agent_model
     )
+    inner = _concrete(provider, agent_model=agent_model, judge_model="", is_judge=False)
     return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
 
 
 def get_judge_llm() -> LLMProvider:
-    provider = settings.llm_judge_provider
+    provider = resolve_provider(settings.llm_judge_provider)
     judge_model = (
         settings.ollama_judge_model if provider == "ollama" else settings.anthropic_judge_model
     )
