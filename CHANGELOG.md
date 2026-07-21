@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Reinstate a suspended cert by re-certification (v1.1)
+- **`reinstate_agent_cert`** — recovers a **suspended** cert (from drift or a constitution amendment) by re-certifying against the *current* version matrix: validate a fresh passing battery → build + sign a new CertSnapshot pinning the now-current Forge/constitution versions → flip the existing cert row to `active` (fresh validity, cleared revocation) → `reinstated` lifecycle event → restore one autonomy level. Updates in place, respecting `UNIQUE(agentId, forgeCap)` (the reason suspended certs must be reinstated, not re-issued). Closes the recovery gap the Drift Canary (ADR-0017) left open.
+- **Shared `_create_snapshot` helper** — `issue` + `reinstate` build/sign snapshots through one path → byte-identical canonical/signed payloads (ADR-0007).
+- **Deterministic re-issue rejection** — `issue` now rejects when an active **or suspended** cert occupies the pair (was: active only), with a "reinstate/revoke instead" message — consistent on SQLite (tests) and Postgres (was previously an undeclared-constraint gap that let SQLite create a duplicate).
+- **Router** `POST /api/certs/agent/{cert_id}/reinstate` (admin) → `IssueCertResponse`.
+- **Tests:** +2 (208 api + 5 validator) — drift→suspend→reinstate→active+autonomy-restored+signature-verifies, and reinstate-rejects-non-suspended. Existing cert/drift/governance suites still green (refactor behavior-preserving). ruff + mypy clean on touched files.
+- ADR-0020.
+
 ### Added — Jurisdiction Engine: NV-only → multi-state (v1.1)
 - **Jurisdiction registry** (`services/jurisdiction/registry.py`) — `Jurisdiction` (code/name/level/regulators/required_flags/phi_flags) per authority. **US-FED** federal baseline (`oig_sam`, `i9`; `hipaa` under PHI) applies everywhere; six states (NV/CA/TX/FL/AZ/NY) layer their regulator + required flags. Reverse flag→jurisdiction index for inference. Adding a state = one row.
 - **Engine** (`services/jurisdiction/engine.py`) — `resolve_requirements(codes, phi_required)` (federal always included), `infer_jurisdictions(flags)` (reverse-map declared flags → jurisdictions), `coverage_for_flags(...)` → `CoverageReport` (required/present/missing/extra + `satisfied`); multi-state via explicit codes; unknown code → `UnknownJurisdictionError` (404).

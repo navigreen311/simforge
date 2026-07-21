@@ -20,6 +20,11 @@ class RevokeCertRequest(BaseModel):
     reason: str
 
 
+class ReinstateCertRequest(BaseModel):
+    battery_run_ids: list[str] = Field(..., min_length=1)
+    approver_id: str
+
+
 class CertSnapshotOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

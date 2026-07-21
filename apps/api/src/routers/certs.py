@@ -15,12 +15,14 @@ from src.schemas.cert import (
     CertSnapshotOut,
     IssueAgentCertRequest,
     IssueCertResponse,
+    ReinstateCertRequest,
     RevokeCertRequest,
     VerifyResponse,
 )
 from src.services.cert import (
     CertIssuanceError,
     issue_agent_cert,
+    reinstate_agent_cert,
     revoke_agent_cert,
     verify_snapshot,
 )
@@ -101,6 +103,29 @@ async def revoke_cert(
     except CertIssuanceError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return AgentCertOut.model_validate(cert)
+
+
+@router.post(
+    "/agent/{cert_id}/reinstate",
+    response_model=IssueCertResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def reinstate_cert(
+    cert_id: str, body: ReinstateCertRequest, session: AsyncSession = Depends(get_session)
+) -> IssueCertResponse:
+    """Reinstate a suspended cert by re-certifying against the current version matrix."""
+    try:
+        issued = await reinstate_agent_cert(
+            session, cert_id, body.battery_run_ids, body.approver_id
+        )
+    except CertIssuanceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return IssueCertResponse(
+        cert=AgentCertOut.model_validate(issued.agent_cert),
+        snapshot=CertSnapshotOut.model_validate(issued.snapshot),
+        autonomy_from=issued.autonomy_from,
+        autonomy_to=issued.autonomy_to,
+    )
 
 
 # --- snapshots (mounted under /api/snapshots via a separate include) ---
