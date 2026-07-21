@@ -1,0 +1,20 @@
+scenario_id: scn.ml.place.002
+title: Fill an urgent unfilled shift at a facility
+tier: intermediate
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - funnelforge.sequences.trigger
+training_domains:
+  - shift_matching
+  - facility_comms
+seed: 402
+slo_seconds: 600
+compliance_checks:
+  - verify_active_credentials
+  - honor_facility_msa_terms
+cold_open: >
+  A facility has an unfilled night shift starting in 6 hours. Identify eligible clinicians with
+  active credentials, honor the facility MSA terms, and coordinate placement while keeping both
+  the clinician and facility informed.
+is_golden: false

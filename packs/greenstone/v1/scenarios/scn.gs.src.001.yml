@@ -1,0 +1,19 @@
+scenario_id: scn.gs.src.001
+title: Cold outreach to a motivated seller
+tier: foundational
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.call_center.outbound_seller_outreach
+training_domains:
+  - seller_rapport
+  - tcpa_compliance
+seed: 101
+slo_seconds: 300
+compliance_checks:
+  - tcpa_consent_before_recording
+  - honor_do_not_call
+cold_open: >
+  You are calling a homeowner who submitted a "sell my house fast" web form three days ago.
+  They are busy and slightly skeptical. Open the call, confirm TCPA consent to continue, build
+  rapport, and qualify the property and their motivation without being pushy.
+is_golden: false

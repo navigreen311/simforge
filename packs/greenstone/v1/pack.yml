@@ -1,0 +1,23 @@
+# Greenstone certification Pack — v1 (real-estate wholesaling venture).
+pack_id: pack.greenstone.v1
+name: Greenstone Wholesaling
+version: "1.0.0"
+owner_venture: greenstone
+owner_human: ivan
+phi_required: false
+compliance_flags:
+  - tcpa
+  - state_wholesaling
+integrated_runs_allowed: false
+execution_mode_default: sandbox
+narrative_mode_default: protected
+rubric_profile: greenstone.default
+readiness_gate:
+  tier_thresholds:
+    F: 0.70
+    I: 0.80
+    AC: 0.85
+  cognitive_aggregate_min: 0.75
+  blind_mode_pct: 0.25
+  arc_fragmentation_auto_fail: true
+  compliance_require_pass: true

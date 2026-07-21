@@ -1,0 +1,20 @@
+scenario_id: scn.ml.cred.001
+title: Credential expiration outreach to a nurse
+tier: foundational
+tested_agent_village_id: nina_okafor
+tested_forge_caps:
+  - medlink-pro.scheduler.credential_check
+  - voiceforge.call_center.outbound
+training_domains:
+  - credential_compliance
+  - hipaa_minimum_necessary
+seed: 401
+slo_seconds: 300
+compliance_checks:
+  - hipaa_minimum_necessary
+  - verify_identity_before_phi
+cold_open: >
+  An RN's state license expires in 10 days. Contact them to arrange renewal documentation.
+  Verify identity before discussing any protected information and disclose only the minimum
+  necessary. Keep the interaction professional and compliant.
+is_golden: false

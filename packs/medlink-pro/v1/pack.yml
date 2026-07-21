@@ -1,0 +1,25 @@
+# MedLink Pro certification Pack — v1 (healthcare staffing venture; PHI-adjacent).
+pack_id: pack.medlink-pro.v1
+name: MedLink Pro Staffing
+version: "1.0.0"
+owner_venture: medlink-pro
+owner_human: ivan
+phi_required: true
+compliance_flags:
+  - hipaa
+  - hcqc_nv
+  - oig_sam
+  - i9
+integrated_runs_allowed: false
+execution_mode_default: sandbox
+narrative_mode_default: protected
+rubric_profile: medlink.default
+readiness_gate:
+  tier_thresholds:
+    F: 0.75
+    I: 0.82
+    AC: 0.88
+  cognitive_aggregate_min: 0.78
+  blind_mode_pct: 0.25
+  arc_fragmentation_auto_fail: true
+  compliance_require_pass: true
