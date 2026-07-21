@@ -2,6 +2,8 @@
 
 from src.models.agent import Agent
 from src.models.base import Base
+from src.models.ccb import CCB
 from src.models.department import Department
+from src.models.village_fingerprint import VillageFingerprint
 
-__all__ = ["Base", "Agent", "Department"]
+__all__ = ["Base", "Agent", "Department", "CCB", "VillageFingerprint"]
