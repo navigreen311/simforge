@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Real Clerk JWT auth + production Ed25519 signer (v1.1)
+- **Real Clerk verification** (`AUTH_MODE=clerk`) — `auth/clerk.py` verifies a real Clerk RS256 JWT (PyJWT + cryptography; added dep `pyjwt[crypto]`): Bearer parse → resolve signing key → verify signature + `exp`/`iat` (+ optional `iss`/`aud`). Key from `CLERK_JWKS_JSON` (static, offline/test) or `CLERK_JWKS_URL` (live JWKS, cached). `auth/roles.py` maps `roles`/`public_metadata.roles`/`org_role` claims → SimForge roles. `get_current_principal` dispatches on `AUTH_MODE` (dev-bypass default unchanged); `require_role`/call sites untouched.
+- **Production signer** (`HSM_PROVIDER=file`) — `FileEd25519Signer` loads an **existing** Ed25519 key from a secret-injected PEM (`SIMFORGE_SIGNING_PRIVATE_KEY_PEM`) or a path and **never auto-generates** (raises `SignerConfigError` if absent), so a misconfigured prod deploy fails loudly instead of minting an untrusted key. `get_signer` dispatches on `HSM_PROVIDER` (stub|file|yubihsm|cloudhsm); yubihsm/cloudhsm still raise (need vendor SDK + creds). `reset_signer_cache()` for tests.
+- Defaults unchanged (`AUTH_MODE=dev-bypass` + `HSM_PROVIDER=stub`) → dev/CI stay offline + deterministic.
+- **Tests:** +10 (192 api + 5 validator) — Clerk verify (valid token→principal+roles, expired/wrong-issuer/unknown-key/malformed→401, role-claim shapes) + prod signer (injected-PEM round-trip, require-existing-key, `get_signer` file dispatch, unknown-provider raises). ruff + mypy clean on touched files.
+- **Verified live:** `AUTH_MODE=clerk` app → no/garbage token 401, valid self-issued RS256 token 200. ADR-0018.
+
 ### Added — Drift Canary: Forge version drift → auto-suspend (v1.1)
 - **Real Forge-version pin at issuance** — `issue_agent_cert` now pins `forge_versions={forge: await get_current_version()}` (was the placeholder `"sandbox.dev"`), so a cert is bound to the actual Forge version its battery ran against. Falls back to `"{forge}.unknown"` if the lookup errors (issuance never fails on a Forge hiccup).
 - **Drift Canary** (`services/drift/canary.py`) — `scan_forge_drift` compares every active cert's pinned Forge version against the Forge's current `get_current_version()`; on drift it auto-suspends the cert (status `suspended` + lifecycle event) and defensively demotes the agent one autonomy level, mirroring the constitution-amendment auto-suspend. Versions cached per scan (one hit per Forge). An **unreachable** Forge is reported but never suspended (a transient outage must not knock out certs).
