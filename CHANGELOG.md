@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Jurisdiction Engine: NV-only → multi-state (v1.1)
+- **Jurisdiction registry** (`services/jurisdiction/registry.py`) — `Jurisdiction` (code/name/level/regulators/required_flags/phi_flags) per authority. **US-FED** federal baseline (`oig_sam`, `i9`; `hipaa` under PHI) applies everywhere; six states (NV/CA/TX/FL/AZ/NY) layer their regulator + required flags. Reverse flag→jurisdiction index for inference. Adding a state = one row.
+- **Engine** (`services/jurisdiction/engine.py`) — `resolve_requirements(codes, phi_required)` (federal always included), `infer_jurisdictions(flags)` (reverse-map declared flags → jurisdictions), `coverage_for_flags(...)` → `CoverageReport` (required/present/missing/extra + `satisfied`); multi-state via explicit codes; unknown code → `UnknownJurisdictionError` (404).
+- **Router** `/api/jurisdictions` — list, `{code}/requirements`, `POST /coverage`, and `GET /coverage/pack/{pack_id}` (infer a pack's jurisdictions from its `complianceFlags`+`phiRequired` and report gaps). No Prisma/pack-schema change.
+- **Tests:** +14 (206 api + 5 validator) — federal baseline, NV/CA/multi-state requirements, inference, coverage satisfied/missing/extra, unknown→raise, and the router incl. real-pack coverage. ruff + mypy clean on touched files.
+- **Verified live (Postgres 17):** 7 jurisdictions (was NV-only); `pack.medlink-pro.v1` → satisfied `[US-FED, US-NV]`; NV-only flags → missing `[oig_sam, i9, hipaa]`; NV+CA additionally requires `cdph_ca`+`ccpa`. ADR-0019.
+
 ### Added — Real Clerk JWT auth + production Ed25519 signer (v1.1)
 - **Real Clerk verification** (`AUTH_MODE=clerk`) — `auth/clerk.py` verifies a real Clerk RS256 JWT (PyJWT + cryptography; added dep `pyjwt[crypto]`): Bearer parse → resolve signing key → verify signature + `exp`/`iat` (+ optional `iss`/`aud`). Key from `CLERK_JWKS_JSON` (static, offline/test) or `CLERK_JWKS_URL` (live JWKS, cached). `auth/roles.py` maps `roles`/`public_metadata.roles`/`org_role` claims → SimForge roles. `get_current_principal` dispatches on `AUTH_MODE` (dev-bypass default unchanged); `require_role`/call sites untouched.
 - **Production signer** (`HSM_PROVIDER=file`) — `FileEd25519Signer` loads an **existing** Ed25519 key from a secret-injected PEM (`SIMFORGE_SIGNING_PRIVATE_KEY_PEM`) or a path and **never auto-generates** (raises `SignerConfigError` if absent), so a misconfigured prod deploy fails loudly instead of minting an untrusted key. `get_signer` dispatches on `HSM_PROVIDER` (stub|file|yubihsm|cloudhsm); yubihsm/cloudhsm still raise (need vendor SDK + creds). `reset_signer_cache()` for tests.
