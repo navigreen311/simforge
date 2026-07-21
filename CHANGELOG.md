@@ -4,6 +4,15 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Phase 8 (Governance & Object Registry / Lineage)
+- **Governance** (`services/governance`) — constitution lifecycle + **amendment workflow** (propose → cooling period → ratify/withdraw/veto); ratification bumps the version, supersedes the prior, and **auto-suspends certs pinned to the old constitution**; impact analysis (affected-cert count); in-process **safe-mode** flag.
+- **Object Registry + Lineage** (`services/registry`) — URN scheme (`urn:gc:village:<kind>:<id>`), register/resolve/tombstone, directed lineage edges + BFS path + neighborhood subgraph. Cert issuance now **emits lineage** (`produced_by`/`derived_from`/`pinned_to`/`evidenced_by`).
+- **Models:** Constitution, ConstitutionalAmendment, ObjectRegistryEntry, LineageEdge.
+- **Endpoints:** `/api/constitution/*` (current/version/history/amendments/safe-mode), `/api/registry/*` (urn/kind/register/tombstone), `/api/lineage/*` (from/to/path/subgraph).
+- **Frontend:** Constitution + amendments page, Lineage explorer; sidebar enabled. **Script:** `scripts/seed-constitution.py`.
+- **Tests:** 7 new (66 api + 5 validator) — URN/lineage path+subgraph, constitution ratify/current, amendment cooling→ratify→supersede, cert-issuance-emits-lineage. ruff clean.
+- **Verified live:** amendment ratified → v1.0.0→v1.0.1, 2 dependent certs auto-suspended.
+
 ### Added — Phase 7 (Certification, signing & autonomy ladder)
 - **Signing** (`services/cert/signer.py`) — `Signer` ABC + Ed25519 **StubSigner** (dev; generates/persists a keypair); HSM providers drop in behind the ABC.
 - **CertSnapshot** (`snapshot.py`) — version-pinned payload with a stable canonical encoding; `content_hash` + signature.

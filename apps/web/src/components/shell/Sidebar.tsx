@@ -10,7 +10,8 @@ const NAV: Array<{ href: string; label: string; ready: boolean }> = [
   { href: "/dashboard/departments", label: "Departments", ready: false },
   { href: "/dashboard/certs", label: "Certifications", ready: true },
   { href: "/dashboard/gaps/software", label: "Gaps", ready: true },
-  { href: "/dashboard/constitution", label: "Constitution", ready: false },
+  { href: "/dashboard/constitution", label: "Constitution", ready: true },
+  { href: "/dashboard/lineage", label: "Lineage", ready: true },
 ];
 
 export function Sidebar() {
