@@ -25,11 +25,15 @@ SimForge orchestrates systems absent from local dev: Village OS filesystem, 6 Fo
 **ASSUMPTION:** no 3.11-only behavior is required. **To change:** install 3.11 and pin via `pyproject.toml` `requires-python`.
 **Fact-check:** verify `prisma-client-py` supports 3.12 at pin time; if not, fall back to raw async SQLAlchemy against the same Prisma-migrated schema.
 
-## ADR-0003 — Prisma as schema source of truth for both TS and Python
-**Status:** Accepted (from blueprint §A.4).
+## ADR-0003 — Prisma = schema/migrations/TS-types; **SQLAlchemy async = Python runtime**
+**Status:** Accepted (2026-07-20, revised in Phase 1).
 
-One `schema.prisma` drives TS (`prisma-client-js`) and Python (`prisma-client-py`). Migrations via Prisma in dev/staging/prod; Alembic reserved for data/backfill migrations Prisma can't express.
-**Fact-check:** `prisma-client-py` maturity for async on 3.12; if it blocks, SQLAlchemy models generated/maintained against the same DB — schema.prisma stays canonical.
+`schema.prisma` is the single source of truth for the datamodel, migrations (`prisma migrate`), and the TS client (`prisma-client-js`). For the **Python runtime we use async SQLAlchemy 2.0**, with ORM models mapped explicitly to Prisma's table/column names (PascalCase tables, camelCase columns).
+
+**Why not `prisma-client-py`:** maturity risk on Python 3.12 + extra toolchain (node generator) with no upside for our read-heavy API. SQLAlchemy async (asyncpg) is battle-tested and matches the blueprint's `db.py # async SQLAlchemy engine`.
+**Cost:** Python models must be kept in sync with `schema.prisma` by hand. Mitigation: a `contract` test asserts model↔DB column parity (Phase 9); the `pyclient` generator stays in the schema (commented intent) for a future revisit.
+**Generation discipline:** never run bare `prisma generate` (it would invoke the unused `pyclient` generator). Use `prisma migrate dev --skip-generate` then `prisma generate --generator client`.
+**Local infra:** dev runs against **native Postgres 17 + Memurai** (already on :5432/:6379); Docker is not installed here, so `docker-compose` is the documented alt, not the dev path used.
 
 ## ADR-0004 — Vertical-slice build order, spine-first
 **Status:** Accepted (2026-07-20).

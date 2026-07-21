@@ -5,7 +5,7 @@
 // WEEK 1: currently a skeleton that seeds departments + a few agents so the app boots.
 // Full scenario/pack seeding lands with the Pack ingestion feature (see docs/ROADMAP.md, Phase 3).
 
-import { PrismaClient } from "./generated";
+import { PrismaClient } from "../../apps/web/src/lib/db/generated";
 
 const prisma = new PrismaClient();
 
