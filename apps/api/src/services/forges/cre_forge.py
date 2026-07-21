@@ -50,6 +50,10 @@ class LocalCREForgeAdapter(ForgeAdapter):
         deal = self.engine.create_deal(tenant_id, fault.module)
         self.engine.inject_fault(tenant_id, deal.deal_id, fault.fault_type)
 
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        # The deal (an assignment) is processed; any title/lien/assignment fault surfaces.
+        return await self.create_and_process(tenant_id, "assignment", fault_type)
+
     # -- deal operations (used by the mock world) -------------------------
 
     async def create_and_process(

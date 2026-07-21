@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
 
 import yaml
 from sqlalchemy import select
@@ -23,14 +22,8 @@ from src.models.pack import Pack, Scenario
 from src.models.run import Run, TraceEvent
 from src.services.agent_runtime.llm_client import LLMProvider, get_llm_provider
 from src.services.agent_runtime.runtime import AgentRuntime
-from src.services.forges import Fault, FaultType, get_forge_adapter
-from src.services.forges.capitalforge import LocalCapitalForgeAdapter
-from src.services.forges.cre_forge import LocalCREForgeAdapter
-from src.services.forges.funnelforge import LocalFunnelForgeAdapter
-from src.services.forges.medlink_pro import LocalMedLinkProAdapter
+from src.services.forges import FaultType, get_forge_adapter
 from src.services.forges.registry import forge_of_cap
-from src.services.forges.visionaudioforge import LocalVAFAdapter
-from src.services.forges.voiceforge import LocalVoiceForgeAdapter
 from src.services.mock_world.world import MockWorld
 from src.services.scenario_engine.complications import ComplicationInjector
 from src.services.scenario_engine.runner import ScenarioRunner
@@ -39,13 +32,42 @@ from src.services.village.ccb_store import capture_ccb
 from src.services.village.reader import VillageReader, VillageReaderError
 from src.utils.time import utcnow
 
-# Deterministic fault per CapitalForge bank module.
-_BANK_FAULT = {
-    "emd": (FaultType.FRAUD_FLAG, "P1", "EMD release held pending fraud review"),
-    "wire": (FaultType.NSF, "P0", "Wire failed: insufficient funds"),
-    "bank": (FaultType.DECLINATION, "P1", "Credit application declined"),
-    "deals": (FaultType.DECLINATION, "P1", "Financing declined for the deal"),
+# Which fault to inject when exercising a forge cap (test policy lives here; how to exercise
+# lives in each adapter's `exercise`). Keyed forge → module → fault_type, with a per-forge
+# default for modules not listed. This is the runner's only forge-specific knowledge now — the
+# adapter (Local or HTTP, per FORGE_MODE) does the rest through the uniform `exercise` op.
+_FORGE_MODULE_FAULT: dict[str, dict[str, str]] = {
+    "capitalforge": {
+        "emd": FaultType.FRAUD_FLAG,
+        "wire": FaultType.NSF,
+        "bank": FaultType.DECLINATION,
+        "deals": FaultType.DECLINATION,
+    },
+    "medlink-pro": {
+        "scheduler": FaultType.SHIFT_DOUBLE_BOOKED,
+        "compliance": FaultType.CREDENTIAL_EXPIRED_UNFLAGGED,
+        "clinician": FaultType.CREDENTIAL_EXPIRED_UNFLAGGED,
+    },
+    "funnelforge": {
+        "leads": FaultType.WEBHOOK_DROPPED,
+        "campaigns": FaultType.CAMPAIGN_TO_UNSUBSCRIBED,
+        "sequences": FaultType.SEQUENCE_MISFIRE,
+        "segments": FaultType.SEGMENT_STALE,
+    },
 }
+_FORGE_DEFAULT_FAULT: dict[str, str] = {
+    "capitalforge": FaultType.DECLINATION,
+    "vaf": FaultType.FORGED_SIGNATURE,
+    "voiceforge": FaultType.DROPPED_CALL,
+    "cre-forge": FaultType.TITLE_DEFECT,
+    "medlink-pro": FaultType.UI_BLOCKING_MODAL,
+    "funnelforge": FaultType.WEBHOOK_DROPPED,
+}
+
+
+def _pick_fault(forge: str, module: str) -> str | None:
+    by_module = _FORGE_MODULE_FAULT.get(forge, {})
+    return by_module.get(module) or _FORGE_DEFAULT_FAULT.get(forge)
 
 
 def _emit_forge_trace(state, forge: str, module: str, cap: str, result: dict) -> None:
@@ -79,135 +101,35 @@ def _emit_forge_trace(state, forge: str, module: str, cap: str, result: dict) ->
         )
 
 
-async def _run_capitalforge(state, caps, run_id: str, inject: bool) -> None:
-    # Registry is the swap point (Local ↔ real HTTP); the bank ops are forge-specific.
-    adapter = cast(LocalCapitalForgeAdapter, get_forge_adapter("capitalforge"))
-    tenant = await adapter.provision_sandbox_tenant(run_id)
+def _group_caps_by_forge(caps: list[str]) -> dict[str, list[str]]:
+    """Group tested caps by forge, preserving first-appearance order (deterministic)."""
+    by_forge: dict[str, list[str]] = {}
     for cap in caps:
-        module = cap.split(".")[1] if "." in cap else "bank"
-        if inject and module in _BANK_FAULT:
-            ftype, sev, detail = _BANK_FAULT[module]
-            await adapter.inject_fault(tenant.tenant_id, Fault(ftype, sev, detail, module))
-        if module == "emd":
-            result = await adapter.emd_release(tenant.tenant_id, 10_000.0)
-        elif module == "wire":
-            result = await adapter.wire(tenant.tenant_id, 300_000.0)
-        else:
-            result = await adapter.apply(tenant.tenant_id, 200_000.0)
-        _emit_forge_trace(state, "capitalforge", module, cap, result)
-    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-
-
-async def _run_vaf(state, caps, run_id: str, inject: bool) -> None:
-    # Registry is the swap point (Local ↔ real HTTP); the doc ops are forge-specific.
-    adapter = cast(LocalVAFAdapter, get_forge_adapter("vaf"))
-    tenant = await adapter.provision_sandbox_tenant(run_id)
-    for cap in caps:
-        module = cap.split(".")[1] if "." in cap else "doc_vault"
-        # A retrieved document may be forged/expired/revoked — VAF's OCR surfaces it.
-        fault_type = FaultType.FORGED_SIGNATURE if inject else None
-        result = await adapter.generate_and_extract(tenant.tenant_id, "title_report", fault_type)
-        _emit_forge_trace(state, "vaf", module, cap, result)
-    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-
-
-async def _run_voiceforge(state, caps, run_id: str, inject: bool) -> None:
-    # Registry is the swap point (Local ↔ real HTTP/WS); the call ops are forge-specific.
-    adapter = cast(LocalVoiceForgeAdapter, get_forge_adapter("voiceforge"))
-    tenant = await adapter.provision_sandbox_tenant(run_id)
-    for cap in caps:
-        parts = cap.split(".")
-        module = parts[1] if len(parts) > 1 else "call_center"
-        direction = parts[2] if len(parts) > 2 else "inbound"
-        # A handled call may drop, hit dead air, misroute, or miss a disclosure — seen on handle.
-        fault_type = FaultType.DROPPED_CALL if inject else None
-        result = await adapter.place_and_handle(tenant.tenant_id, direction, fault_type)
-        _emit_forge_trace(state, "voiceforge", module, cap, result)
-    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-
-
-async def _run_cre_forge(state, caps, run_id: str, inject: bool) -> None:
-    # Registry is the swap point (Local ↔ real HTTP); the deal ops are forge-specific.
-    adapter = cast(LocalCREForgeAdapter, get_forge_adapter("cre-forge"))
-    tenant = await adapter.provision_sandbox_tenant(run_id)
-    for cap in caps:
-        module = cap.split(".")[1] if "." in cap else "deals"
-        # A processed deal may hit a title defect, an undisclosed lien, or a blocked assignment.
-        fault_type = FaultType.TITLE_DEFECT if inject else None
-        result = await adapter.create_and_process(tenant.tenant_id, "assignment", fault_type)
-        _emit_forge_trace(state, "cre-forge", module, cap, result)
-    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-
-
-# Deterministic fault per medlink-pro console module (compliance/safety faults are critical).
-_CONSOLE_FAULT = {
-    "scheduler": FaultType.SHIFT_DOUBLE_BOOKED,
-    "compliance": FaultType.CREDENTIAL_EXPIRED_UNFLAGGED,
-    "clinician": FaultType.CREDENTIAL_EXPIRED_UNFLAGGED,
-}
-
-
-async def _run_medlink_pro(state, caps, run_id: str, inject: bool) -> None:
-    # Registry is the swap point (Local ↔ real HTTP); the console ops are forge-specific.
-    adapter = cast(LocalMedLinkProAdapter, get_forge_adapter("medlink-pro"))
-    tenant = await adapter.provision_sandbox_tenant(run_id)
-    for cap in caps:
-        module = cap.split(".")[1] if "." in cap else "scheduler"
-        # A console task may hit an unflagged expired cred, a double-booked shift, or a UI block.
-        fault_type = _CONSOLE_FAULT.get(module, FaultType.UI_BLOCKING_MODAL) if inject else None
-        result = await adapter.start_and_run(tenant.tenant_id, module, fault_type)
-        _emit_forge_trace(state, "medlink-pro", module, cap, result)
-    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-
-
-# Deterministic fault per funnelforge flow module (delivery/compliance faults are critical).
-_FUNNEL_FAULT = {
-    "leads": FaultType.WEBHOOK_DROPPED,
-    "campaigns": FaultType.CAMPAIGN_TO_UNSUBSCRIBED,
-    "sequences": FaultType.SEQUENCE_MISFIRE,
-    "segments": FaultType.SEGMENT_STALE,
-}
-
-
-async def _run_funnelforge(state, caps, run_id: str, inject: bool) -> None:
-    # Registry is the swap point (Local ↔ real HTTP/webhooks); the flow ops are forge-specific.
-    adapter = cast(LocalFunnelForgeAdapter, get_forge_adapter("funnelforge"))
-    tenant = await adapter.provision_sandbox_tenant(run_id)
-    for cap in caps:
-        module = cap.split(".")[1] if "." in cap else "sequences"
-        # A triggered flow may drop a webhook, misfire a step, or message an unsubscribed lead.
-        fault_type = _FUNNEL_FAULT.get(module, FaultType.WEBHOOK_DROPPED) if inject else None
-        result = await adapter.trigger_and_run(tenant.tenant_id, module, fault_type)
-        _emit_forge_trace(state, "funnelforge", module, cap, result)
-    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+        by_forge.setdefault(forge_of_cap(cap), []).append(cap)
+    return by_forge
 
 
 async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
-    """Provision Forge sandbox tenants for the tested caps, run ops, record trace events.
+    """Provision each tested Forge's sandbox tenant, exercise the tested caps, record trace events.
 
-    A fault is injected deterministically (advanced-crisis tier OR even seed) so faults →
-    Software Gaps are exercised; real sandbox faults come from the live Forge. Sandbox-isolated:
-    no Village writes."""
-    caps = scenario.testedForgeCaps or []
+    Forge-agnostic and mode-agnostic: every forge is driven through the uniform `exercise` op, so
+    the same loop works whether the resolved adapter is Local (in-process engine) or HTTP (real
+    sandbox, per FORGE_MODE — ADR-0016). A fault is injected deterministically (advanced-crisis
+    tier OR even seed) so faults → Software Gaps are exercised. Sandbox-isolated: no Village
+    writes."""
     inject = scenario.tier == "advanced_crisis" or scenario.seed % 2 == 0
-    cf = [c for c in caps if forge_of_cap(c) == "capitalforge"]
-    vaf = [c for c in caps if forge_of_cap(c) == "vaf"]
-    voice = [c for c in caps if forge_of_cap(c) == "voiceforge"]
-    cre = [c for c in caps if forge_of_cap(c) == "cre-forge"]
-    mlp = [c for c in caps if forge_of_cap(c) == "medlink-pro"]
-    ff = [c for c in caps if forge_of_cap(c) == "funnelforge"]
-    if cf:
-        await _run_capitalforge(state, cf, run_id, inject)
-    if vaf:
-        await _run_vaf(state, vaf, run_id, inject)
-    if voice:
-        await _run_voiceforge(state, voice, run_id, inject)
-    if cre:
-        await _run_cre_forge(state, cre, run_id, inject)
-    if mlp:
-        await _run_medlink_pro(state, mlp, run_id, inject)
-    if ff:
-        await _run_funnelforge(state, ff, run_id, inject)
+    for forge, caps in _group_caps_by_forge(scenario.testedForgeCaps or []).items():
+        adapter = get_forge_adapter(forge)
+        try:
+            tenant = await adapter.provision_sandbox_tenant(run_id)
+        except NotImplementedError:
+            continue  # unknown forge (Null adapter) — nothing to exercise
+        for cap in caps:
+            module = cap.split(".")[1] if "." in cap else "core"
+            fault_type = _pick_fault(forge, module) if inject else None
+            result = await adapter.exercise(tenant.tenant_id, cap, fault_type)
+            _emit_forge_trace(state, forge, module, cap, result)
+        await adapter.teardown_sandbox_tenant(tenant.tenant_id)
 
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}

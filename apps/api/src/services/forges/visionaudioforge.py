@@ -50,6 +50,10 @@ class LocalVAFAdapter(ForgeAdapter):
         doc = self.engine.generate_doc(tenant_id, fault.module)
         self.engine.inject_fault(tenant_id, doc.doc_id, fault.fault_type)
 
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        # A retrieved document (a title report for the deal) is OCR'd; any fault surfaces.
+        return await self.generate_and_extract(tenant_id, "title_report", fault_type)
+
     # -- doc operations (used by the mock world) --------------------------
 
     async def generate_and_extract(

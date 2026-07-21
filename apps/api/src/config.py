@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     # Packs
     packs_root: str = Field(default="./packs", alias="PACKS_ROOT")
 
+    # Forge sandboxes (ADR-0016). Default "local" = in-process engines (deterministic/offline,
+    # keeps CI hermetic). "http" swaps to real HTTP-backed sandboxes for any forge that has a URL
+    # configured in FORGE_SANDBOX_URLS (comma-separated "name=url" pairs); forges without a URL
+    # stay Local even in http mode.
+    forge_mode: str = Field(default="local", alias="FORGE_MODE")  # local | http
+    forge_sandbox_urls_raw: str = Field(default="", alias="FORGE_SANDBOX_URLS")
+    forge_request_timeout_seconds: float = Field(
+        default=30.0, alias="FORGE_REQUEST_TIMEOUT_SECONDS"
+    )
+
     # Gap routing (empty in dev → no Linear posting)
     linear_api_key: str = Field(default="", alias="LINEAR_API_KEY")
 
@@ -88,6 +98,20 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_origins_raw.split(",") if o.strip()]
+
+    @property
+    def forge_sandbox_urls(self) -> dict[str, str]:
+        """Parse FORGE_SANDBOX_URLS ('name=url,name=url') into {forge: base_url}."""
+        out: dict[str, str] = {}
+        for pair in self.forge_sandbox_urls_raw.split(","):
+            pair = pair.strip()
+            if not pair or "=" not in pair:
+                continue
+            name, url = pair.split("=", 1)
+            name, url = name.strip(), url.strip()
+            if name and url:
+                out[name] = url.rstrip("/")
+        return out
 
     @property
     def sqlalchemy_url(self) -> str:

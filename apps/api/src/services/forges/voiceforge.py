@@ -50,6 +50,11 @@ class LocalVoiceForgeAdapter(ForgeAdapter):
         call = self.engine.place_call(tenant_id, "inbound")
         self.engine.inject_fault(tenant_id, call.call_id, fault.fault_type)
 
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        parts = cap.split(".")
+        direction = parts[2] if len(parts) > 2 else "inbound"
+        return await self.place_and_handle(tenant_id, direction, fault_type)
+
     # -- call operations (used by the mock world) -------------------------
 
     async def place_and_handle(

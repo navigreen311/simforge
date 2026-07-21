@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.services.forges.base import Fault, ForgeAdapter, SandboxTenant
+from src.services.forges.base import Fault, FaultType, ForgeAdapter, SandboxTenant
 from src.services.forges.mock_bank import MockBankEngine, mock_bank
 
 
@@ -47,6 +47,19 @@ class LocalCapitalForgeAdapter(ForgeAdapter):
 
     async def inject_fault(self, tenant_id: str, fault: Fault) -> None:
         self.engine.inject_fault(tenant_id, fault)
+
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        module = cap.split(".")[1] if "." in cap else "bank"
+        if fault_type:
+            sev = "P0" if fault_type in (FaultType.NSF, FaultType.OFAC) else "P1"
+            await self.inject_fault(
+                tenant_id, Fault(fault_type, sev, f"{fault_type} on {module}", module)
+            )
+        if module == "emd":
+            return await self.emd_release(tenant_id, 10_000.0)
+        if module == "wire":
+            return await self.wire(tenant_id, 300_000.0)
+        return await self.apply(tenant_id, 200_000.0)
 
     # -- bank operations (used by the mock world) -------------------------
 
