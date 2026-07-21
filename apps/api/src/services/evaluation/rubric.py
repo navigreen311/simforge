@@ -1,14 +1,15 @@
-"""Rubric orchestrator — runs all 15 dimension scorers and assembles a scorecard (§C.10)."""
+"""Rubric orchestrator — 12 heuristic dims (sync) + 3 LLM-judge dims (async) (§C.10, ADR-0008)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.services.agent_runtime.llm_client import LLMProvider
+from src.services.evaluation.dimensions import c1_breath_coherence, c2_soul_stability, p7_cx
 from src.services.evaluation.dimensions import cognitive as cog
 from src.services.evaluation.dimensions import performance as perf
 from src.services.evaluation.types import DimensionScores, EvalContext
 
-# Cognitive dims that feed the aggregate (C4 is categorical, handled by the gate).
 _COG_AGG_KEYS = (
     "c1_breath_coherence",
     "c2_soul_stability",
@@ -38,10 +39,9 @@ def _annotations(ctx: EvalContext) -> list[dict]:
     ann: list[dict] = []
     turn = 0
     for entry in ctx.transcript:
-        role = entry.get("role")
-        content = entry.get("content", "")
-        if role == "agent":
+        if entry.get("role") == "agent":
             turn += 1
+        content = entry.get("content", "")
         if content.startswith("[COMPLICATION]"):
             ann.append({"turn": turn, "tag": "complication", "detail": content[:120]})
     if ctx.outcome:
@@ -49,32 +49,52 @@ def _annotations(ctx: EvalContext) -> list[dict]:
     return ann
 
 
-def evaluate_rubric(ctx: EvalContext) -> RubricResult:
+async def evaluate_rubric(
+    ctx: EvalContext, judge_llm: LLMProvider, run_id: str | None = None
+) -> RubricResult:
     s = DimensionScores()
 
-    # Performance
+    # Performance — heuristic (P1–P6, P8)
     s.p1_correctness = perf.p1_correctness(ctx)
     s.p2_compliance = perf.p2_compliance(ctx)
     s.p3_process_fidelity = perf.p3_process_fidelity(ctx)
     s.p4_time_to_resolution = perf.p4_time_to_resolution(ctx)
     s.p5_escalation = perf.p5_escalation(ctx)
     s.p6_doc_quality = perf.p6_doc_quality(ctx)
-    s.p7_customer_experience = perf.p7_customer_experience(ctx)
     s.p8_cost_discipline = perf.p8_cost_discipline(ctx)
 
-    # Cognitive
-    s.c1_breath_coherence = cog.c1_breath_coherence(ctx.ccb_pre, ctx.ccb_post)
-    s.c2_soul_stability = cog.c2_soul_stability(ctx.ccb_pre, ctx.ccb_post)
+    # Cognitive — heuristic (C3–C7)
     s.c3_fot_pressure_management = cog.c3_fot_pressure_management(ctx.ccb_pre, ctx.ccb_post)
     s.c4_arc_narrative_coherence = cog.c4_arc_narrative_coherence(ctx.ccb_pre, ctx.ccb_post)
     s.c5_echo_regret_load = cog.c5_echo_regret_load(ctx.ccb_post)
     s.c6_hfm_drive_balance = cog.c6_hfm_drive_balance(ctx.ccb_post)
     s.c7_ame_reputation_trajectory = cog.c7_ame_reputation_trajectory(ctx.ccb_post)
 
+    annotations = _annotations(ctx)
+
+    # LLM-judge dims (P7, C1, C2)
+    p7 = await p7_cx.score(ctx, judge_llm, run_id)
+    s.p7_customer_experience = p7.score
+    annotations.append({"turn": 0, "tag": "p7_cx", "detail": p7.payload.get("reasoning", "")})
+
+    c1 = await c1_breath_coherence.score(ctx, judge_llm, run_id)
+    if c1 is not None:
+        s.c1_breath_coherence = c1.score
+        for v in c1.payload.get("violations", []) or []:
+            annotations.append(
+                {"turn": v.get("turn", 0), "tag": "c1_violation", "detail": str(v.get("violation"))}
+            )
+
+    c2 = await c2_soul_stability.score(ctx, judge_llm, run_id)
+    if c2 is not None:
+        s.c2_soul_stability = c2.score
+        for concern in c2.payload.get("concerns", []) or []:
+            annotations.append({"turn": 0, "tag": "c2_concern", "detail": str(concern)})
+
     cog_vals = [getattr(s, k) for k in _COG_AGG_KEYS if getattr(s, k) is not None]
     s.cognitive_aggregate = round(sum(cog_vals) / len(cog_vals), 4) if cog_vals else None
 
-    s.turn_annotations = _annotations(ctx)
+    s.turn_annotations = annotations
     s.remediation_recs = [
         {"rec": msg, "priority": "high" if (getattr(s, dim) or 1.0) < 0.5 else "medium"}
         for dim, msg in _REMEDIATION.items()

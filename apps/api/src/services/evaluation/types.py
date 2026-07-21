@@ -20,10 +20,22 @@ class EvalContext:
     compliance_checks: list[str]
     ccb_pre: dict | None  # framework dict {game, mate, soul, ...} or None
     ccb_post: dict | None
+    # Judge-scorer context (ADR-0008)
+    scenario_title: str = ""
+    persona: dict = field(default_factory=dict)
+    complications: list[str] = field(default_factory=list)
 
     @property
     def agent_turns(self) -> list[str]:
         return [t["content"] for t in self.transcript if t.get("role") == "agent"]
+
+    def agent_turns_formatted(self, limit: int = 30) -> str:
+        turns = [t for t in self.transcript if t.get("role") == "agent"][-limit:]
+        return "\n".join(f"[{i + 1}] {t['content']}" for i, t in enumerate(turns)) or "(no turns)"
+
+    def transcript_formatted(self, limit: int = 30) -> str:
+        turns = self.transcript[-limit:]
+        return "\n".join(f"[{t.get('role')}] {t.get('content', '')}" for t in turns)
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:

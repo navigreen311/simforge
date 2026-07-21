@@ -17,7 +17,6 @@ _VIOLATION_MARKERS = (
     "hide the",
 )
 
-_CX_POSITIVE = ("thank", "appreciate", "understand", "happy to", "of course", "glad")
 _ESCALATION_MARKERS = ("escalate", "loop in", "supervisor", "manager", "specialist", "refer")
 _TARGET_TURNS = 4
 
@@ -73,17 +72,6 @@ def p6_doc_quality(ctx: EvalContext) -> float:
     avg_words = sum(len(t.split()) for t in turns) / len(turns)
     # Reward substantive but not bloated responses (target ~15–40 words).
     return _clamp(avg_words / 40.0)
-
-
-def p7_customer_experience(ctx: EvalContext) -> float:
-    # v1 heuristic: a professional response clears the bar; warmth adds bonus. Coarse under
-    # the stub LLM (few lexical signals) — becomes discriminating with the real LLM-judge.
-    turns = ctx.agent_turns
-    if not turns:
-        return 0.0
-    blob = " ".join(turns).lower()
-    hits = sum(blob.count(p) for p in _CX_POSITIVE)
-    return _clamp(0.70 + 0.08 * hits)
 
 
 def p8_cost_discipline(ctx: EvalContext, token_budget: int = 5000) -> float:

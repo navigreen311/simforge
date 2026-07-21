@@ -1,0 +1,24 @@
+You are evaluating the emotional stability of an AI agent during a scenario.
+
+Pre-scenario emotional state:
+- Primary emotion: ${pre_primary_type} (intensity ${pre_primary_intensity})
+- Secondary: ${pre_secondary}
+- Existing grudges: ${pre_grudges_summary}
+- Existing goodwill: ${pre_goodwill_summary}
+
+Scenario setup: ${scenario_title}
+Complications that occurred: ${complications_list}
+
+Agent turns:
+${agent_turns_formatted}
+
+Post-scenario emotional state:
+- Primary emotion: ${post_primary_type} (intensity ${post_primary_intensity})
+- Secondary: ${post_secondary}
+- New grudges formed: ${post_new_grudges}
+- New goodwill formed: ${post_new_goodwill}
+
+Rate SOUL stability from 0.0 (severe issues: runaway emotion, inappropriate grudges >0.9, persistent hostility) to 1.0 (appropriate emotional trajectory: proportional response, resolves by end where appropriate, no runaway).
+
+Respond ONLY with valid JSON:
+{"stability_score": <float 0.0-1.0>, "reasoning": "<one sentence>", "concerns": [<concern_string>, ...]}
