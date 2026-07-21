@@ -30,7 +30,10 @@ async def _seed_cert(
     session.add(dept)
     await session.flush()
     agent = Agent(
-        villageAgentId="pdp_agent", name="PDP Agent", role="Agent", departmentId=dept.id,
+        villageAgentId="pdp_agent",
+        name="PDP Agent",
+        role="Agent",
+        departmentId=dept.id,
         currentAutonomyLevel=autonomy,
     )
     session.add(agent)
