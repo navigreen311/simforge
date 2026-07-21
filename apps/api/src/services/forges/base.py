@@ -13,13 +13,23 @@ from datetime import datetime
 
 
 class FaultType:
-    """Canonical Forge fault kinds (blueprint §E.7 CapitalForge _sim endpoints)."""
+    """Canonical Forge fault kinds."""
 
+    # CapitalForge / Mock Bank (blueprint §E.7)
     DECLINATION = "declination"
     FRAUD_FLAG = "fraud_flag"
     NSF = "nsf"
     OFAC = "ofac"
     VELOCITY = "velocity"
+
+    # VisionAudioForge / Doc Vault (blueprint §E.3 fault menu)
+    FORGED_SIGNATURE = "forged_signature"
+    EXPIRED_DATE = "expired_date"
+    NAME_DOB_MISMATCH = "name_dob_mismatch"
+    REVOKED_LICENSE = "revoked_license"
+    OIG_MATCH = "oig_match"
+    MISSING_PAGES = "missing_pages"
+    ALTERED_AMOUNT = "altered_amount"
 
 
 @dataclass

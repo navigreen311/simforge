@@ -5,6 +5,7 @@ tested_agent_village_id: david_kim
 tested_forge_caps:
   - cre-forge.deals.title
   - voiceforge.call_center.inbound
+  - vaf.doc_vault.retrieve
 training_domains:
   - crisis_management
   - stakeholder_comms
