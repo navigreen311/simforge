@@ -11,6 +11,7 @@ from src.deps import require_role
 from src.models.agent import Agent
 from src.models.pack import Pack, Scenario
 from src.models.run import Run, TraceEvent
+from src.models.scorecard import Scorecard
 from src.schemas.run import (
     RunList,
     RunSummary,
@@ -19,6 +20,7 @@ from src.schemas.run import (
     TranscriptResponse,
     TranscriptTurn,
 )
+from src.schemas.scorecard import ScorecardResponse
 
 router = APIRouter()
 
@@ -86,6 +88,45 @@ async def get_transcript(
     run = await _get_run_or_404(session, run_id)
     turns = [TranscriptTurn(**t) for t in (run.transcript or [])]
     return TranscriptResponse(run_id=run.runId, turns=turns)
+
+
+@router.get(
+    "/{run_id}/scorecard",
+    response_model=ScorecardResponse,
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def get_scorecard(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> ScorecardResponse:
+    run = await _get_run_or_404(session, run_id)
+    card = (
+        await session.execute(select(Scorecard).where(Scorecard.runId == run.id))
+    ).scalar_one_or_none()
+    if card is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No scorecard yet")
+    return ScorecardResponse(
+        run_id=run.runId,
+        p1_correctness=card.p1Correctness,
+        p2_compliance=card.p2Compliance,
+        p3_process_fidelity=card.p3ProcessFidelity,
+        p4_time_to_resolution=card.p4TimeToResolution,
+        p5_escalation=card.p5Escalation,
+        p6_doc_quality=card.p6DocQuality,
+        p7_customer_experience=card.p7CustomerExperience,
+        p8_cost_discipline=card.p8CostDiscipline,
+        c1_breath_coherence=card.c1BreathCoherence,
+        c2_soul_stability=card.c2SoulStability,
+        c3_fot_pressure_management=card.c3FotPressureManagement,
+        c4_arc_narrative_coherence=card.c4ArcNarrativeCoherence,
+        c5_echo_regret_load=card.c5EchoRegretLoad,
+        c6_hfm_drive_balance=card.c6HfmDriveBalance,
+        c7_ame_reputation_trajectory=card.c7AmeReputationTrajectory,
+        cognitive_aggregate=card.cognitiveAggregate,
+        readiness_gate_passed=card.readinessGatePassed,
+        auto_fail_reason=card.autoFailReason,
+        turn_annotations=card.turnAnnotations or [],
+        remediation_recs=card.remediationRecs,
+    )
 
 
 @router.get(

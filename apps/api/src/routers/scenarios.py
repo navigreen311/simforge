@@ -72,9 +72,14 @@ async def run_scenario_endpoint(
     production async execution route.
     """
     from src.routers.runs import _summarize
+    from src.services.evaluation import evaluate_run
 
     try:
         run = await run_scenario(session, scenario_id, reader)
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    # Evaluate the completed run (15-dim rubric + readiness gate) and persist its Scorecard.
+    if run.status != "errored":
+        await evaluate_run(session, run.id)
     return await _summarize(session, run)

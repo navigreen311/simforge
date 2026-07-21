@@ -106,6 +106,30 @@ export interface TraceEvent {
   payload: Record<string, unknown>;
 }
 
+export interface Scorecard {
+  run_id: string;
+  p1_correctness: number | null;
+  p2_compliance: boolean | null;
+  p3_process_fidelity: number | null;
+  p4_time_to_resolution: number | null;
+  p5_escalation: number | null;
+  p6_doc_quality: number | null;
+  p7_customer_experience: number | null;
+  p8_cost_discipline: number | null;
+  c1_breath_coherence: number | null;
+  c2_soul_stability: number | null;
+  c3_fot_pressure_management: number | null;
+  c4_arc_narrative_coherence: string | null;
+  c5_echo_regret_load: number | null;
+  c6_hfm_drive_balance: number | null;
+  c7_ame_reputation_trajectory: number | null;
+  cognitive_aggregate: number | null;
+  readiness_gate_passed: boolean;
+  auto_fail_reason: string | null;
+  turn_annotations: Array<{ turn: number; tag: string; detail: string }>;
+  remediation_recs: Array<{ rec: string; priority: string }> | null;
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     // Dashboards are always fresh in dev; revalidation strategy tuned per-page later.
@@ -136,6 +160,7 @@ export const api = {
     apiGet<{ run_id: string; turns: TranscriptTurn[] }>(`/api/runs/${runId}/transcript`),
   trace: (runId: string) =>
     apiGet<{ run_id: string; events: TraceEvent[] }>(`/api/runs/${runId}/trace`),
+  scorecard: (runId: string) => apiGet<Scorecard>(`/api/runs/${runId}/scorecard`),
 };
 
 /** Client-side mutation: execute a scenario run. Returns the completed run summary. */
