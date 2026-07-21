@@ -282,6 +282,11 @@ async def revoke_agent_cert(
 
     await session.commit()
     await session.refresh(cert)
+    # Real-time PEP cache invalidation (best-effort; §F.4).
+    if agent is not None:
+        from src.services.governance.revocation import publish_cert_event
+
+        await publish_cert_event(agent.villageAgentId, cert.forgeCap, "revoked")
     return cert
 
 
@@ -357,4 +362,8 @@ async def reinstate_agent_cert(
     await session.commit()
     await session.refresh(cert)
     await session.refresh(snapshot)
+    # Reinstatement re-enables the cert → tell PEPs to drop any cached deny (best-effort; §F.4).
+    from src.services.governance.revocation import publish_cert_event
+
+    await publish_cert_event(agent.villageAgentId, cert.forgeCap, "reinstated")
     return IssuedCert(cert, snapshot, from_level, to_level)

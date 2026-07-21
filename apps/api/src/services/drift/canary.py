@@ -124,6 +124,12 @@ async def scan_forge_drift(
 
     if suspend:
         await session.commit()
+        # Real-time PEP cache invalidation for every drift-suspended cert (best-effort; §F.4).
+        from src.services.governance.revocation import publish_cert_event
+
+        for f in findings:
+            if f.status == "drift":
+                await publish_cert_event(f.agent_village_id, f.forge_cap, "suspended")
 
     drift_findings = [f for f in findings if f.status == "drift"]
     return {

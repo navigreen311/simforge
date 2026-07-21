@@ -4,6 +4,12 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — PDP/PEP: real-time revocation pub/sub (v1.1, ADR-0024)
+- **Revocation publisher** (`services/governance/revocation.py`) — publishes cert lifecycle events (`revoked`/`suspended`/`reinstated`) to the Redis channel `simforge:revocations` (§F.4), so PEPs can invalidate their decision caches fleet-wide in ~real time instead of at TTL expiry. **Best-effort**: a down/absent Redis never fails the cert operation (short connect timeout, swallow + log). Publish-only, sandbox-safe.
+- **Hooked into the cert lifecycle** — `revoke_agent_cert` → `revoked`; `reinstate_agent_cert` → `reinstated`; Drift Canary suspend → `suspended` (per drifted cert); amendment ratify → `suspended` (per affected cert).
+- **Tests:** +4 (254 api) — event payload, publish success (mocked), failure-is-swallowed, and a Memurai-guarded real pub/sub roundtrip (skips when Redis is unreachable, so CI is unaffected). ruff + mypy clean.
+- **Verified live:** `publish_cert_event` → live Memurai `simforge:revocations` → subscriber received the exact `{agent_id, forge_cap, event, ts}` event. (Dev note: on Windows use `REDIS_URL=redis://127.0.0.1:...` — `localhost` resolves to IPv6 `::1` for the async client while Memurai binds IPv4.)
+
 ### Added — PDP: runtime authorization from certs (v1.1, ADR-0024)
 - **Policy Decision Point** (`services/governance/pdp.py`) — `PDP.decide(session, AuthRequest) → AuthDecision`, turning issued certs into runtime enforcement. Decision from the agent's cert-for-the-action + autonomy ladder + safe-mode: safe-mode → step_up; no/suspended/revoked/expired cert → deny (specific reason code); active cert L4/L5 → **allow**, L3 → **step_up_approval_required**, L2 → **downgrade_and_retry** (draft only), L1 → **deny** (observe only). Per-decision `ttl_seconds` for PEP caching; `fail_policy` (default **fail-closed**) for PEP outage behavior.
 - **API** `/api/pdp` — `POST /decide` (PEP call, read-only) + `GET /agent/{id}/effective` (a decision per cert, for dashboards/audit).

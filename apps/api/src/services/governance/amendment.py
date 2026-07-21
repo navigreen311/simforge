@@ -145,6 +145,7 @@ async def ratify_amendment(session: AsyncSession, amendment_id: str, ratified_by
         .scalars()
         .all()
     )
+    suspended_certs: list[AgentCert] = []
     for c in certs:
         snap = (
             await session.execute(select(CertSnapshot).where(CertSnapshot.id == c.certSnapshotId))
@@ -161,8 +162,22 @@ async def ratify_amendment(session: AsyncSession, amendment_id: str, ratified_by
                 )
             )
             suspended += 1
+            suspended_certs.append(c)
 
     await session.commit()
+
+    # Real-time PEP cache invalidation for each amendment-suspended cert (best-effort; §F.4).
+    if suspended_certs:
+        from src.models.agent import Agent
+        from src.services.governance.revocation import publish_cert_event
+
+        for c in suspended_certs:
+            agent = (
+                await session.execute(select(Agent).where(Agent.id == c.agentId))
+            ).scalar_one_or_none()
+            if agent is not None:
+                await publish_cert_event(agent.villageAgentId, c.forgeCap, "suspended")
+
     return {
         "amendment_id": amendment_id,
         "new_version": new_version,
