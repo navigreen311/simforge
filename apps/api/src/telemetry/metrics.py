@@ -17,6 +17,15 @@ CERTS_ISSUED_TOTAL = Counter("simforge_certs_issued_total", "AgentCerts issued",
 GAPS_OPEN = Gauge("simforge_gaps_open", "Open gaps by kind", ["kind"])
 EVAL_LATENCY = Histogram("simforge_eval_latency_seconds", "Rubric evaluation latency")
 
+# PDP/PEP (blueprint §H.2 — pdp_decision_latency, pdp_cache_hit_ratio).
+PDP_DECISION_LATENCY = Histogram(
+    "simforge_pdp_decision_latency_seconds", "PDP decision latency", ["decision"]
+)
+PDP_DECISIONS_TOTAL = Counter(
+    "simforge_pdp_decisions_total", "PDP decisions", ["decision", "reason_code"]
+)
+PDP_CACHE_HIT_RATIO = Gauge("simforge_pdp_cache_hit_ratio", "PEP decision-cache hit ratio")
+
 
 def configure_metrics() -> None:
     # Collectors register on import; nothing to wire at startup for the pull model.
