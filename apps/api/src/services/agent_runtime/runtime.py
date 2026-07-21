@@ -9,8 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.services.agent_runtime.llm_client import LLMProvider, LLMResponse
+from src.services.agent_runtime.llm_client import LLMProvider, LLMResponse, get_agent_llm
 from src.services.village.reader import VillageReader, VillageReaderError
+
+
+def build_agent_runtime(village_reader: VillageReader) -> AgentRuntime:
+    """Construct an AgentRuntime with the configured agent-runtime LLM provider (ADR-0008)."""
+    return AgentRuntime(village_reader=village_reader, provider=get_agent_llm())
 
 
 @dataclass
