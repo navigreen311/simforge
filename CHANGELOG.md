@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Fourth real Forge: CRE Forge (Deal Desk) (post-v1)
+- **CRE Forge Deal Desk** — deterministic in-process engine (`services/forges/deal_desk.py`) + `LocalCREForgeAdapter` (`cre_forge.py`, version `cre-forge.dealdesk.v1`): tenants, synthetic CRE deals (assignment/wholesale/double_close/novation, never real party data), deal-fault injection + processing. Fault menu spans deal (title_defect/lien_undisclosed/assignment_blocked/deal_stale), buyer (buyer_unresponsive), lead/sequence (sequence_stall/duplicate_lead). Severities: title_defect/lien_undisclosed/assignment_blocked → **P0**, deal_stale/buyer_unresponsive/sequence_stall → **P1**, duplicate_lead → **P2**. Registry now resolves `cre-forge` → real adapter.
+- **Runner** — `_run_cre_forge` added to the per-forge dispatch; injects `title_defect` (P0) on fault — the crisis scenario's premise. Reporter is forge-agnostic, so CRE Forge faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).
+- **`scn.gs.crisis.003`** now surfaces **all three** of its declared forge faults in one run — a CRE `title_defect`, a VAF `forged_signature`, and a VoiceForge `dropped_call`.
+- **Router** `POST /api/forges/cre-forge/demo`.
+- **Tests:** +13 (141 api + 5 validator) — Deal Desk engine (all 7 fault severities), CRE Forge adapter **contract test** (§I.3), registry resolution, demo, and the CRE Forge fault→gap integration. ruff + mypy clean on touched files.
+- **Verified live:** `scn.gs.crisis.003` → `cre-forge/deals` title_defect P0 fault → Software Gap `cre-forge/deals`. ADR-0013. **4 of 6 Forges now real.**
+
 ### Added — Third real Forge: VoiceForge (Call Center) (post-v1)
 - **VoiceForge Call Center** — deterministic in-process engine (`services/forges/call_center.py`) + `LocalVoiceForgeAdapter` (`voiceforge.py`, version `voiceforge.callcenter.v1`): tenants, synthetic calls against a persona catalog (§E.2 preload), call-fault injection + handling. Fault menu spans line-quality (dropped_call/dead_air/line_noise), call-flow (misroute/hold_timeout/escalation_failure), and compliance (disclosure_missing). Severities: dropped_call/escalation_failure/disclosure_missing → **P0**, rest → **P1**. Registry now resolves `voiceforge` → real adapter.
 - **Runner** — `_run_voiceforge` added to the per-forge dispatch; cap's 3rd segment selects call direction (`voiceforge.call_center.inbound` → inbound). Reporter is forge-agnostic, so VoiceForge faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).

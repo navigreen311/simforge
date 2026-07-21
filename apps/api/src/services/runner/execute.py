@@ -25,6 +25,7 @@ from src.services.agent_runtime.llm_client import LLMProvider, get_llm_provider
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.forges import Fault, FaultType, get_forge_adapter
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
+from src.services.forges.cre_forge import LocalCREForgeAdapter
 from src.services.forges.registry import forge_of_cap
 from src.services.forges.visionaudioforge import LocalVAFAdapter
 from src.services.forges.voiceforge import LocalVoiceForgeAdapter
@@ -123,6 +124,19 @@ async def _run_voiceforge(state, caps, run_id: str, inject: bool) -> None:
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
 
 
+async def _run_cre_forge(state, caps, run_id: str, inject: bool) -> None:
+    # Registry is the swap point (Local ↔ real HTTP); the deal ops are forge-specific.
+    adapter = cast(LocalCREForgeAdapter, get_forge_adapter("cre-forge"))
+    tenant = await adapter.provision_sandbox_tenant(run_id)
+    for cap in caps:
+        module = cap.split(".")[1] if "." in cap else "deals"
+        # A processed deal may hit a title defect, an undisclosed lien, or a blocked assignment.
+        fault_type = FaultType.TITLE_DEFECT if inject else None
+        result = await adapter.create_and_process(tenant.tenant_id, "assignment", fault_type)
+        _emit_forge_trace(state, "cre-forge", module, cap, result)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
+
 async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     """Provision Forge sandbox tenants for the tested caps, run ops, record trace events.
 
@@ -134,12 +148,15 @@ async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     cf = [c for c in caps if forge_of_cap(c) == "capitalforge"]
     vaf = [c for c in caps if forge_of_cap(c) == "vaf"]
     voice = [c for c in caps if forge_of_cap(c) == "voiceforge"]
+    cre = [c for c in caps if forge_of_cap(c) == "cre-forge"]
     if cf:
         await _run_capitalforge(state, cf, run_id, inject)
     if vaf:
         await _run_vaf(state, vaf, run_id, inject)
     if voice:
         await _run_voiceforge(state, voice, run_id, inject)
+    if cre:
+        await _run_cre_forge(state, cre, run_id, inject)
 
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}

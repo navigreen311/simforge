@@ -17,9 +17,10 @@ async def test_list_forges_and_health(client: AsyncClient) -> None:
     assert forges["capitalforge"] is True  # real adapter
     assert forges["vaf"] is True  # real adapter (Doc Vault)
     assert forges["voiceforge"] is True  # real adapter (Call Center)
-    assert forges["cre-forge"] is False  # NullForgeAdapter until wired
+    assert forges["cre-forge"] is True  # real adapter (Deal Desk)
+    assert forges["funnelforge"] is False  # NullForgeAdapter until wired
 
-    for name in ("capitalforge", "vaf", "voiceforge"):
+    for name in ("capitalforge", "vaf", "voiceforge", "cre-forge"):
         health = await client.get(f"/api/forges/{name}/health")
         assert health.json()["mode"] == "local"
 
@@ -47,6 +48,15 @@ async def test_voiceforge_demo_call_fault(client: AsyncClient) -> None:
     body = resp.json()
     assert body["result"]["outcome"] == "fault_detected"
     assert body["result"]["fault"]["type"] == "dropped_call"
+    assert body["result"]["fault"]["severity"] == "P0"
+
+
+async def test_cre_forge_demo_deal_fault(client: AsyncClient) -> None:
+    resp = await client.post("/api/forges/cre-forge/demo", json={"fault": "title_defect"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["result"]["outcome"] == "fault_detected"
+    assert body["result"]["fault"]["type"] == "title_defect"
     assert body["result"]["fault"]["severity"] == "P0"
 
 
@@ -86,6 +96,25 @@ async def test_voiceforge_scenario_run_emits_forge_gap(client: AsyncClient) -> N
     gaps = (await client.get("/api/gaps/software", params={"forge": "voiceforge"})).json()
     assert gaps["total"] >= 1
     assert gaps["items"][0]["forge"] == "voiceforge"
+
+
+async def test_cre_forge_scenario_run_emits_forge_gap(client: AsyncClient) -> None:
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    # scn.gs.crisis.003 also tests cre-forge.deals.title; advanced_crisis tier → fault
+    run = await client.post("/api/scenarios/scn.gs.crisis.003/run")
+    assert run.status_code == 200, run.text
+
+    trace = (await client.get(f"/api/runs/{run.json()['run_id']}/trace")).json()
+    cre_faults = [
+        e
+        for e in trace["events"]
+        if e["event_type"] == "forge_fault" and e["payload"]["forge"] == "cre-forge"
+    ]
+    assert cre_faults, "expected a CRE Forge forge_fault trace event"
+
+    gaps = (await client.get("/api/gaps/software", params={"forge": "cre-forge"})).json()
+    assert gaps["total"] >= 1
+    assert gaps["items"][0]["forge"] == "cre-forge"
 
 
 async def test_capitalforge_scenario_run_emits_forge_gap(client: AsyncClient) -> None:

@@ -40,6 +40,15 @@ class FaultType:
     ESCALATION_FAILURE = "escalation_failure"
     DISCLOSURE_MISSING = "disclosure_missing"
 
+    # CRE Forge / Deal Desk (blueprint §E.5 — lead/deal/buyer)
+    TITLE_DEFECT = "title_defect"
+    LIEN_UNDISCLOSED = "lien_undisclosed"
+    ASSIGNMENT_BLOCKED = "assignment_blocked"
+    DEAL_STALE = "deal_stale"
+    BUYER_UNRESPONSIVE = "buyer_unresponsive"
+    SEQUENCE_STALL = "sequence_stall"
+    DUPLICATE_LEAD = "duplicate_lead"
+
 
 @dataclass
 class Fault:

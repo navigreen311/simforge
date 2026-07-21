@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from src.deps import require_role
 from src.services.forges import Fault, FaultType
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
+from src.services.forges.cre_forge import LocalCREForgeAdapter
 from src.services.forges.registry import KNOWN_FORGES, get_forge_adapter
 from src.services.forges.visionaudioforge import LocalVAFAdapter
 from src.services.forges.voiceforge import LocalVoiceForgeAdapter
@@ -28,6 +29,11 @@ class DemoDocRequest(BaseModel):
 class DemoCallRequest(BaseModel):
     fault: str | None = None  # dropped_call|dead_air|misroute|disclosure_missing|...
     direction: str = "inbound"
+
+
+class DemoDealRequest(BaseModel):
+    fault: str | None = None  # title_defect|lien_undisclosed|assignment_blocked|deal_stale|...
+    deal_type: str = "assignment"
 
 
 @router.get("/", dependencies=[Depends(require_role("viewer"))])
@@ -77,6 +83,17 @@ async def voiceforge_demo(body: DemoCallRequest) -> dict:
     adapter = LocalVoiceForgeAdapter()
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.place_and_handle(tenant.tenant_id, body.direction, body.fault)
+    audit = await adapter.get_audit_log(tenant.tenant_id)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+
+
+@router.post("/cre-forge/demo", dependencies=[Depends(require_role("admin"))])
+async def cre_forge_demo(body: DemoDealRequest) -> dict:
+    """Provision a Deal Desk tenant, process a deal, optionally with an injected deal fault."""
+    adapter = LocalCREForgeAdapter()
+    tenant = await adapter.provision_sandbox_tenant("demo")
+    result = await adapter.create_and_process(tenant.tenant_id, body.deal_type, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
     return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
