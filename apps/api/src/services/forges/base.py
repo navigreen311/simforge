@@ -109,6 +109,16 @@ class ForgeAdapter(ABC):
     @abstractmethod
     async def inject_fault(self, tenant_id: str, fault: Fault) -> None: ...
 
+    @abstractmethod
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        """Exercise a tested capability (optionally injecting a fault) and return a result dict
+        ``{"outcome": ..., "fault"?: {...}}``. This is the single uniform op the scenario runner
+        drives — the same call works whether the adapter is Local (in-process engine) or HTTP
+        (real sandbox), so the runner is forge-agnostic and mode-agnostic. `cap` is the full
+        capability string (e.g. ``"capitalforge.emd.release"``); each adapter reads the segments
+        it needs."""
+        ...
+
 
 class NullForgeAdapter(ForgeAdapter):
     """Placeholder for Forges not yet wired — reports unhealthy, refuses provisioning."""
@@ -136,3 +146,6 @@ class NullForgeAdapter(ForgeAdapter):
 
     async def inject_fault(self, tenant_id: str, fault: Fault) -> None:
         return None
+
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        return {"outcome": "skipped", "reason": f"{self.forge_name} adapter not implemented"}

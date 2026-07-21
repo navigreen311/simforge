@@ -49,6 +49,10 @@ class LocalFunnelForgeAdapter(ForgeAdapter):
         flow = self.engine.start_flow(tenant_id, fault.module)
         self.engine.inject_fault(tenant_id, flow.flow_id, fault.fault_type)
 
+    async def exercise(self, tenant_id: str, cap: str, fault_type: str | None) -> dict:
+        module = cap.split(".")[1] if "." in cap else "sequences"
+        return await self.trigger_and_run(tenant_id, module, fault_type)
+
     # -- flow operations (used by the mock world) -------------------------
 
     async def trigger_and_run(

@@ -4,11 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
+import pytest
 from httpx import AsyncClient
+
+from src.services.forges.http_adapter import HttpForgeAdapter
+from src.services.forges.reference_sandbox import create_reference_sandbox
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
 MEDLINK = str(REPO_ROOT / "packs" / "medlink-pro" / "v1")
+
+
+def _http_adapter_factory(forge: str) -> HttpForgeAdapter:
+    """Resolve every forge to an HttpForgeAdapter talking to its reference sandbox in-process."""
+    transport = httpx.ASGITransport(app=create_reference_sandbox(forge))
+    return HttpForgeAdapter(forge, "http://sandbox.local", transport=transport)
 
 
 async def test_list_forges_and_health(client: AsyncClient) -> None:
@@ -182,6 +193,30 @@ async def test_funnelforge_scenario_run_emits_forge_gap(client: AsyncClient) -> 
     gaps = (await client.get("/api/gaps/software", params={"forge": "funnelforge"})).json()
     assert gaps["total"] >= 1
     assert gaps["items"][0]["forge"] == "funnelforge"
+
+
+async def test_scenario_run_over_http_forge_mode(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FORGE_MODE=http path: the runner drives the whole fault→gap loop over HTTP (ADR-0016).
+
+    Patches the runner's adapter factory to the reference-sandbox HTTP adapter, so provisioning,
+    exercising, and fault surfacing all cross the wire — the real-sandbox swap, proven hermetically.
+    """
+    monkeypatch.setattr("src.services.runner.execute.get_forge_adapter", _http_adapter_factory)
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    # scn.gs.crisis.003 exercises 3 forges (cre-forge + vaf + voiceforge) — all over HTTP now.
+    run = await client.post("/api/scenarios/scn.gs.crisis.003/run")
+    assert run.status_code == 200, run.text
+
+    trace = (await client.get(f"/api/runs/{run.json()['run_id']}/trace")).json()
+    forges_faulted = {
+        e["payload"]["forge"] for e in trace["events"] if e["event_type"] == "forge_fault"
+    }
+    assert {"cre-forge", "vaf", "voiceforge"} <= forges_faulted
+
+    gaps = (await client.get("/api/gaps/software", params={"forge": "cre-forge"})).json()
+    assert gaps["total"] >= 1
 
 
 async def test_capitalforge_scenario_run_emits_forge_gap(client: AsyncClient) -> None:
