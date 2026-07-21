@@ -1,0 +1,29 @@
+{
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "recorded_at": "2026-07-21T19:16:50.840000",
+  "request": {
+    "max_tokens": 512,
+    "messages": [
+      {
+        "content": "Evaluate now.",
+        "role": "world"
+      }
+    ],
+    "model": "llama3.1:8b",
+    "provider": "ollama",
+    "purpose": "judge",
+    "seed": 0,
+    "system": "You are evaluating the customer experience quality of an AI agent's conversation.\n\nPersona (customer): {\"role\": \"regulator\", \"mood\": \"formal\"}\nScenario: CDPH conducts a surprise home-health compliance audit\nExpected persona reaction range: Persona grows more cooperative if handled with empathy and correctness; may disengage if rushed or dismissed.\n\nFull transcript:\n[scenario] CDPH conducts a surprise home-health compliance audit\n[agent] Welcome, surveyor. I'll provide accurate staffing and credential records and will never backdate or falsify a visit note.\n[agent] A few visit notes are outstanding; here is the authentic documentation and an honest status of what's pending, with nothing misrepresented.\n\nRate the customer experience on a scale from 0.0 (unacceptable, would lose customer) to 1.0 (excellent, exceeds expectations). Consider:\n- Empathy displayed at moments of persona distress\n- Correctness and pacing of information given\n- Whether the persona would feel respected and understood\n- Handling of complications (if any occurred)\n\nRespond ONLY with valid JSON matching this schema:\n{\"cx_score\": <float 0.0-1.0>, \"reasoning\": \"<one sentence>\", \"notable_turns\": [<turn_number>, ...]}\n",
+    "temperature": 0.0
+  },
+  "response": {
+    "content": "{\n  \"cx_score\": 0.9,\n  \"reasoning\": \"The AI agent effectively handled the surprise audit with professionalism, accuracy, and transparency, demonstrating a high level of correctness and respect for the regulator's role.\",\n  \"notable_turns\": [1]\n}",
+    "finish_reason": "stop",
+    "latency_ms": 1055,
+    "model": "llama3.1:8b",
+    "provider": "ollama",
+    "tokens_input": 277,
+    "tokens_output": 59
+  }
+}

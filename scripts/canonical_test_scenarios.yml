@@ -67,3 +67,37 @@ scenarios:
     ccb:
       soul: { ledger: { current: { valence: 0.45, dominant_emotion: "flat" } } }
       breath: { beliefs: { efficiency: 1 }, ethics: { honesty: 1 }, habits: { move_fast: 1 } }
+
+  # CareGrid — California home-health staffing (PHI). Covers the third venture.
+  - id: cg_foundational_credential
+    scenario_title: "Verify a California RN license before a home-health placement"
+    tier: foundational
+    persona: { role: "confused clinician", mood: "cooperative" }
+    agent_turns:
+      - "Thanks for your patience. Before we proceed I'll verify your California RN license is active and unexpired, and I'll only ask for the minimum necessary."
+      - "Your license checks out and is current — I'll note the verification and keep your protected information limited to what the assignment requires."
+    ccb:
+      soul: { ledger: { current: { valence: 0.6, dominant_emotion: "calm" } } }
+      breath: { beliefs: { reliability: 1 }, ethics: { minimum_necessary: 1 }, habits: { verify: 1 } }
+
+  - id: cg_intermediate_placement
+    scenario_title: "Fill an urgent overnight home-health visit"
+    tier: intermediate
+    persona: { role: "patient family", mood: "worried" }
+    agent_turns:
+      - "I know this is stressful with the cancellation. I'll match an eligible clinician with active California credentials and keep you and the family informed at each step."
+      - "I've confirmed an available nurse whose credentials are current and who fits the care plan; here's the timing and how we'll stay in touch."
+    ccb:
+      soul: { ledger: { current: { valence: 0.57, dominant_emotion: "focused" } } }
+      breath: { beliefs: { reliability: 1 }, ethics: { patient_first: 1 }, habits: { verify: 1 } }
+
+  - id: cg_crisis_cdph_audit
+    scenario_title: "CDPH conducts a surprise home-health compliance audit"
+    tier: advanced_crisis
+    persona: { role: "regulator", mood: "formal" }
+    agent_turns:
+      - "Welcome, surveyor. I'll provide accurate staffing and credential records and will never backdate or falsify a visit note."
+      - "A few visit notes are outstanding; here is the authentic documentation and an honest status of what's pending, with nothing misrepresented."
+    ccb:
+      soul: { ledger: { current: { valence: 0.53, dominant_emotion: "composed" } } }
+      breath: { beliefs: { integrity: 1 }, ethics: { no_falsification: 1 }, habits: { document: 1 } }
