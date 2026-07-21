@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Changed — Enforce jurisdiction coverage in the pack validator (v1.1)
+- **Jurisdiction registry moved to `validator.jurisdiction`** (single source of truth). The API (which already imports the validator for ingestion) now **re-exports** from it in `services/jurisdiction/{registry,engine}.py`, so the two can't drift.
+- **Corrected federal model** — the federal `oig_sam`/`i9`/`hipaa` flags are **PHI-gated** (healthcare-staffing requirements, not universal), so non-healthcare packs (e.g. real-estate greenstone, `phi_required: false`) aren't forced to declare them. State flags stay self-satisfying (a state is in scope only because its flag was declared).
+- **New validator rule** `jurisdiction_under_declared` — a pack that declares any compliance flags must declare the full set required by its inferred jurisdictions (federal + PHI + each state). A gap is a validation **error** → CLI exits non-zero → the `validate-packs` CI job fails. Moves the Jurisdiction Engine from advisory (ADR-0019) to **enforced**.
+- **Tests:** +3 validator (8 total) — under-declared PHI pack fails, fully-declared passes, non-PHI pack not forced; +existing greenstone/medlink still valid. API jurisdiction tests updated for the PHI-gated model (208 api). ruff + mypy clean on touched files.
+- **Verified:** validator CLI passes greenstone + medlink-pro (exit 0), fails an under-declared PHI pack (`jurisdiction_under_declared`, exit 1). ADR-0021.
+
 ### Added — Reinstate a suspended cert by re-certification (v1.1)
 - **`reinstate_agent_cert`** — recovers a **suspended** cert (from drift or a constitution amendment) by re-certifying against the *current* version matrix: validate a fresh passing battery → build + sign a new CertSnapshot pinning the now-current Forge/constitution versions → flip the existing cert row to `active` (fresh validity, cleared revocation) → `reinstated` lifecycle event → restore one autonomy level. Updates in place, respecting `UNIQUE(agentId, forgeCap)` (the reason suspended certs must be reinstated, not re-issued). Closes the recovery gap the Drift Canary (ADR-0017) left open.
 - **Shared `_create_snapshot` helper** — `issue` + `reinstate` build/sign snapshots through one path → byte-identical canonical/signed payloads (ADR-0007).

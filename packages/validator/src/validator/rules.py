@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from validator.jurisdiction import coverage_for_flags
 from validator.loader import LoadedPack
 
 # Real SSN (AAA-GG-SSSS) excluding obviously-synthetic 000/666/9xx area numbers is complex;
@@ -108,9 +109,33 @@ def _referential(loaded: LoadedPack, issues: list[ValidationIssue]) -> None:
             )
 
 
+def _jurisdiction_coverage(loaded: LoadedPack, issues: list[ValidationIssue]) -> None:
+    """A pack must declare all compliance flags required by the jurisdictions it operates in.
+
+    Jurisdictions are inferred from the declared flags (e.g. `hcqc_nv` → Nevada); the federal
+    baseline (`oig_sam`, `i9`, plus `hipaa` under PHI) always applies. A pack that names a state or
+    handles PHI but omits a required flag is under-declared → validation error. A pack with no
+    compliance flags at all is left to the `phi_no_flags` warning above (nothing to infer from)."""
+    flags = list(loaded.spec.compliance_flags)
+    if not flags:
+        return
+    report = coverage_for_flags(flags, phi_required=loaded.spec.phi_required)
+    if not report.satisfied:
+        issues.append(
+            ValidationIssue(
+                "error",
+                "jurisdiction_under_declared",
+                f"Pack operates in {report.jurisdictions} but is missing required compliance "
+                f"flags {report.missing_flags} (declared: {flags}).",
+                loaded.pack_yaml_path,
+            )
+        )
+
+
 def validate_pack(loaded: LoadedPack) -> ValidationResult:
     issues: list[ValidationIssue] = []
     _phi_guard(loaded, issues)
     _referential(loaded, issues)
+    _jurisdiction_coverage(loaded, issues)
     ok = not any(i.severity == "error" for i in issues)
     return ValidationResult(ok=ok, issues=issues)

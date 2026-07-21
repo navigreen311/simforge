@@ -12,9 +12,10 @@ from src.services.jurisdiction import (
 from src.services.jurisdiction.engine import UnknownJurisdictionError
 
 
-def test_federal_baseline_always_included() -> None:
-    # Even with no state, the federal flags are required.
-    assert resolve_requirements([], phi_required=False) == ["oig_sam", "i9"]
+def test_federal_baseline_phi_gated() -> None:
+    # Federal staffing/privacy flags are PHI (healthcare) requirements — not for non-PHI packs.
+    assert resolve_requirements([], phi_required=False) == []
+    assert resolve_requirements([], phi_required=True) == ["oig_sam", "i9", "hipaa"]
     assert infer_jurisdictions([]) == ["US-FED"]
 
 

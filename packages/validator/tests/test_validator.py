@@ -64,6 +64,55 @@ def test_phi_guard_flags_ssn(tmp_path: Path) -> None:
     assert any(i.code == "phi_ssn" for i in result.errors)
 
 
+def _write_pack(pack_dir: Path, pack_yaml: str) -> None:
+    (pack_dir / "scenarios").mkdir(parents=True)
+    (pack_dir / "pack.yml").write_text(pack_yaml, encoding="utf-8")
+    (pack_dir / "scenarios" / "s.yml").write_text(
+        "scenario_id: scn.t.001\ntitle: T\ntier: foundational\n"
+        "tested_agent_village_id: a\nslo_seconds: 60\ncold_open: 'x'\n",
+        encoding="utf-8",
+    )
+
+
+def test_jurisdiction_under_declared_phi_pack_flagged(tmp_path: Path) -> None:
+    # A PHI (healthcare-staffing) pack in Nevada that omits the required federal flags.
+    _write_pack(
+        tmp_path / "under",
+        "pack_id: pack.test.v1\nname: T\nversion: '1'\nowner_venture: t\nowner_human: h\n"
+        "rubric_profile: r\nphi_required: true\ncompliance_flags:\n  - hcqc_nv\n"
+        "readiness_gate:\n  tier_thresholds:\n    F: 0.7\n",
+    )
+    result = validate_pack(load_pack(tmp_path / "under"))
+    assert result.ok is False
+    issue = next(i for i in result.errors if i.code == "jurisdiction_under_declared")
+    assert "oig_sam" in issue.message and "i9" in issue.message and "hipaa" in issue.message
+
+
+def test_jurisdiction_fully_declared_phi_pack_passes(tmp_path: Path) -> None:
+    _write_pack(
+        tmp_path / "full",
+        "pack_id: pack.test.v1\nname: T\nversion: '1'\nowner_venture: t\nowner_human: h\n"
+        "rubric_profile: r\nphi_required: true\ncompliance_flags:\n"
+        "  - hcqc_nv\n  - hipaa\n  - oig_sam\n  - i9\n"
+        "readiness_gate:\n  tier_thresholds:\n    F: 0.7\n",
+    )
+    result = validate_pack(load_pack(tmp_path / "full"))
+    assert result.ok, [i.message for i in result.errors]
+
+
+def test_non_phi_pack_not_forced_to_declare_federal_flags(tmp_path: Path) -> None:
+    # A non-healthcare venture (phi false) with venture-specific flags is not under-declared.
+    _write_pack(
+        tmp_path / "re",
+        "pack_id: pack.test.v1\nname: T\nversion: '1'\nowner_venture: t\nowner_human: h\n"
+        "rubric_profile: r\nphi_required: false\ncompliance_flags:\n"
+        "  - tcpa\n  - state_wholesaling\n"
+        "readiness_gate:\n  tier_thresholds:\n    F: 0.7\n",
+    )
+    result = validate_pack(load_pack(tmp_path / "re"))
+    assert result.ok, [i.message for i in result.errors]
+
+
 def test_missing_threshold_flagged(tmp_path: Path) -> None:
     pack_dir = tmp_path / "gappack"
     (pack_dir / "scenarios").mkdir(parents=True)
