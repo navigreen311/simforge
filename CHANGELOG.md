@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Integrated (write-enabled) execution — PDP-gated, off by default (v1.1, ADR-0025)
+- **Integrated execution** (`services/execution/`) — a run can now *commit* an agent's actions, not just simulate them. **Deliberately relaxes the sandbox-only guardrail (ADR-0001)** for this feature, with safety by construction:
+  - **Triple-gated, off by default** — executes only when `INTEGRATED_EXECUTION_ENABLED` (default false) AND the pack's `integratedRunsAllowed` AND the run's `?integrated=true`. Any gate unmet → sandbox. CI runs entirely flag-off; the shipped default changes nothing.
+  - **PDP-gated per action** — each tested capability goes through `PDP.decide` (ADR-0024); only an `allow` is **applied**, everything else is **blocked**. An uncertified / suspended / revoked / low-autonomy agent cannot execute.
+  - **VillageData fixture never written** — effects are an auditable `TraceEvent` ledger (`integrated_action`/`integrated_revert`), queryable + **reversible** (compensating entries).
+- **API** `/api/execution` — `GET /status` (is it enabled), `GET /run/{id}/actions` (the ledger with PDP reasons + revert status), `POST /run/{id}/actions/{id}/revert` (admin). `POST /api/scenarios/{id}/run?integrated=true` requests integrated mode.
+- **Tests:** +9 (275 api) — the triple gate (off by default), and end-to-end: a certified L5 agent's cap → **applied**, its uncertified cap → **blocked**, in one run; revert an applied action; can't revert a blocked one. ruff + mypy clean.
+
 ### Added — PDP/PEP docs + runbook (v1.1, ADR-0024) — **series complete**
 - **`docs/pdp-pep.md`** — operator/architecture doc: the decision matrix, the PEP embed pattern, real-time revocation, graceful degradation, metrics, and a try-it recipe.
 - **Runbook R-003** (PDP latency spike / PEP degradation) rewritten to reference the real implementation — the `/metrics` names, the two indexed DB reads on the decide path, revocation-storm diagnosis, and "degradation is safe" guidance.

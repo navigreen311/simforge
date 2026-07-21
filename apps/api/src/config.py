@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     # Packs
     packs_root: str = Field(default="./packs", alias="PACKS_ROOT")
 
+    # Integrated (write-enabled) execution (ADR-0025). OFF by default: a run may only execute
+    # integrated actions when this is true AND the pack allows it AND the run explicitly requests
+    # it — and every action is still gated by the PDP (only `allow` decisions are applied). The
+    # read-only VillageData fixture is never written; effects are recorded as an auditable ledger.
+    integrated_execution_enabled: bool = Field(default=False, alias="INTEGRATED_EXECUTION_ENABLED")
+
     # Forge sandboxes (ADR-0016). Default "local" = in-process engines (deterministic/offline,
     # keeps CI hermetic). "http" swaps to real HTTP-backed sandboxes for any forge that has a URL
     # configured in FORGE_SANDBOX_URLS (comma-separated "name=url" pairs); forges without a URL
