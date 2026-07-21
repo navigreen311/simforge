@@ -115,8 +115,12 @@ class Settings(BaseSettings):
         default=30.0, alias="FORGE_REQUEST_TIMEOUT_SECONDS"
     )
 
-    # Gap routing (empty in dev → no Linear posting)
+    # Gap routing to Linear (ADR-0029). Empty LINEAR_API_KEY → no-op (dev). With a key + team,
+    # gaps post real issues via the Linear GraphQL API (best-effort; a Linear outage never blocks
+    # gap emission).
     linear_api_key: str = Field(default="", alias="LINEAR_API_KEY")
+    linear_team_id: str = Field(default="", alias="LINEAR_TEAM_ID")
+    linear_api_url: str = Field(default="https://api.linear.app/graphql", alias="LINEAR_API_URL")
 
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")

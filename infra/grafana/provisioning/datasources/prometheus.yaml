@@ -1,0 +1,11 @@
+# Grafana datasource provisioning — SimForge Prometheus (ADR-0029).
+apiVersion: 1
+datasources:
+  - name: SimForge-Prometheus
+    type: prometheus
+    access: proxy
+    uid: simforge-prom
+    url: ${PROMETHEUS_URL:-http://prometheus:9090}
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
