@@ -4,6 +4,12 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — CareGrid venture Pack (California home-health staffing) (content)
+- **`pack.caregrid.v1`** — a third venture Pack (after greenstone + medlink-pro) exercising the platform across a new domain and **jurisdiction**: California home-health staffing (PHI). Declares the full US-CA + federal compliance set (`hipaa`, `cdph_ca`, `ccpa`, `oig_sam`, `i9`) — so it validates under the enforced jurisdiction rule (ADR-0021) and showcases the multi-state engine (US-CA, not just NV).
+- **3 scenarios** spanning four real Forges: `scn.cg.cred.001` (F — VAF license retrieval + medlink-pro credential check), `scn.cg.place.002` (I — medlink-pro shift-fill + funnelforge sequence), `scn.cg.audit.003` (AC — a CDPH surprise audit exercising medlink-pro + VAF + VoiceForge in one run).
+- **Tests:** +4 (217 api + 9 validator) — CareGrid validates (multi-state CA), the crisis run emits three Forge faults → three Software Gaps, the placement run passes + scores, and the pack reports satisfied US-CA/US-FED coverage.
+- **Verified live (Postgres 17):** CareGrid ingests; `scn.cg.audit.003` → `medlink-pro/compliance` + `vaf/doc_vault` + `voiceforge/call_center` P0 faults; pack coverage satisfied `[US-FED, US-CA]`.
+
 ### Added — YubiHSM / CloudHSM signer providers (v1.1)
 - **Backend-agnostic HSM signer** (`services/cert/hsm_signer.py`) — `HsmEd25519Signer(Signer)` holds no private key: it delegates `sign` to an on-device `HsmBackend` and derives verify/public-key/key-id from the backend's public key. Every HSM shares this one class.
 - **`HsmBackend` protocol** (`sign` + `public_key_der`) with concrete lazy-SDK backends: `_YubiHsmBackend` (the `yubihsm` SDK — connector→session→on-device Ed25519 `sign_eddsa`) and `_Pkcs11Backend` (the `pkcs11` SDK/vendor `.so` — EDDSA sign, for AWS CloudHSM or any PKCS#11 HSM). Each raises a clear `SignerConfigError` naming the missing SDK/config instead of crashing.
