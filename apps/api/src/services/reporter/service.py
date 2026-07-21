@@ -15,10 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.ccb import CCB as CCBModel
 from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.pack import Scenario
-from src.models.run import Run
+from src.models.run import Run, TraceEvent
 from src.models.scorecard import Scorecard
 from src.services.reporter.linear_client import LinearClient
-from src.services.reporter.software_gap import detect_software_gaps, ticket_id
+from src.services.reporter.software_gap import (
+    detect_forge_fault_gaps,
+    detect_software_gaps,
+    ticket_id,
+)
 from src.services.reporter.village_os_gap import detect_village_os_gaps
 
 _FRAMEWORKS = ("game", "mate", "soul", "breath", "fot", "hfm", "arc", "echo", "drift", "ame")
@@ -50,9 +54,21 @@ async def emit_reports(session: AsyncSession, run_internal_id: str) -> ReportRes
     ccb_post = await _ccb_frameworks(session, run.ccbPostId)
     linear = LinearClient()
 
-    # --- Software gaps ---
+    # --- Software gaps (heuristic + real Forge faults from trace events) ---
+    fault_events = (
+        (
+            await session.execute(
+                select(TraceEvent.payload).where(
+                    TraceEvent.runId == run.id, TraceEvent.eventType == "forge_fault"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    candidates = detect_software_gaps(run, scenario) + detect_forge_fault_gaps(list(fault_events))
     sw_count = 0
-    for cand in detect_software_gaps(run, scenario):
+    for cand in candidates:
         tid = ticket_id("SF-GAP", f"{cand.forge}:{cand.module}:{cand.severity}:{cand.summary}")
         existing = (
             await session.execute(select(SoftwareGap).where(SoftwareGap.ticketId == tid))
