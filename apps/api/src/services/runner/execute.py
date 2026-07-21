@@ -26,6 +26,7 @@ from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.forges import Fault, FaultType, get_forge_adapter
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.cre_forge import LocalCREForgeAdapter
+from src.services.forges.medlink_pro import LocalMedLinkProAdapter
 from src.services.forges.registry import forge_of_cap
 from src.services.forges.visionaudioforge import LocalVAFAdapter
 from src.services.forges.voiceforge import LocalVoiceForgeAdapter
@@ -137,6 +138,27 @@ async def _run_cre_forge(state, caps, run_id: str, inject: bool) -> None:
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
 
 
+# Deterministic fault per medlink-pro console module (compliance/safety faults are critical).
+_CONSOLE_FAULT = {
+    "scheduler": FaultType.SHIFT_DOUBLE_BOOKED,
+    "compliance": FaultType.CREDENTIAL_EXPIRED_UNFLAGGED,
+    "clinician": FaultType.CREDENTIAL_EXPIRED_UNFLAGGED,
+}
+
+
+async def _run_medlink_pro(state, caps, run_id: str, inject: bool) -> None:
+    # Registry is the swap point (Local ↔ real HTTP); the console ops are forge-specific.
+    adapter = cast(LocalMedLinkProAdapter, get_forge_adapter("medlink-pro"))
+    tenant = await adapter.provision_sandbox_tenant(run_id)
+    for cap in caps:
+        module = cap.split(".")[1] if "." in cap else "scheduler"
+        # A console task may hit an unflagged expired cred, a double-booked shift, or a UI block.
+        fault_type = _CONSOLE_FAULT.get(module, FaultType.UI_BLOCKING_MODAL) if inject else None
+        result = await adapter.start_and_run(tenant.tenant_id, module, fault_type)
+        _emit_forge_trace(state, "medlink-pro", module, cap, result)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
+
 async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     """Provision Forge sandbox tenants for the tested caps, run ops, record trace events.
 
@@ -149,6 +171,7 @@ async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     vaf = [c for c in caps if forge_of_cap(c) == "vaf"]
     voice = [c for c in caps if forge_of_cap(c) == "voiceforge"]
     cre = [c for c in caps if forge_of_cap(c) == "cre-forge"]
+    mlp = [c for c in caps if forge_of_cap(c) == "medlink-pro"]
     if cf:
         await _run_capitalforge(state, cf, run_id, inject)
     if vaf:
@@ -157,6 +180,8 @@ async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
         await _run_voiceforge(state, voice, run_id, inject)
     if cre:
         await _run_cre_forge(state, cre, run_id, inject)
+    if mlp:
+        await _run_medlink_pro(state, mlp, run_id, inject)
 
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}

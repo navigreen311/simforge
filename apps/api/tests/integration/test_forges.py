@@ -8,6 +8,7 @@ from httpx import AsyncClient
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
+MEDLINK = str(REPO_ROOT / "packs" / "medlink-pro" / "v1")
 
 
 async def test_list_forges_and_health(client: AsyncClient) -> None:
@@ -18,9 +19,10 @@ async def test_list_forges_and_health(client: AsyncClient) -> None:
     assert forges["vaf"] is True  # real adapter (Doc Vault)
     assert forges["voiceforge"] is True  # real adapter (Call Center)
     assert forges["cre-forge"] is True  # real adapter (Deal Desk)
+    assert forges["medlink-pro"] is True  # real adapter (Clinical Console)
     assert forges["funnelforge"] is False  # NullForgeAdapter until wired
 
-    for name in ("capitalforge", "vaf", "voiceforge", "cre-forge"):
+    for name in ("capitalforge", "vaf", "voiceforge", "cre-forge", "medlink-pro"):
         health = await client.get(f"/api/forges/{name}/health")
         assert health.json()["mode"] == "local"
 
@@ -57,6 +59,18 @@ async def test_cre_forge_demo_deal_fault(client: AsyncClient) -> None:
     body = resp.json()
     assert body["result"]["outcome"] == "fault_detected"
     assert body["result"]["fault"]["type"] == "title_defect"
+    assert body["result"]["fault"]["severity"] == "P0"
+
+
+async def test_medlink_pro_demo_console_fault(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/forges/medlink-pro/demo",
+        json={"fault": "credential_expired_unflagged", "module": "compliance"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["result"]["outcome"] == "fault_detected"
+    assert body["result"]["fault"]["type"] == "credential_expired_unflagged"
     assert body["result"]["fault"]["severity"] == "P0"
 
 
@@ -115,6 +129,26 @@ async def test_cre_forge_scenario_run_emits_forge_gap(client: AsyncClient) -> No
     gaps = (await client.get("/api/gaps/software", params={"forge": "cre-forge"})).json()
     assert gaps["total"] >= 1
     assert gaps["items"][0]["forge"] == "cre-forge"
+
+
+async def test_medlink_pro_scenario_run_emits_forge_gap(client: AsyncClient) -> None:
+    await client.post("/api/packs/", json={"pack_dir": MEDLINK})
+    # scn.ml.place.002 tests medlink-pro.scheduler.shift_fill for jennifer_adams (seeded),
+    # seed 402 (even) → fault
+    run = await client.post("/api/scenarios/scn.ml.place.002/run")
+    assert run.status_code == 200, run.text
+
+    trace = (await client.get(f"/api/runs/{run.json()['run_id']}/trace")).json()
+    mlp_faults = [
+        e
+        for e in trace["events"]
+        if e["event_type"] == "forge_fault" and e["payload"]["forge"] == "medlink-pro"
+    ]
+    assert mlp_faults, "expected a medlink-pro forge_fault trace event"
+
+    gaps = (await client.get("/api/gaps/software", params={"forge": "medlink-pro"})).json()
+    assert gaps["total"] >= 1
+    assert gaps["items"][0]["forge"] == "medlink-pro"
 
 
 async def test_capitalforge_scenario_run_emits_forge_gap(client: AsyncClient) -> None:

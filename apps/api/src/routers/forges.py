@@ -9,6 +9,7 @@ from src.deps import require_role
 from src.services.forges import Fault, FaultType
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.cre_forge import LocalCREForgeAdapter
+from src.services.forges.medlink_pro import LocalMedLinkProAdapter
 from src.services.forges.registry import KNOWN_FORGES, get_forge_adapter
 from src.services.forges.visionaudioforge import LocalVAFAdapter
 from src.services.forges.voiceforge import LocalVoiceForgeAdapter
@@ -34,6 +35,13 @@ class DemoCallRequest(BaseModel):
 class DemoDealRequest(BaseModel):
     fault: str | None = None  # title_defect|lien_undisclosed|assignment_blocked|deal_stale|...
     deal_type: str = "assignment"
+
+
+class DemoConsoleRequest(BaseModel):
+    fault: str | None = (
+        None  # credential_expired_unflagged|shift_double_booked|ui_blocking_modal|...
+    )
+    module: str = "scheduler"
 
 
 @router.get("/", dependencies=[Depends(require_role("viewer"))])
@@ -94,6 +102,17 @@ async def cre_forge_demo(body: DemoDealRequest) -> dict:
     adapter = LocalCREForgeAdapter()
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.create_and_process(tenant.tenant_id, body.deal_type, body.fault)
+    audit = await adapter.get_audit_log(tenant.tenant_id)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+
+
+@router.post("/medlink-pro/demo", dependencies=[Depends(require_role("admin"))])
+async def medlink_pro_demo(body: DemoConsoleRequest) -> dict:
+    """Provision a Clinical Console tenant, run a task, optionally with an injected fault."""
+    adapter = LocalMedLinkProAdapter()
+    tenant = await adapter.provision_sandbox_tenant("demo")
+    result = await adapter.start_and_run(tenant.tenant_id, body.module, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
     return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
