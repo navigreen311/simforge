@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────
+# SimForge .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+signing-keys/
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Prisma generated
+apps/web/src/lib/db/generated/
+apps/api/src/prisma_client/
+
+# Local infra / data
+docker-data/
+*.sqlite
+*.db
+evidence-local/
+village-data-local/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# Build artifacts
+*.tar.gz
+.fly/
