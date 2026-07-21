@@ -7,7 +7,9 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, ge
 # --- Collectors (subset of blueprint §H.2) ---
 RUNS_TOTAL = Counter("simforge_runs_total", "Scenario runs", ["status", "execution_mode"])
 RUN_DURATION = Histogram("simforge_run_duration_seconds", "Run wall-clock", ["tier"])
-TOKENS_TOTAL = Counter("simforge_tokens_used_total", "LLM tokens used", ["provider"])
+TOKENS_TOTAL = Counter(
+    "simforge_tokens_used_total", "LLM tokens used", ["provider", "model", "purpose"]
+)
 GATE_PASSED_TOTAL = Counter(
     "simforge_readiness_gate_total", "Readiness gate outcomes", ["tier", "passed"]
 )

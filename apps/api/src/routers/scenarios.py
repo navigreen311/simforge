@@ -74,16 +74,15 @@ async def run_scenario_endpoint(
     from src.routers.runs import _summarize
     from src.services.evaluation import evaluate_run
     from src.services.reporter import emit_reports
-    from src.telemetry.metrics import GATE_PASSED_TOTAL, RUN_DURATION, RUNS_TOTAL, TOKENS_TOTAL
+    from src.telemetry.metrics import GATE_PASSED_TOTAL, RUN_DURATION, RUNS_TOTAL
 
     try:
         run = await run_scenario(session, scenario_id, reader)
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-    # Metrics
+    # Metrics (token counts are emitted per-call by the LLM providers).
     RUNS_TOTAL.labels(status=run.status, execution_mode=run.executionMode).inc()
-    TOKENS_TOTAL.labels(provider="stub").inc(run.tokensUsed or 0)
     if run.latencyMs is not None:
         RUN_DURATION.labels(tier="all").observe(run.latencyMs / 1000.0)
 

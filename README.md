@@ -46,6 +46,20 @@ pnpm dev                      # web on :3000, api on :8000
 
 Then open <http://localhost:3000>.
 
+### Real LLM scoring (optional, ADR-0008)
+
+By default the agent + judge LLMs are a deterministic stub. To use a real model for the
+3 LLM-judge dimensions (P7/C1/C2):
+
+```bash
+# Ollama (local): ollama serve ; ollama pull llama3.1:8b
+export LLM_PROVIDER=ollama LLM_JUDGE_PROVIDER=ollama OLLAMA_BASE_URL=http://localhost:11434
+# or Anthropic (cloud):
+export LLM_PROVIDER=anthropic LLM_JUDGE_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-...
+
+python scripts/populate-llm-cache.py --provider ollama   # first-time: record hermetic fixtures
+```
+
 ## v1 local-dev note
 
 SimForge orchestrates external systems (Village OS filesystem, 6 Forge sandbox APIs, Clerk, HSM, Linear). In local dev these run against **stubs** (see `docs/DECISIONS.md`). No real PHI/PII is ever used — all fixtures are synthetic.

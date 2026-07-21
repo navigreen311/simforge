@@ -43,6 +43,11 @@ async def evaluate_run(session: AsyncSession, run_id_internal: str) -> Scorecard
         .all()
     )
 
+    complications = [
+        t.get("content", "")[14:].strip()
+        for t in (run.transcript or [])
+        if str(t.get("content", "")).startswith("[COMPLICATION]")
+    ]
     ctx = EvalContext(
         transcript=run.transcript or [],
         trace_event_types=list(trace_types),
@@ -55,9 +60,14 @@ async def evaluate_run(session: AsyncSession, run_id_internal: str) -> Scorecard
         compliance_checks=list(scenario.complianceChecks or []),
         ccb_pre=await _ccb_frameworks(session, run.ccbPreId),
         ccb_post=await _ccb_frameworks(session, run.ccbPostId),
+        scenario_title=scenario.title,
+        persona={"venue": run.packId, "forge_caps": list(scenario.testedForgeCaps or [])},
+        complications=complications,
     )
 
-    result = evaluate_rubric(ctx)
+    from src.services.agent_runtime.llm_client import get_judge_llm
+
+    result = await evaluate_rubric(ctx, get_judge_llm(), run_id=run.runId)
     s = result.scores
 
     tier_thresholds = gate_cfg.tierThresholds if gate_cfg else {"F": 0.70, "I": 0.80, "AC": 0.85}

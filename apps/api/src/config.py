@@ -31,11 +31,25 @@ class Settings(BaseSettings):
     auth_mode: str = Field(default="dev-bypass", alias="AUTH_MODE")
     clerk_secret_key: str = Field(default="", alias="CLERK_SECRET_KEY")
 
-    # LLM provider — "stub" (default, deterministic/offline), "ollama", "openai", or "auto"
-    llm_provider: str = Field(default="stub", alias="LLM_PROVIDER")
+    # LLM providers (ADR-0008). Agent-runtime + judge providers routed independently.
+    llm_provider: str = Field(default="stub", alias="LLM_PROVIDER")  # stub|ollama|anthropic
+    llm_judge_provider: str = Field(default="stub", alias="LLM_JUDGE_PROVIDER")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="llama3.1:8b", alias="OLLAMA_MODEL")
-    llm_timeout_seconds: float = Field(default=120.0, alias="LLM_TIMEOUT_SECONDS")
+    ollama_agent_model: str = Field(default="llama3.1:8b", alias="OLLAMA_AGENT_MODEL")
+    ollama_judge_model: str = Field(default="llama3.1:8b", alias="OLLAMA_JUDGE_MODEL")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_agent_model: str = Field(
+        default="claude-3-5-sonnet-20241022", alias="ANTHROPIC_AGENT_MODEL"
+    )
+    anthropic_judge_model: str = Field(
+        default="claude-3-5-sonnet-20241022", alias="ANTHROPIC_JUDGE_MODEL"
+    )
+    llm_request_timeout_seconds: float = Field(default=60.0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
+    llm_max_retries: int = Field(default=3, alias="LLM_MAX_RETRIES")
+    llm_cache_dir: str = Field(default="./tests/fixtures/llm_cache", alias="LLM_CACHE_DIR")
+    # off | read | record | replay_strict (replay_strict = CI/unit default)
+    llm_cache_mode: str = Field(default="off", alias="LLM_CACHE_MODE")
+    llm_test_mode: bool = Field(default=False, alias="LLM_TEST_MODE")
 
     # Village coupling
     village_data_path: str = Field(

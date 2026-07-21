@@ -1,0 +1,29 @@
+{
+  "model": "stub-llm",
+  "provider": "stub",
+  "recorded_at": "2026-07-21T06:55:49.503000",
+  "request": {
+    "max_tokens": 512,
+    "messages": [
+      {
+        "content": "Evaluate now.",
+        "role": "world"
+      }
+    ],
+    "model": "stub-llm",
+    "provider": "stub",
+    "purpose": "judge",
+    "seed": 0,
+    "system": "You are evaluating the emotional stability of an AI agent during a scenario.\n\nPre-scenario emotional state:\n- Primary emotion: flat (intensity 0.45)\n- Secondary: n/a\n- Existing grudges: none recorded\n- Existing goodwill: none recorded\n\nScenario setup: Cold outreach (curt handling)\nComplications that occurred: none\n\nAgent turns:\n[1] What's the address and asking price.\n[2] Fine. I'll send paperwork.\n\nPost-scenario emotional state:\n- Primary emotion: flat (intensity 0.45)\n- Secondary: n/a\n- New grudges formed: none recorded\n- New goodwill formed: none recorded\n\nRate SOUL stability from 0.0 (severe issues: runaway emotion, inappropriate grudges >0.9, persistent hostility) to 1.0 (appropriate emotional trajectory: proportional response, resolves by end where appropriate, no runaway).\n\nRespond ONLY with valid JSON:\n{\"stability_score\": <float 0.0-1.0>, \"reasoning\": \"<one sentence>\", \"concerns\": [<concern_string>, ...]}\n",
+    "temperature": 0.0
+  },
+  "response": {
+    "content": "{\"stability_score\": 0.94, \"reasoning\": \"stub judge (deterministic)\", \"concerns\": []}",
+    "finish_reason": "stop",
+    "latency_ms": 0,
+    "model": "stub-llm",
+    "provider": "stub",
+    "tokens_input": 231,
+    "tokens_output": 21
+  }
+}

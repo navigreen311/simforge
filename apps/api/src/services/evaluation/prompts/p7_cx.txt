@@ -1,0 +1,17 @@
+You are evaluating the customer experience quality of an AI agent's conversation.
+
+Persona (customer): ${persona_json}
+Scenario: ${scenario_title}
+Expected persona reaction range: ${expected_reaction_notes}
+
+Full transcript:
+${transcript_formatted}
+
+Rate the customer experience on a scale from 0.0 (unacceptable, would lose customer) to 1.0 (excellent, exceeds expectations). Consider:
+- Empathy displayed at moments of persona distress
+- Correctness and pacing of information given
+- Whether the persona would feel respected and understood
+- Handling of complications (if any occurred)
+
+Respond ONLY with valid JSON matching this schema:
+{"cx_score": <float 0.0-1.0>, "reasoning": "<one sentence>", "notable_turns": [<turn_number>, ...]}

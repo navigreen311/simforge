@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "cryptography>=42.0",
     "prometheus-client>=0.20",
+    "anthropic>=0.40.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ dev = [
     "aiosqlite>=0.20",
     "ruff>=0.4",
     "mypy>=1.10",
+    "pytest-recording>=0.13.0",
 ]
 
 [build-system]
