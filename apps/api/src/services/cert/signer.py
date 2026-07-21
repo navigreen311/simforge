@@ -161,9 +161,16 @@ def get_signer() -> Signer:
             pem=settings.simforge_signing_private_key_pem,
             private_key_path=settings.simforge_signing_private_key_path,
         )
+    elif provider == "yubihsm":
+        from src.services.cert.hsm_signer import build_yubihsm_signer
+
+        _signer_singleton = build_yubihsm_signer()
+    elif provider == "cloudhsm":
+        from src.services.cert.hsm_signer import build_cloudhsm_signer
+
+        _signer_singleton = build_cloudhsm_signer()
     else:
-        # yubihsm / cloudhsm: drop in behind the same Signer ABC with the vendor SDK + creds.
-        raise NotImplementedError(f"HSM provider '{provider}' not enabled in this environment")
+        raise NotImplementedError(f"Unknown HSM provider '{provider}'")
     return _signer_singleton
 
 

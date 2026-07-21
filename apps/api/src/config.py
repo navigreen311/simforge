@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     simforge_signing_private_key_pem: str = Field(
         default="", alias="SIMFORGE_SIGNING_PRIVATE_KEY_PEM"
     )
+    # YubiHSM (HSM_PROVIDER=yubihsm) — needs the `yubihsm` SDK + a reachable connector.
+    yubihsm_connector_url: str = Field(default="", alias="YUBIHSM_CONNECTOR_URL")
+    yubihsm_auth_key_id: int = Field(default=1, alias="YUBIHSM_AUTH_KEY_ID")
+    yubihsm_password: str = Field(default="", alias="YUBIHSM_PASSWORD")
+    yubihsm_signing_key_id: int = Field(default=0, alias="YUBIHSM_SIGNING_KEY_ID")
+    # PKCS#11 / AWS CloudHSM (HSM_PROVIDER=cloudhsm) — needs the `pkcs11` SDK + the vendor .so lib.
+    pkcs11_lib_path: str = Field(default="", alias="PKCS11_LIB_PATH")
+    pkcs11_token_label: str = Field(default="", alias="PKCS11_TOKEN_LABEL")
+    pkcs11_pin: str = Field(default="", alias="PKCS11_PIN")
+    pkcs11_key_label: str = Field(default="", alias="PKCS11_KEY_LABEL")
 
     # Certification (dev relaxes the prod 18-scenario battery minimum)
     cert_min_battery_size: int = Field(default=1, alias="CERT_MIN_BATTERY_SIZE")
