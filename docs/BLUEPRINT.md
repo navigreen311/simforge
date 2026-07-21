@@ -2944,6 +2944,7 @@ See §A.5 (repository structure). Every file has:
 | Version | Date | Changes |
 |---|---|---|
 | 1.0.0 | 2026-04-21 | Initial blueprint corresponding to spec v1.0.0 |
+| 1.0.0-path-a | 2026-07-21 | Path A: real LLM provider (Ollama+Anthropic) + LLM-judge P7/C1/C2 + hermetic cache (ADR-0008/0009) |
 
 ---
 

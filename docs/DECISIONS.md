@@ -73,6 +73,8 @@ Two consequences bit CertSnapshot verification (signed value must survive a DB r
 **Verified:** a freshly issued CertSnapshot verifies `valid: True` against live Postgres.
 
 ## ADR-0008 — Pluggable LLM provider; StubProvider is the default
+
+> **Expanded (Path A):** the full ADR now lives at `docs/adr/ADR-0008-real-llm-provider.md` (adds Ollama+Anthropic judge providers, cache layer, canonicalization via ADR-0009). This entry is the original summary.
 **Status:** Accepted (2026-07-21, post-v1).
 
 The agent runtime selects its LLM via `LLM_PROVIDER`: **`stub`** (default — deterministic,
