@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Sixth (final) real Forge: FunnelForge (Flows) — **all 6 Forges now real** (post-v1)
+- **FunnelForge Flows** — deterministic in-process engine (`services/forges/funnel.py`) + `LocalFunnelForgeAdapter` (`funnelforge.py`, version `funnelforge.flows.v1`): tenants, synthetic leads/segments/campaigns/sequences, flow-fault injection + run. Fault menu: delivery/compliance (webhook_dropped/campaign_to_unsubscribed → **P0**), flow/data (sequence_misfire/segment_stale/bounce_unhandled/lead_misattributed → **P1**, duplicate_enrollment → **P2**). Fixtures synthetic only. **Registry now resolves all 6 Forge names to real Local adapters**; `NullForgeAdapter` is retained only as the fallback for unknown forge names.
+- **Runner** — `_run_funnelforge` added to the per-forge dispatch with a per-module fault map (`_FUNNEL_FAULT`). Reporter is forge-agnostic, so funnelforge faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).
+- **`scn.ml.place.002`** now surfaces its `funnelforge.sequences.trigger` cap as a real flow fault → Software Gap.
+- **Router** `POST /api/forges/funnelforge/demo`.
+- **Tests:** +14 (169 api + 5 validator) — Funnel engine (all 7 fault severities + seed-state), FunnelForge adapter **contract test** (§I.3), all-6-real registry resolution + unknown-name Null fallback, demo, and the funnelforge fault→gap integration on `scn.ml.place.002`. ruff + mypy clean on touched files.
+- **Verified live:** `scn.ml.place.002` → `funnelforge/sequences` sequence_misfire fault → Software Gap `funnelforge/sequences`. ADR-0015. **6 of 6 Forges real — the fault→gap loop is complete across the whole Forge surface.**
+
 ### Added — Fifth real Forge: medlink-pro (Clinical Console) (post-v1)
 - **medlink-pro Clinical Console** — deterministic in-process engine (`services/forges/clinical_console.py`) + `LocalMedLinkProAdapter` (`medlink_pro.py`, version `medlink-pro.console.v1`): tenants, **PHI-synthetic** staffing state (scheduler/compliance/clinician), UI + staffing fault injection + task run. Fault menu: compliance/safety (credential_expired_unflagged/shift_double_booked/phi_overexposure → **P0**), UI/state (ui_blocking_modal/stale_roster/timecard_missing/msa_terms_stale → **P1**). Fixtures synthetic only ("SYNTHETIC CLINICIAN"/"SYNTHETIC FACILITY") — never real PHI. Registry now resolves `medlink-pro` → real adapter.
 - **Runner** — `_run_medlink_pro` added to the per-forge dispatch with a per-module fault map (`_CONSOLE_FAULT`: scheduler→shift_double_booked, compliance/clinician→credential_expired_unflagged, else ui_blocking_modal). Reporter is forge-agnostic, so medlink-pro faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).
