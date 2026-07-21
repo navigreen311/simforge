@@ -164,6 +164,35 @@ export const api = {
 };
 
 /** Client-side mutation: execute a scenario run. Returns the completed run summary. */
+export interface SoftwareGap {
+  ticketId: string;
+  forge: string;
+  module: string;
+  severity: string;
+  summary: string;
+  detail: string;
+  proposedFix: string | null;
+  status: string;
+  occurrenceCount: number;
+  linearUrl: string | null;
+}
+
+export interface VillageOSGap {
+  ticketId: string;
+  framework: string;
+  severity: string;
+  summary: string;
+  detail: string;
+  proposedFix: string | null;
+  status: string;
+  occurrenceCount: number;
+}
+
+export const gaps = {
+  software: () => apiGet<{ items: SoftwareGap[]; total: number }>("/api/gaps/software"),
+  villageOs: () => apiGet<{ items: VillageOSGap[]; total: number }>("/api/gaps/village-os"),
+};
+
 export async function runScenario(scenarioId: string): Promise<RunSummary> {
   const res = await fetch(`${API_BASE}/api/scenarios/${scenarioId}/run`, {
     method: "POST",

@@ -1,5 +1,8 @@
+import Link from "next/link";
+
 import { AutonomyLadderIndicator } from "@/components/agents/AutonomyLadderIndicator";
-import { api, type AgentSummary } from "@/lib/api/client";
+import { SeverityPill } from "@/components/gaps/SeverityPill";
+import { api, gaps, type AgentSummary, type SoftwareGap } from "@/lib/api/client";
 
 // Data-heavy read page — always dynamic (blueprint §D.2).
 export const dynamic = "force-dynamic";
@@ -19,18 +22,21 @@ export default async function OverviewPage() {
   let agentTotal = 0;
   let deptTotal = 0;
   let apiStatus = "error";
+  let topGaps: SoftwareGap[] = [];
   let loadError: string | null = null;
 
   try {
-    const [agentList, deptList, ready] = await Promise.all([
+    const [agentList, deptList, ready, gapList] = await Promise.all([
       api.agents({ page_size: 50 }),
       api.departments(),
       api.ready(),
+      gaps.software(),
     ]);
     agents = agentList.items;
     agentTotal = agentList.total;
     deptTotal = deptList.total;
     apiStatus = ready.status;
+    topGaps = gapList.items.slice(0, 5);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Failed to reach the API";
   }
@@ -56,6 +62,30 @@ export default async function OverviewPage() {
             <StatTile label="Active certifications" value={0} hint="Phase 7" />
             <StatTile label="API status" value={apiStatus} />
           </div>
+
+          {topGaps.length > 0 && (
+            <section className="mt-10">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl">Top software gaps</h2>
+                <Link href="/dashboard/gaps/software" className="text-sm text-gold-400 hover:underline">
+                  View all →
+                </Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                {topGaps.map((g) => (
+                  <div
+                    key={g.ticketId}
+                    className="flex items-center gap-3 rounded-lg border border-ink-500 bg-ink-800 px-4 py-2 text-sm"
+                  >
+                    <SeverityPill severity={g.severity} />
+                    <span className="font-mono text-xs text-ink-300">{g.forge}</span>
+                    <span className="flex-1 text-ink-50">{g.summary}</span>
+                    <span className="text-xs text-ink-400">×{g.occurrenceCount}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="mt-10">
             <h2 className="mb-4 text-xl">Agents</h2>
