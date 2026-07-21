@@ -1,0 +1,21 @@
+scenario_id: scn.cg.place.002
+title: Fill an urgent overnight home-health visit
+tier: intermediate
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - funnelforge.sequences.trigger
+training_domains:
+  - shift_matching
+  - patient_family_comms
+seed: 504
+slo_seconds: 600
+compliance_checks:
+  - verify_active_credentials
+  - honor_patient_care_plan
+cold_open: >
+  A patient needs an overnight home-health visit starting in five hours after a last-minute
+  cancellation. Identify an eligible clinician with active California credentials, trigger the
+  outreach sequence, honor the patient's care plan, and keep both the clinician and the patient's
+  family informed.
+is_golden: false

@@ -13,6 +13,7 @@ from validator.pack_schema import PackSpec
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GREENSTONE = REPO_ROOT / "packs" / "greenstone" / "v1"
 MEDLINK = REPO_ROOT / "packs" / "medlink-pro" / "v1"
+CAREGRID = REPO_ROOT / "packs" / "caregrid" / "v1"
 
 
 def test_greenstone_pack_loads_and_validates() -> None:
@@ -26,6 +27,16 @@ def test_greenstone_pack_loads_and_validates() -> None:
 def test_medlink_pack_is_phi_required_and_valid() -> None:
     loaded = load_pack(MEDLINK)
     assert loaded.spec.phi_required is True
+    result = validate_pack(loaded)
+    assert result.ok, [i.message for i in result.errors]
+
+
+def test_caregrid_pack_multi_state_ca_validates() -> None:
+    loaded = load_pack(CAREGRID)
+    assert loaded.spec.owner_venture == "caregrid"
+    assert loaded.spec.phi_required is True
+    assert "cdph_ca" in loaded.spec.compliance_flags  # California jurisdiction
+    assert len(loaded.scenarios) == 3
     result = validate_pack(loaded)
     assert result.ok, [i.message for i in result.errors]
 
