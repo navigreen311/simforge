@@ -104,10 +104,18 @@ async def issue_agent_cert(
     now = utcnow()
     expires = now + timedelta(days=settings.cert_validity_days)
 
+    # Pin the real Forge version the battery ran against (drift canary compares against this).
+    from src.services.forges.registry import get_forge_adapter
+
+    try:
+        forge_version = await get_forge_adapter(forge).get_current_version()
+    except Exception:  # noqa: BLE001 — never fail issuance on a Forge lookup hiccup
+        forge_version = f"{forge}.unknown"
+
     pinned = PinnedVersions(
         pack=pack.packId,
         scenario_library_hash=pack.yamlHash,
-        forge_versions={forge: "sandbox.dev"},
+        forge_versions={forge: forge_version},
         village_schema_fingerprint=fingerprint,
     )
     payload = CertSnapshotPayload(
