@@ -83,3 +83,66 @@ async def test_forge_drift_auto_suspends_and_demotes(
     assert scan["suspended"] == 1
     assert (await client.get(f"/api/certs/agent/{cert_id}")).json()["status"] == "suspended"
     assert (await client.get("/api/agents/david_kim")).json()["currentAutonomyLevel"] == "L1"
+
+
+async def test_suspended_cert_reinstated_by_recert(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A drift-suspended cert recovers via re-certification against the current version matrix."""
+    cert_id, pinned = await _issue_cert(client)
+    # Drift → suspend + demote to L1. (Only the drift canary's Forge lookup is patched; the cert
+    # registry's re-pin during reinstate uses the real adapter → pins the current v1 again.)
+    monkeypatch.setattr(
+        "src.services.drift.canary.get_forge_adapter",
+        lambda forge: _BumpedAdapter() if forge == "cre-forge" else None,
+    )
+    assert (await client.post("/api/drift/scan")).json()["suspended"] == 1
+    assert (await client.get(f"/api/certs/agent/{cert_id}")).json()["status"] == "suspended"
+    assert (await client.get("/api/agents/david_kim")).json()["currentAutonomyLevel"] == "L1"
+
+    # Re-issue is blocked (a suspended cert occupies the pair) — must reinstate instead.
+    dup = await client.post(
+        "/api/certs/agent/issue",
+        json={
+            "agent_village_id": "david_kim",
+            "forge_cap": "cre-forge.call_center.outbound_seller_outreach",
+            "tier": "foundational",
+            "battery_run_ids": [
+                (await client.post("/api/scenarios/scn.gs.src.001/run")).json()["run_id"]
+            ],
+            "approver_id": "ivan",
+            "pack_id": "pack.greenstone.v1",
+        },
+    )
+    assert dup.status_code == 400
+    assert "reinstate" in dup.json()["detail"].lower()
+
+    # A fresh passing battery reinstates: cert → active, re-pins the CURRENT forge version,
+    # and autonomy is restored to L2.
+    fresh_run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()["run_id"]
+    reinstate = await client.post(
+        f"/api/certs/agent/{cert_id}/reinstate",
+        json={"battery_run_ids": [fresh_run], "approver_id": "ivan"},
+    )
+    assert reinstate.status_code == 200, reinstate.text
+    body = reinstate.json()
+    assert body["cert"]["status"] == "active"
+    assert body["autonomy_from"] == "L1" and body["autonomy_to"] == "L2"
+    # New snapshot pins the current version (still v1 here — no real drift now).
+    assert body["snapshot"]["pinnedVersions"]["forge_versions"]["cre-forge"] == pinned
+    assert (await client.get("/api/agents/david_kim")).json()["currentAutonomyLevel"] == "L2"
+
+    # And the signature on the new snapshot verifies.
+    verify = (await client.get(f"/api/snapshots/{body['snapshot']['snapshotId']}/verify")).json()
+    assert verify["valid"] is True
+
+
+async def test_reinstate_rejects_non_suspended_cert(client: AsyncClient) -> None:
+    cert_id, _ = await _issue_cert(client)  # active, not suspended
+    fresh_run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()["run_id"]
+    resp = await client.post(
+        f"/api/certs/agent/{cert_id}/reinstate",
+        json={"battery_run_ids": [fresh_run], "approver_id": "ivan"},
+    )
+    assert resp.status_code == 400
+    assert "suspended" in resp.json()["detail"].lower()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +15,12 @@ from src.models.cert import AgentCert, CertLifecycleEvent, CertSnapshot
 from src.models.pack import Pack
 from src.models.run import Run
 from src.models.scorecard import Scorecard
-from src.services.cert.autonomy_ladder import LEVELS, demote, promote_on_first_cert
+from src.services.cert.autonomy_ladder import (
+    LEVELS,
+    demote,
+    promote_on_first_cert,
+    record_transition,
+)
 from src.services.cert.signer import encode_signature, get_signer
 from src.services.cert.snapshot import CertSnapshotPayload, PinnedVersions
 from src.services.evidence import store_evidence_bundle
@@ -57,41 +62,17 @@ async def _validate_battery(
     return runs
 
 
-async def issue_agent_cert(
+async def _create_snapshot(
     session: AsyncSession,
     agent_village_id: str,
     forge_cap: str,
     tier: str,
-    battery_run_ids: list[str],
+    runs: list[Run],
     approver_id: str,
-    pack_id: str,
-) -> IssuedCert:
-    agent = (
-        await session.execute(select(Agent).where(Agent.villageAgentId == agent_village_id))
-    ).scalar_one_or_none()
-    if agent is None:
-        raise CertIssuanceError(f"Agent not found: {agent_village_id}")
-
-    runs = await _validate_battery(session, agent, battery_run_ids)
-
-    existing = (
-        await session.execute(
-            select(AgentCert).where(
-                AgentCert.agentId == agent.id,
-                AgentCert.forgeCap == forge_cap,
-                AgentCert.status == "active",
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise CertIssuanceError(
-            f"Active cert already exists for {agent_village_id} / {forge_cap} (use renew)"
-        )
-
-    pack = (await session.execute(select(Pack).where(Pack.packId == pack_id))).scalar_one_or_none()
-    if pack is None:
-        raise CertIssuanceError(f"Pack not found: {pack_id}")
-
+    pack: Pack,
+) -> tuple[CertSnapshot, datetime, datetime]:
+    """Build + sign a CertSnapshot pinning the current version matrix. Shared by issue + reinstate,
+    so both produce byte-identical canonical/signed payloads (ADR-0007)."""
     # Village fingerprint pinned from a battery run's CCB.
     fingerprint = ""
     if runs[0].ccbPreId:
@@ -129,9 +110,7 @@ async def issue_agent_cert(
         forge_cap=forge_cap,
     )
 
-    content_hash = payload.content_hash()
-    snapshot_id = f"certsnap:{content_hash[:16]}"
-
+    snapshot_id = f"certsnap:{payload.content_hash()[:16]}"
     bundle = {
         "snapshot_id": snapshot_id,
         "subject": agent_village_id,
@@ -170,6 +149,51 @@ async def issue_agent_cert(
     )
     session.add(snapshot)
     await session.flush()
+    return snapshot, now, expires
+
+
+async def issue_agent_cert(
+    session: AsyncSession,
+    agent_village_id: str,
+    forge_cap: str,
+    tier: str,
+    battery_run_ids: list[str],
+    approver_id: str,
+    pack_id: str,
+) -> IssuedCert:
+    agent = (
+        await session.execute(select(Agent).where(Agent.villageAgentId == agent_village_id))
+    ).scalar_one_or_none()
+    if agent is None:
+        raise CertIssuanceError(f"Agent not found: {agent_village_id}")
+
+    runs = await _validate_battery(session, agent, battery_run_ids)
+
+    # A cert already occupies this (agent, forge_cap) pair (UNIQUE in the schema). An active one
+    # blocks re-issue; a *suspended* one must be reinstated (re-certified), not re-issued.
+    existing = (
+        await session.execute(
+            select(AgentCert).where(
+                AgentCert.agentId == agent.id,
+                AgentCert.forgeCap == forge_cap,
+                AgentCert.status.in_(("active", "suspended")),
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        verb = "Reinstate it" if existing.status == "suspended" else "Revoke it first"
+        raise CertIssuanceError(
+            f"A {existing.status} cert already exists for {agent_village_id} / {forge_cap}. "
+            f"{verb} instead of re-issuing."
+        )
+
+    pack = (await session.execute(select(Pack).where(Pack.packId == pack_id))).scalar_one_or_none()
+    if pack is None:
+        raise CertIssuanceError(f"Pack not found: {pack_id}")
+
+    snapshot, now, expires = await _create_snapshot(
+        session, agent_village_id, forge_cap, tier, runs, approver_id, pack
+    )
 
     cert = AgentCert(
         agentId=agent.id,
@@ -190,7 +214,7 @@ async def issue_agent_cert(
             timestamp=now,
             actor=approver_id,
             reason="battery passed",
-            snapshotIdAtEvent=snapshot_id,
+            snapshotIdAtEvent=snapshot.snapshotId,
         )
     )
 
@@ -212,8 +236,9 @@ async def issue_agent_cert(
     await register_entry(session, pack_urn(pack.packId), "pack", pack.packId, {})
     await add_edge(session, c_urn, agent_urn(agent.villageAgentId), "produced_by")
     await add_edge(session, c_urn, pack_urn(pack.packId), "derived_from")
-    await add_edge(session, c_urn, constitution_urn(pinned.constitution_version), "pinned_to")
-    await add_edge(session, c_urn, evidence_urn(snapshot_id), "evidenced_by")
+    constitution_version = snapshot.pinnedVersions.get("constitution_version", "v1.0.0")
+    await add_edge(session, c_urn, constitution_urn(constitution_version), "pinned_to")
+    await add_edge(session, c_urn, evidence_urn(snapshot.snapshotId), "evidenced_by")
 
     from_level = agent.currentAutonomyLevel
     await promote_on_first_cert(session, agent)
@@ -258,3 +283,78 @@ async def revoke_agent_cert(
     await session.commit()
     await session.refresh(cert)
     return cert
+
+
+async def reinstate_agent_cert(
+    session: AsyncSession,
+    cert_id: str,
+    battery_run_ids: list[str],
+    approver_id: str,
+) -> IssuedCert:
+    """Reinstate a **suspended** cert by re-certifying against the *current* version matrix.
+
+    A cert suspended by the Drift Canary (Forge drift) or a constitution amendment is recovered by
+    running a fresh passing battery: this pins a new snapshot against the now-current Forge (and
+    constitution) versions, flips the cert back to active, and restores one autonomy level. The
+    UNIQUE(agentId, forgeCap) constraint is respected — the existing cert row is updated in place
+    (no re-issue), which is why suspended certs can't be re-`issue`d and must be reinstated."""
+    cert = (
+        await session.execute(select(AgentCert).where(AgentCert.id == cert_id))
+    ).scalar_one_or_none()
+    if cert is None:
+        raise CertIssuanceError(f"Cert not found: {cert_id}")
+    if cert.status != "suspended":
+        raise CertIssuanceError(f"Only suspended certs can be reinstated (cert is '{cert.status}')")
+
+    agent = (
+        await session.execute(select(Agent).where(Agent.id == cert.agentId))
+    ).scalar_one_or_none()
+    if agent is None:
+        raise CertIssuanceError("Cert's agent no longer exists")
+
+    runs = await _validate_battery(session, agent, battery_run_ids)
+
+    old_snap = (
+        await session.execute(select(CertSnapshot).where(CertSnapshot.id == cert.certSnapshotId))
+    ).scalar_one_or_none()
+    pack_id = old_snap.pinnedVersions.get("pack") if old_snap else None
+    pack = (
+        (await session.execute(select(Pack).where(Pack.packId == pack_id))).scalar_one_or_none()
+        if pack_id
+        else None
+    )
+    if pack is None:
+        raise CertIssuanceError("Original pack for this cert not found; cannot reinstate")
+
+    snapshot, now, expires = await _create_snapshot(
+        session, agent.villageAgentId, cert.forgeCap, cert.tier, runs, approver_id, pack
+    )
+
+    cert.status = "active"
+    cert.certSnapshotId = snapshot.id
+    cert.issuedAt = now
+    cert.expiresAt = expires
+    cert.revokedAt = None
+    cert.revocationReason = None
+    session.add(
+        CertLifecycleEvent(
+            agentCertId=cert.id,
+            event="reinstated",
+            timestamp=now,
+            actor=approver_id,
+            reason="re-certified against current versions",
+            snapshotIdAtEvent=snapshot.snapshotId,
+        )
+    )
+
+    # Restore one autonomy level (inverse of the defensive demote on suspension).
+    from_level = agent.currentAutonomyLevel
+    idx = LEVELS.index(from_level) if from_level in LEVELS else 0
+    if idx < len(LEVELS) - 1:
+        await record_transition(session, agent, LEVELS[idx + 1], "cert reinstated", approver_id)
+    to_level = agent.currentAutonomyLevel
+
+    await session.commit()
+    await session.refresh(cert)
+    await session.refresh(snapshot)
+    return IssuedCert(cert, snapshot, from_level, to_level)
