@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.services.forges.base import ForgeAdapter, NullForgeAdapter
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.visionaudioforge import LocalVAFAdapter
+from src.services.forges.voiceforge import LocalVoiceForgeAdapter
 
 KNOWN_FORGES = (
     "voiceforge",
@@ -17,11 +18,13 @@ KNOWN_FORGES = (
 
 
 def get_forge_adapter(forge: str) -> ForgeAdapter:
-    """Resolve a Forge name to its adapter. v1: only CapitalForge is real (Local Mock Bank)."""
+    """Resolve a Forge name to its adapter. Real: CapitalForge, VAF, VoiceForge (all Local)."""
     if forge == "capitalforge":
         return LocalCapitalForgeAdapter()
     if forge == "vaf":
         return LocalVAFAdapter()
+    if forge == "voiceforge":
+        return LocalVoiceForgeAdapter()
     return NullForgeAdapter(forge)
 
 

@@ -10,6 +10,7 @@ from src.services.forges import Fault, FaultType
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.registry import KNOWN_FORGES, get_forge_adapter
 from src.services.forges.visionaudioforge import LocalVAFAdapter
+from src.services.forges.voiceforge import LocalVoiceForgeAdapter
 
 router = APIRouter()
 
@@ -22,6 +23,11 @@ class DemoBankRequest(BaseModel):
 class DemoDocRequest(BaseModel):
     fault: str | None = None  # forged_signature|expired_date|revoked_license|oig_match|...
     doc_type: str = "title_report"
+
+
+class DemoCallRequest(BaseModel):
+    fault: str | None = None  # dropped_call|dead_air|misroute|disclosure_missing|...
+    direction: str = "inbound"
 
 
 @router.get("/", dependencies=[Depends(require_role("viewer"))])
@@ -60,6 +66,17 @@ async def vaf_demo(body: DemoDocRequest) -> dict:
     adapter = LocalVAFAdapter()
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.generate_and_extract(tenant.tenant_id, body.doc_type, body.fault)
+    audit = await adapter.get_audit_log(tenant.tenant_id)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+
+
+@router.post("/voiceforge/demo", dependencies=[Depends(require_role("admin"))])
+async def voiceforge_demo(body: DemoCallRequest) -> dict:
+    """Provision a Call Center tenant, place+handle a call, optionally with an injected fault."""
+    adapter = LocalVoiceForgeAdapter()
+    tenant = await adapter.provision_sandbox_tenant("demo")
+    result = await adapter.place_and_handle(tenant.tenant_id, body.direction, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
     return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
