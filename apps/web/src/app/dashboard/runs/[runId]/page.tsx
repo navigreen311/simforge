@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { FifteenDimChart } from "@/components/runs/FifteenDimChart";
 import { RunStatusBadge } from "@/components/runs/RunStatusBadge";
-import { api, type RunSummary, type TranscriptTurn } from "@/lib/api/client";
+import { api, type Scorecard, type RunSummary, type TranscriptTurn } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,14 @@ export default async function RunDetailPage({ params }: { params: { runId: strin
     notFound();
   }
 
+  // Scorecard is best-effort (absent for errored runs).
+  let scorecard: Scorecard | null = null;
+  try {
+    scorecard = await api.scorecard(params.runId);
+  } catch {
+    scorecard = null;
+  }
+
   return (
     <div className="mx-auto max-w-5xl">
       <Link href="/dashboard/runs" className="text-sm text-ink-300 hover:text-ink-100">
@@ -59,6 +68,12 @@ export default async function RunDetailPage({ params }: { params: { runId: strin
         <Stat label="Latency" value={run.latency_ms != null ? `${run.latency_ms}ms` : "—"} />
         <Stat label="Tokens" value={run.tokens_used != null ? String(run.tokens_used) : "—"} />
       </div>
+
+      {scorecard && (
+        <section className="mt-8">
+          <FifteenDimChart card={scorecard} />
+        </section>
+      )}
 
       <section className="mt-8 grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
