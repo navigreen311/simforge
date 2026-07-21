@@ -49,6 +49,15 @@ class FaultType:
     SEQUENCE_STALL = "sequence_stall"
     DUPLICATE_LEAD = "duplicate_lead"
 
+    # medlink-pro / Clinical Console (blueprint §E.4 — UI-fault + staffing/compliance)
+    CREDENTIAL_EXPIRED_UNFLAGGED = "credential_expired_unflagged"
+    SHIFT_DOUBLE_BOOKED = "shift_double_booked"
+    PHI_OVEREXPOSURE = "phi_overexposure"
+    UI_BLOCKING_MODAL = "ui_blocking_modal"
+    STALE_ROSTER = "stale_roster"
+    TIMECARD_MISSING = "timecard_missing"
+    MSA_TERMS_STALE = "msa_terms_stale"
+
 
 @dataclass
 class Fault:

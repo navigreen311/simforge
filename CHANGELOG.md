@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Fifth real Forge: medlink-pro (Clinical Console) (post-v1)
+- **medlink-pro Clinical Console** — deterministic in-process engine (`services/forges/clinical_console.py`) + `LocalMedLinkProAdapter` (`medlink_pro.py`, version `medlink-pro.console.v1`): tenants, **PHI-synthetic** staffing state (scheduler/compliance/clinician), UI + staffing fault injection + task run. Fault menu: compliance/safety (credential_expired_unflagged/shift_double_booked/phi_overexposure → **P0**), UI/state (ui_blocking_modal/stale_roster/timecard_missing/msa_terms_stale → **P1**). Fixtures synthetic only ("SYNTHETIC CLINICIAN"/"SYNTHETIC FACILITY") — never real PHI. Registry now resolves `medlink-pro` → real adapter.
+- **Runner** — `_run_medlink_pro` added to the per-forge dispatch with a per-module fault map (`_CONSOLE_FAULT`: scheduler→shift_double_booked, compliance/clinician→credential_expired_unflagged, else ui_blocking_modal). Reporter is forge-agnostic, so medlink-pro faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).
+- **`pack.medlink-pro.v1`** staffing scenarios (e.g. `scn.ml.place.002`) now surface real console faults → Software Gaps.
+- **Router** `POST /api/forges/medlink-pro/demo`.
+- **Tests:** +14 (155 api + 5 validator) — Clinical Console engine (all 7 fault severities + seed-state), medlink-pro adapter **contract test** (§I.3), registry resolution, demo, and the medlink-pro fault→gap integration on `scn.ml.place.002`. ruff + mypy clean on touched files.
+- **Verified live:** `scn.ml.place.002` → `medlink-pro/scheduler` shift_double_booked P0 fault → Software Gap `medlink-pro/scheduler`. ADR-0014. **5 of 6 Forges now real** (only funnelforge remains Null).
+
 ### Added — Fourth real Forge: CRE Forge (Deal Desk) (post-v1)
 - **CRE Forge Deal Desk** — deterministic in-process engine (`services/forges/deal_desk.py`) + `LocalCREForgeAdapter` (`cre_forge.py`, version `cre-forge.dealdesk.v1`): tenants, synthetic CRE deals (assignment/wholesale/double_close/novation, never real party data), deal-fault injection + processing. Fault menu spans deal (title_defect/lien_undisclosed/assignment_blocked/deal_stale), buyer (buyer_unresponsive), lead/sequence (sequence_stall/duplicate_lead). Severities: title_defect/lien_undisclosed/assignment_blocked → **P0**, deal_stale/buyer_unresponsive/sequence_stall → **P1**, duplicate_lead → **P2**. Registry now resolves `cre-forge` → real adapter.
 - **Runner** — `_run_cre_forge` added to the per-forge dispatch; injects `title_defect` (P0) on fault — the crisis scenario's premise. Reporter is forge-agnostic, so CRE Forge faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).

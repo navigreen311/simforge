@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.services.forges.base import ForgeAdapter, NullForgeAdapter
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.cre_forge import LocalCREForgeAdapter
+from src.services.forges.medlink_pro import LocalMedLinkProAdapter
 from src.services.forges.visionaudioforge import LocalVAFAdapter
 from src.services.forges.voiceforge import LocalVoiceForgeAdapter
 
@@ -19,7 +20,7 @@ KNOWN_FORGES = (
 
 
 def get_forge_adapter(forge: str) -> ForgeAdapter:
-    """Resolve a Forge name to its adapter. Real: CapitalForge, VAF, VoiceForge, CRE Forge."""
+    """Resolve a Forge name → adapter. Real: CapitalForge/VAF/VoiceForge/CRE/medlink-pro."""
     if forge == "capitalforge":
         return LocalCapitalForgeAdapter()
     if forge == "vaf":
@@ -28,6 +29,8 @@ def get_forge_adapter(forge: str) -> ForgeAdapter:
         return LocalVoiceForgeAdapter()
     if forge == "cre-forge":
         return LocalCREForgeAdapter()
+    if forge == "medlink-pro":
+        return LocalMedLinkProAdapter()
     return NullForgeAdapter(forge)
 
 
