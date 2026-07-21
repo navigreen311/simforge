@@ -27,6 +27,7 @@ from src.services.forges import Fault, FaultType, get_forge_adapter
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.registry import forge_of_cap
 from src.services.forges.visionaudioforge import LocalVAFAdapter
+from src.services.forges.voiceforge import LocalVoiceForgeAdapter
 from src.services.mock_world.world import MockWorld
 from src.services.scenario_engine.complications import ComplicationInjector
 from src.services.scenario_engine.runner import ScenarioRunner
@@ -107,6 +108,21 @@ async def _run_vaf(state, caps, run_id: str, inject: bool) -> None:
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
 
 
+async def _run_voiceforge(state, caps, run_id: str, inject: bool) -> None:
+    # Registry is the swap point (Local ↔ real HTTP/WS); the call ops are forge-specific.
+    adapter = cast(LocalVoiceForgeAdapter, get_forge_adapter("voiceforge"))
+    tenant = await adapter.provision_sandbox_tenant(run_id)
+    for cap in caps:
+        parts = cap.split(".")
+        module = parts[1] if len(parts) > 1 else "call_center"
+        direction = parts[2] if len(parts) > 2 else "inbound"
+        # A handled call may drop, hit dead air, misroute, or miss a disclosure — seen on handle.
+        fault_type = FaultType.DROPPED_CALL if inject else None
+        result = await adapter.place_and_handle(tenant.tenant_id, direction, fault_type)
+        _emit_forge_trace(state, "voiceforge", module, cap, result)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
+
 async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     """Provision Forge sandbox tenants for the tested caps, run ops, record trace events.
 
@@ -117,10 +133,13 @@ async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     inject = scenario.tier == "advanced_crisis" or scenario.seed % 2 == 0
     cf = [c for c in caps if forge_of_cap(c) == "capitalforge"]
     vaf = [c for c in caps if forge_of_cap(c) == "vaf"]
+    voice = [c for c in caps if forge_of_cap(c) == "voiceforge"]
     if cf:
         await _run_capitalforge(state, cf, run_id, inject)
     if vaf:
         await _run_vaf(state, vaf, run_id, inject)
+    if voice:
+        await _run_voiceforge(state, voice, run_id, inject)
 
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}

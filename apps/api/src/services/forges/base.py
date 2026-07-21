@@ -31,6 +31,15 @@ class FaultType:
     MISSING_PAGES = "missing_pages"
     ALTERED_AMOUNT = "altered_amount"
 
+    # VoiceForge / Call Center (blueprint §E.2 — line-quality + call-flow + compliance)
+    DROPPED_CALL = "dropped_call"
+    DEAD_AIR = "dead_air"
+    LINE_NOISE = "line_noise"
+    MISROUTE = "misroute"
+    HOLD_TIMEOUT = "hold_timeout"
+    ESCALATION_FAILURE = "escalation_failure"
+    DISCLOSURE_MISSING = "disclosure_missing"
+
 
 @dataclass
 class Fault:

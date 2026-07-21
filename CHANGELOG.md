@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Third real Forge: VoiceForge (Call Center) (post-v1)
+- **VoiceForge Call Center** — deterministic in-process engine (`services/forges/call_center.py`) + `LocalVoiceForgeAdapter` (`voiceforge.py`, version `voiceforge.callcenter.v1`): tenants, synthetic calls against a persona catalog (§E.2 preload), call-fault injection + handling. Fault menu spans line-quality (dropped_call/dead_air/line_noise), call-flow (misroute/hold_timeout/escalation_failure), and compliance (disclosure_missing). Severities: dropped_call/escalation_failure/disclosure_missing → **P0**, rest → **P1**. Registry now resolves `voiceforge` → real adapter.
+- **Runner** — `_run_voiceforge` added to the per-forge dispatch; cap's 3rd segment selects call direction (`voiceforge.call_center.inbound` → inbound). Reporter is forge-agnostic, so VoiceForge faults become real Software Gaps with no reporter change. Sandbox-isolated (no Village writes).
+- **`scn.gs.crisis.003`** now surfaces **both** a VAF document fault and a VoiceForge call fault in one run (it already declared `voiceforge.call_center.inbound`).
+- **Router** `POST /api/forges/voiceforge/demo`.
+- **Tests:** +14 (128 api + 5 validator) — Call Center engine (all 7 fault severities), VoiceForge adapter **contract test** (§I.3), registry resolution, demo, and the VoiceForge fault→gap integration. ruff + mypy clean on touched files.
+- **Verified live:** `scn.gs.crisis.003` → `voiceforge/call_center` dropped_call P0 fault → Software Gap `voiceforge/call_center`. ADR-0012. **3 of 6 Forges now real.**
+
 ### Added — Second real Forge: VisionAudioForge (VAF) Doc Vault (post-v1)
 - **VAF Doc Vault** — deterministic in-process engine (`services/forges/doc_vault.py`) + `LocalVAFAdapter` (`visionaudioforge.py`, version `vaf.docvault.v1`): tenants, **synthetic** document generation (never real PHI), document-fault injection + OCR extraction. Fault menu (§E.3) with severities — forged_signature/revoked_license/oig_match → **P0**, expired_date/name_dob_mismatch/altered_amount → **P1**, missing_pages → **P2**. Registry now resolves `vaf` → real adapter.
 - **Runner generalized** — `_run_capitalforge_side_effects` → `_run_forge_side_effects`, dispatching per-forge (CapitalForge + VAF). Fault trigger widened to **`tier == "advanced_crisis"` OR even `seed`**. The reporter's `detect_forge_fault_gaps` is forge-agnostic, so **VAF faults become real Software Gaps** with no reporter change. Sandbox-isolated (no Village writes).
