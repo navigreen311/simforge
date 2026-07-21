@@ -46,6 +46,32 @@ async def readiness(session: AsyncSession = Depends(get_session)) -> ReadyRespon
     return ReadyResponse(status=overall, checks=checks)
 
 
+@router.get("/config")
+async def seam_config() -> dict:
+    """Non-secret view of which integration seams are in production vs stub mode (ADR-0030).
+
+    A deploy-readiness check: confirm the seams you intend to run for real are actually configured.
+    Reports modes only — never keys or secrets."""
+    return {
+        "app_version": settings.app_version,
+        "auth_mode": settings.auth_mode,  # dev-bypass | clerk
+        "hsm_provider": settings.hsm_provider,  # stub | file | yubihsm | cloudhsm
+        "forge_mode": settings.forge_mode,  # local | http
+        "forge_http_sandboxes": sorted(settings.forge_sandbox_urls.keys()),
+        "llm_provider": settings.llm_provider,  # stub | ollama | anthropic | auto
+        "llm_judge_provider": settings.llm_judge_provider,
+        "integrated_execution_enabled": settings.integrated_execution_enabled,
+        "linear_enabled": bool(settings.linear_api_key and settings.linear_team_id),
+        "all_stub": (
+            settings.auth_mode == "dev-bypass"
+            and settings.hsm_provider == "stub"
+            and settings.forge_mode == "local"
+            and settings.llm_provider == "stub"
+            and not settings.integrated_execution_enabled
+        ),
+    }
+
+
 @router.get("/village-fingerprint", response_model=FingerprintResponse)
 async def village_fingerprint() -> FingerprintResponse:
     """Live Village schema fingerprint + drift flag vs the configured expected value."""

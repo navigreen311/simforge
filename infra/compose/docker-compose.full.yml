@@ -1,0 +1,65 @@
+# SimForge — full stack (API + Postgres + Redis + Prometheus + Grafana) for a self-contained
+# deployment/demo of the seams (ADR-0030). Run from repo root:
+#   docker compose -f infra/compose/docker-compose.full.yml up -d --build
+# Then apply the DB schema (Prisma migrations) before first use — see docs/deploy.md.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: simforge
+      POSTGRES_PASSWORD: simforge
+      POSTGRES_DB: simforge
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://simforge:simforge@postgres:5432/simforge
+      REDIS_URL: redis://redis:6379/0
+      PACKS_ROOT: ./packs
+      VILLAGE_DATA_PATH: ./tests/fixtures/village/VillageData
+      # Seams default to stub/local; flip to production per docs/deploy.md:
+      #   AUTH_MODE, HSM_PROVIDER, FORGE_MODE, LLM_PROVIDER, INTEGRATED_EXECUTION_ENABLED, LINEAR_*
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+    depends_on: [api]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      PROMETHEUS_URL: http://prometheus:9090
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+
+volumes:
+  pgdata: {}

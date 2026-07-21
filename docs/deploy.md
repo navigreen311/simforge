@@ -29,5 +29,30 @@ pnpm --filter @simforge/db migrate:deploy
 #    (via deploy-prod.yml, manual approval). Rollback = shift traffic back to the previous target group.
 ```
 
+## Seam configuration (ADR-0030)
+Every external integration is a **seam** that ships in stub/local mode and activates on config. Flip
+only what you intend to run for real, then confirm with `GET /api/health/config` (reports modes, no
+secrets — `all_stub: false` once any seam is live).
+
+| Seam | Env | Stub default → production |
+|---|---|---|
+| Auth | `AUTH_MODE` | `dev-bypass` → `clerk` (+ `CLERK_JWKS_URL`/`CLERK_ISSUER`) — ADR-0018 |
+| Signing | `HSM_PROVIDER` | `stub` → `file` (`SIMFORGE_SIGNING_PRIVATE_KEY_PEM`) / `yubihsm` / `cloudhsm` — ADR-0018/0022 |
+| Forges | `FORGE_MODE` + `FORGE_SANDBOX_URLS` | `local` → `http` (per-forge) — ADR-0016 |
+| LLM | `LLM_PROVIDER` / `LLM_JUDGE_PROVIDER` | `stub` → `ollama` / `anthropic` / `auto` — ADR-0008/0023 |
+| Gap tickets | `LINEAR_API_KEY` + `LINEAR_TEAM_ID` | no-op → real Linear issues — ADR-0029 |
+| Integrated exec | `INTEGRATED_EXECUTION_ENABLED` | `false` (sandbox) → `true` (PDP-gated) — ADR-0025 |
+| Revocation push | `REDIS_URL` | required for real-time PEP invalidation — ADR-0024 |
+
+## Self-contained stack (compose)
+The whole stack — API + Postgres + Redis + Prometheus + Grafana (dashboards pre-provisioned, ADR-0029) — runs from one file:
+```bash
+docker compose -f infra/compose/docker-compose.full.yml up -d --build
+pnpm --filter @simforge/db migrate:deploy   # apply schema on first boot
+./scripts/smoke-test.sh                      # liveness + readiness + seam-config + /metrics + forges
+# Grafana → http://localhost:3001 (admin/admin) · Prometheus → :9090 · API → :8000
+```
+The API image (`apps/api/Dockerfile`) is a multi-stage, non-root, healthchecked build.
+
 ## Backups & DR
 Daily RDS snapshots (30-day) + 7-day PITR + weekly cross-region copy. See `docs/RUNBOOKS/DR.md` (RPO 1h / RTO 4h).

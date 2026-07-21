@@ -26,12 +26,24 @@ else
   bad "Redis not reachable (docker compose up -d redis)"
 fi
 
-# API health (Phase 1+)
+# API liveness / readiness / seam-config / metrics (ADR-0030)
 API="${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
 if curl -fsS "$API/api/health/" >/dev/null 2>&1; then
-  ok "API health $API/api/health/"
+  ok "API liveness $API/api/health/"
+  if curl -fsS "$API/api/health/ready" 2>/dev/null | grep -q '"status":"ok"'; then
+    ok "API readiness (db + redis ok)"
+  else
+    bad "API readiness degraded ($API/api/health/ready)"
+  fi
+  if cfg=$(curl -fsS "$API/api/health/config" 2>/dev/null); then
+    ok "API seam-config ($(echo "$cfg" | grep -o '"all_stub":[a-z]*'))"
+  else
+    bad "API seam-config unreachable"
+  fi
+  curl -fsS "$API/metrics" >/dev/null 2>&1 && ok "API /metrics exposed" || bad "API /metrics missing"
+  curl -fsS "$API/api/forges/" >/dev/null 2>&1 && ok "API /api/forges reachable" || bad "API /api/forges failed"
 else
-  bad "API not up at $API (expected from Phase 1; run 'pnpm --filter api dev')"
+  bad "API not up at $API (run the api service or 'pnpm --filter api dev')"
 fi
 
 # Web (Phase 1+)
