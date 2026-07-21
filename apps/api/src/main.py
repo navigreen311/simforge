@@ -14,7 +14,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
 from src.db import dispose_engine
-from src.routers import agents, departments, gaps, health, packs, runs, scenarios
+from src.routers import (
+    agents,
+    attest,
+    certs,
+    departments,
+    gaps,
+    health,
+    packs,
+    runs,
+    scenarios,
+)
 from src.telemetry.logging import configure_logging
 from src.telemetry.metrics import configure_metrics
 from src.telemetry.tracing import configure_tracing
@@ -51,6 +61,9 @@ def create_app() -> FastAPI:
     app.include_router(scenarios.router, prefix="/api/scenarios", tags=["scenarios"])
     app.include_router(runs.router, prefix="/api/runs", tags=["runs"])
     app.include_router(gaps.router, prefix="/api/gaps", tags=["gaps"])
+    app.include_router(certs.router, prefix="/api/certs", tags=["certs"])
+    app.include_router(certs.snapshots_router, prefix="/api/snapshots", tags=["snapshots"])
+    app.include_router(attest.router, prefix="/api/attest", tags=["attestation"])
 
     return app
 

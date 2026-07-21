@@ -3,6 +3,13 @@
 from src.models.agent import Agent
 from src.models.base import Base
 from src.models.ccb import CCB
+from src.models.cert import (
+    AgentCert,
+    AutonomyEvent,
+    CertLifecycleEvent,
+    CertSnapshot,
+    DeptCert,
+)
 from src.models.department import Department
 from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.pack import Pack, ReadinessGate, Scenario
@@ -24,4 +31,9 @@ __all__ = [
     "Scorecard",
     "SoftwareGap",
     "VillageOSGap",
+    "AgentCert",
+    "DeptCert",
+    "CertSnapshot",
+    "CertLifecycleEvent",
+    "AutonomyEvent",
 ]

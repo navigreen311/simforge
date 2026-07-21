@@ -193,6 +193,23 @@ export const gaps = {
   villageOs: () => apiGet<{ items: VillageOSGap[]; total: number }>("/api/gaps/village-os"),
 };
 
+export interface AgentCert {
+  id: string;
+  agentId: string;
+  forgeCap: string;
+  tier: string;
+  status: string;
+  issuedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  revocationReason: string | null;
+  certSnapshotId: string;
+}
+
+export const certs = {
+  agent: () => apiGet<{ items: AgentCert[]; total: number }>("/api/certs/agent"),
+};
+
 export async function runScenario(scenarioId: string): Promise<RunSummary> {
   const res = await fetch(`${API_BASE}/api/scenarios/${scenarioId}/run`, {
     method: "POST",
