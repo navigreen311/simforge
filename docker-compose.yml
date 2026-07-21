@@ -1,0 +1,44 @@
+# SimForge — local dev infrastructure.
+# Brings up Postgres + Redis. Ollama is optional (profile: llm).
+#   docker compose up -d postgres redis
+#   docker compose --profile llm up -d      # to also start Ollama
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: simforge-postgres
+    environment:
+      POSTGRES_USER: simforge
+      POSTGRES_PASSWORD: simforge
+      POSTGRES_DB: simforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: simforge-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./docker-data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: simforge-ollama
+    profiles: ["llm"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./docker-data/ollama:/root/.ollama
