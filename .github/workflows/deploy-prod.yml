@@ -1,0 +1,12 @@
+name: deploy-prod
+on:
+  workflow_dispatch: # manual, gated approval (Ivan)
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      # WEEK 9: alembic/prisma migrate (zero-downtime), blue/green deploy,
+      # gradual traffic shift 0->10->100, post-deploy verification, rollback on failure.
+      - run: echo "prod deploy pipeline (scaffold, manual approval) — see docs/deploy.md"

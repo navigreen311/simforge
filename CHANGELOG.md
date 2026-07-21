@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Phase 9 (Observability, security & deploy) — **v1 feature-complete**
+- **Metrics** (`telemetry/metrics.py`) — real Prometheus collectors (`simforge_runs_total`, `_readiness_gate_total`, `_certs_issued_total`, `_tokens_used_total`, `_run_duration_seconds`, …) exposed at **`/metrics`**; wired into the run + cert flows.
+- **Dashboard aggregates** (`/api/dashboard/*`) — `summary`, `throughput` (runs by status + tokens + cost), `readiness-matrix`.
+- **Security** — role-based authz already enforced on every endpoint; Clerk JWT verification **seam** (`auth/clerk.py`, gated by `AUTH_MODE`); `docs/security.md` (keys, PHI, secrets, audit).
+- **Deploy scaffolding** — Terraform (`infra/terraform/`: rds/redis/s3/ecs/iam), CI (`contract-tests.yml`, `deploy-staging.yml`, `deploy-prod.yml`), `docs/deploy.md`, **7 incident runbooks** (R-001…R-007) + `DR.md` + `KEY_CEREMONY.md`.
+- **Tests:** 4 new (70 api + 5 validator) — `/metrics` exposition + dashboard summary/throughput/readiness. ruff clean.
+
 ### Added — Phase 8 (Governance & Object Registry / Lineage)
 - **Governance** (`services/governance`) — constitution lifecycle + **amendment workflow** (propose → cooling period → ratify/withdraw/veto); ratification bumps the version, supersedes the prior, and **auto-suspends certs pinned to the old constitution**; impact analysis (affected-cert count); in-process **safe-mode** flag.
 - **Object Registry + Lineage** (`services/registry`) — URN scheme (`urn:gc:village:<kind>:<id>`), register/resolve/tombstone, directed lineage edges + BFS path + neighborhood subgraph. Cert issuance now **emits lineage** (`produced_by`/`derived_from`/`pinned_to`/`evidenced_by`).

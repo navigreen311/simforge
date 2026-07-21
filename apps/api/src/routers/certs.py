@@ -48,6 +48,9 @@ async def issue_cert(
         )
     except CertIssuanceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    from src.telemetry.metrics import CERTS_ISSUED_TOTAL
+
+    CERTS_ISSUED_TOTAL.labels(tier=issued.agent_cert.tier).inc()
     return IssueCertResponse(
         cert=AgentCertOut.model_validate(issued.agent_cert),
         snapshot=CertSnapshotOut.model_validate(issued.snapshot),
