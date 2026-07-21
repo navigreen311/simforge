@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — PDP: runtime authorization from certs (v1.1, ADR-0024)
+- **Policy Decision Point** (`services/governance/pdp.py`) — `PDP.decide(session, AuthRequest) → AuthDecision`, turning issued certs into runtime enforcement. Decision from the agent's cert-for-the-action + autonomy ladder + safe-mode: safe-mode → step_up; no/suspended/revoked/expired cert → deny (specific reason code); active cert L4/L5 → **allow**, L3 → **step_up_approval_required**, L2 → **downgrade_and_retry** (draft only), L1 → **deny** (observe only). Per-decision `ttl_seconds` for PEP caching; `fail_policy` (default **fail-closed**) for PEP outage behavior.
+- **API** `/api/pdp` — `POST /decide` (PEP call, read-only) + `GET /agent/{id}/effective` (a decision per cert, for dashboards/audit).
+- **Metrics** — `simforge_pdp_decision_latency_seconds{decision}` + `simforge_pdp_decisions_total{decision,reason_code}` (+ a `simforge_pdp_cache_hit_ratio` gauge for the PEP).
+- **Tests:** +16 (251 api) — the full cert × autonomy × safe-mode decision matrix (unit) + the API against real cert issuance/revocation and the effective-permissions view (integration). ruff + mypy clean on touched files.
+- First of the PDP/PEP series (ADR-0024); Redis revocation pub/sub + the PEP SDK follow. Read-only, sandbox-safe — no Village writes, no integrated execution.
+
 ### Added — Real LLM-judge activation (Ollama) + first-signal report (v1.1, ADR-0023)
 - **`auto` provider mode** — `LLM_JUDGE_PROVIDER=auto` (and `LLM_PROVIDER=auto`) resolves to the Ollama judge when `OLLAMA_BASE_URL` answers `GET /api/tags`, else StubProvider. Cached per-process reachability probe that only runs on the `auto` path; **defaults unchanged (`stub`)** so CI stays hermetic + offline. `resolve_provider()` + `reset_reachability_cache()`.
 - **Committed real-judge cache** — the 9 canonical scenarios (now spanning all 3 packs incl. new CareGrid `cg_*`) scored once against a live `llama3.1:8b`; entries in `tests/fixtures/llm_cache/` (+27). CI replays them in `replay_strict` with **no live model** via a new offline test (`test_cached_llm_judge_replay.py`), so the real-judge path is exercised in CI.

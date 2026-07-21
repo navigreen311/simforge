@@ -27,6 +27,7 @@ from src.routers import (
     health,
     jurisdictions,
     packs,
+    pdp,
     registry,
     runs,
     scenarios,
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(forges.router, prefix="/api/forges", tags=["forges"])
     app.include_router(drift.router, prefix="/api/drift", tags=["drift"])
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
+    app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
