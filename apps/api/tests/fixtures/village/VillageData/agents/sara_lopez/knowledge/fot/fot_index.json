@@ -1,0 +1,8 @@
+{
+  "pressure": 0.34,
+  "threads": [
+    "deadline_q3",
+    "mentoring_junior"
+  ],
+  "tier": "stable"
+}

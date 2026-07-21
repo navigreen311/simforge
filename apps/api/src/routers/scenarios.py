@@ -7,9 +7,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
-from src.deps import require_role
+from src.deps import get_village_reader, require_role
 from src.models.pack import Pack, Scenario
 from src.schemas.pack import ScenarioSummary
+from src.schemas.run import RunSummary
+from src.services.runner import RunnerError, run_scenario
+from src.services.village.reader import VillageReader
 
 router = APIRouter()
 
@@ -51,3 +54,27 @@ async def get_scenario(
     if scen is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
     return ScenarioSummary.model_validate(scen)
+
+
+@router.post(
+    "/{scenario_id}/run",
+    response_model=RunSummary,
+    dependencies=[Depends(require_role("prompt_engineer"))],
+)
+async def run_scenario_endpoint(
+    scenario_id: str,
+    session: AsyncSession = Depends(get_session),
+    reader: VillageReader = Depends(get_village_reader),
+) -> RunSummary:
+    """Execute a scenario run (sandbox, deterministic stub LLM) and return the result.
+
+    Phase 4 runs inline for a fast, reproducible demo; the RQ `runner_worker` path is the
+    production async execution route.
+    """
+    from src.routers.runs import _summarize
+
+    try:
+        run = await run_scenario(session, scenario_id, reader)
+    except RunnerError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return await _summarize(session, run)

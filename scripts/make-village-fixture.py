@@ -31,24 +31,56 @@ import json
 import sys
 from pathlib import Path
 
+# Covers every agent referenced by the seed (packages/db/seed.ts) and the sample
+# Packs, so CCB capture + prompt assembly work for any sample scenario.
 AGENTS = {
     "taylor_zhang": {
-        "name": "Taylor Zhang",
-        "role": "Senior Engineer",
+        "name": "Taylor Zhang", "role": "Senior Engineer",
         "backstory": "Joined Greenstone Engineering after years in fintech infra.",
         "personality_traits": ["meticulous", "calm-under-pressure", "mentoring"],
-        "soul_valence": 0.62,
-        "fot_tier": "stable",
-        "arc_phase": "consolidation",
+        "soul_valence": 0.62, "fot_tier": "stable", "arc_phase": "consolidation",
     },
     "gardner": {
-        "name": "Gardner",
-        "role": "Executive Agent",
+        "name": "Gardner", "role": "Executive Agent",
         "backstory": "The Village's executive coordinator; the only Level-10 agent.",
         "personality_traits": ["strategic", "decisive", "big-picture"],
-        "soul_valence": 0.71,
-        "fot_tier": "elevated",
-        "arc_phase": "expansion",
+        "soul_valence": 0.71, "fot_tier": "elevated", "arc_phase": "expansion",
+    },
+    "david_kim": {
+        "name": "David Kim", "role": "Account Executive",
+        "backstory": "Closes wholesaling deals; strong rapport, competitive streak.",
+        "personality_traits": ["persuasive", "energetic", "resilient"],
+        "soul_valence": 0.58, "fot_tier": "stable", "arc_phase": "expansion",
+    },
+    "jennifer_adams": {
+        "name": "Jennifer Adams", "role": "Recruiter",
+        "backstory": "Fills healthcare shifts under tight timelines; detail-driven.",
+        "personality_traits": ["organized", "empathetic", "persistent"],
+        "soul_valence": 0.6, "fot_tier": "stable", "arc_phase": "consolidation",
+    },
+    "nina_okafor": {
+        "name": "Nina Okafor", "role": "Clinical Coordinator",
+        "backstory": "Coordinates clinician credentials; careful with compliance.",
+        "personality_traits": ["precise", "calm", "compliance-minded"],
+        "soul_valence": 0.64, "fot_tier": "stable", "arc_phase": "consolidation",
+    },
+    "marcus_reed": {
+        "name": "Marcus Reed", "role": "Compliance Analyst",
+        "backstory": "Handles audits and regulatory response; unflappable.",
+        "personality_traits": ["rigorous", "steady", "principled"],
+        "soul_valence": 0.55, "fot_tier": "elevated", "arc_phase": "consolidation",
+    },
+    "priya_patel": {
+        "name": "Priya Patel", "role": "Payroll Specialist",
+        "backstory": "Runs payroll cycles; accuracy-obsessed.",
+        "personality_traits": ["accurate", "patient", "diligent"],
+        "soul_valence": 0.61, "fot_tier": "stable", "arc_phase": "consolidation",
+    },
+    "sara_lopez": {
+        "name": "Sara Lopez", "role": "Customer Success Manager",
+        "backstory": "Owns client relationships; warm and proactive.",
+        "personality_traits": ["warm", "proactive", "diplomatic"],
+        "soul_valence": 0.66, "fot_tier": "stable", "arc_phase": "expansion",
     },
 }
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { TierPill } from "@/components/common/TierPill";
+import { RunScenarioButton } from "@/components/runs/RunScenarioButton";
 import { api, type PackDetail } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ export default async function PackDetailPage({ params }: { params: { packId: str
                 <th className="px-4 py-3 font-medium">Tier</th>
                 <th className="px-4 py-3 font-medium">Tested agent</th>
                 <th className="px-4 py-3 font-medium">SLO</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-600">
@@ -69,6 +71,9 @@ export default async function PackDetailPage({ params }: { params: { packId: str
                     {s.testedAgentVillageId}
                   </td>
                   <td className="px-4 py-3 text-ink-100">{s.sloSeconds}s</td>
+                  <td className="px-4 py-3 text-right">
+                    <RunScenarioButton scenarioId={s.scenarioId} />
+                  </td>
                 </tr>
               ))}
             </tbody>
