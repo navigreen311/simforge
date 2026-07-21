@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     auth_mode: str = Field(default="dev-bypass", alias="AUTH_MODE")
     clerk_secret_key: str = Field(default="", alias="CLERK_SECRET_KEY")
 
+    # LLM provider — "stub" (default, deterministic/offline), "ollama", "openai", or "auto"
+    llm_provider: str = Field(default="stub", alias="LLM_PROVIDER")
+    ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="llama3.1:8b", alias="OLLAMA_MODEL")
+    llm_timeout_seconds: float = Field(default=120.0, alias="LLM_TIMEOUT_SECONDS")
+
     # Village coupling
     village_data_path: str = Field(
         default="./village-data-local/VillageData", alias="VILLAGE_DATA_PATH"

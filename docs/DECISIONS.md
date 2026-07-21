@@ -72,6 +72,20 @@ Two consequences bit CertSnapshot verification (signed value must survive a DB r
 **Decision:** all persisted timestamps use `src/utils/time.py::utcnow()` — **naive UTC, truncated to milliseconds**. `base._now()` and the cert path use it. Signing/verification thus operate on values that equal what Postgres stores. Canonical datetime encoding in `cert/snapshot.py::_canon_dt` also normalizes tz.
 **Verified:** a freshly issued CertSnapshot verifies `valid: True` against live Postgres.
 
+## ADR-0008 — Pluggable LLM provider; StubProvider is the default
+**Status:** Accepted (2026-07-21, post-v1).
+
+The agent runtime selects its LLM via `LLM_PROVIDER`: **`stub`** (default — deterministic,
+offline, reproducible; keeps tests + CI hermetic), **`ollama`** (local, `OLLAMA_MODEL`,
+default `llama3.1:8b`), **`auto`** (Ollama if reachable else stub), `openai` (not enabled here).
+`OllamaProvider` hits `POST {OLLAMA_BASE_URL}/api/chat` (non-streaming, seeded); transcript
+roles map agent→assistant, scenario/world→user.
+
+**Why stub stays the default:** runs must be reproducible for tests/CI and free; a real model
+makes the LLM-judge rubric dims (P7/C1/C2) discriminating but is opt-in per env.
+**Run with Ollama:** `ollama serve` + `ollama pull llama3.1:8b`, then `LLM_PROVIDER=ollama`
+(Windows: install Ollama for Windows; the app connects over HTTP regardless of OS).
+
 ### Open decisions (to confirm as phases land)
 - Scenario-engine branching model (Best-of-N in Phase 4).
 - Rubric aggregation weighting (Phase 5) — confirm against spec rubric profile.

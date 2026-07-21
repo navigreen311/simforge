@@ -77,23 +77,88 @@ class StubProvider(LLMProvider):
         return LLMResponse(content=content, tokens=tokens)
 
 
+def to_ollama_messages(system: str, messages: list[dict]) -> list[dict]:
+    """Map SimForge transcript turns → Ollama chat roles.
+
+    The transcript uses scenario/agent/world roles; Ollama expects system/user/assistant.
+    The tested agent is the assistant; the scenario + mock world are the user.
+    """
+    out: list[dict] = [{"role": "system", "content": system}]
+    for m in messages:
+        role = "assistant" if m.get("role") == "agent" else "user"
+        out.append({"role": role, "content": m.get("content", "")})
+    return out
+
+
 class OllamaProvider(LLMProvider):
-    """Local Ollama (blueprint default for Village routes). WEEK 4+: httpx to OLLAMA_BASE_URL."""
+    """Local Ollama chat completion (blueprint default for Village routes)."""
+
+    def __init__(self, base_url: str, model: str, timeout: float = 120.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout = timeout
 
     async def complete(self, *, system: str, messages: list[dict], seed: int) -> LLMResponse:
-        raise NotImplementedError("OllamaProvider not enabled in this environment")
+        import httpx
+
+        payload = {
+            "model": self.model,
+            "messages": to_ollama_messages(system, messages),
+            "stream": False,
+            "options": {"seed": seed, "temperature": 0.7},
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(f"{self.base_url}/api/chat", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        content = (data.get("message") or {}).get("content", "").strip()
+        tokens = int(data.get("prompt_eval_count", 0)) + int(data.get("eval_count", 0))
+        if tokens <= 0:
+            tokens = max(1, int(len(content.split()) * 1.3))
+        return LLMResponse(content=content, tokens=tokens)
 
 
 class OpenAIProvider(LLMProvider):
-    """OpenAI fallback. WEEK 4+: real client using OPENAI_API_KEY."""
+    """OpenAI fallback. WEEK: real client using OPENAI_API_KEY (Anthropic also viable)."""
 
     async def complete(self, *, system: str, messages: list[dict], seed: int) -> LLMResponse:
         raise NotImplementedError("OpenAIProvider not enabled in this environment")
 
 
-def get_llm_provider() -> LLMProvider:
-    """Select a provider. Dev with no real LLM configured → deterministic StubProvider.
+def _ollama_reachable(base_url: str, timeout: float = 1.0) -> bool:
+    import socket
+    from urllib.parse import urlparse
 
-    WEEK 4+: return Ollama (settings.ollama_base_url) / OpenAI when reachable/configured.
+    parsed = urlparse(base_url)
+    host, port = parsed.hostname or "localhost", parsed.port or 11434
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def get_llm_provider() -> LLMProvider:
+    """Select the agent-runtime LLM provider from settings.
+
+    - "stub"   → deterministic offline StubProvider (default; keeps tests reproducible)
+    - "ollama" → local Ollama (settings.ollama_model)
+    - "auto"   → Ollama if reachable, else StubProvider
+    - "openai" → OpenAIProvider (not enabled in this environment)
     """
+    from src.config import settings
+
+    provider = settings.llm_provider.lower()
+    if provider == "ollama":
+        return OllamaProvider(
+            settings.ollama_base_url, settings.ollama_model, settings.llm_timeout_seconds
+        )
+    if provider == "auto":
+        if _ollama_reachable(settings.ollama_base_url):
+            return OllamaProvider(
+                settings.ollama_base_url, settings.ollama_model, settings.llm_timeout_seconds
+            )
+        return StubProvider()
+    if provider == "openai":
+        return OpenAIProvider()
     return StubProvider()
