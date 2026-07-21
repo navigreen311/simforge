@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
@@ -19,6 +19,7 @@ from src.routers import (
     attest,
     certs,
     constitution,
+    dashboard,
     departments,
     gaps,
     health,
@@ -69,6 +70,14 @@ def create_app() -> FastAPI:
     app.include_router(constitution.router, prefix="/api/constitution", tags=["constitution"])
     app.include_router(registry.router, prefix="/api/registry", tags=["registry"])
     app.include_router(registry.lineage_router, prefix="/api/lineage", tags=["lineage"])
+    app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics() -> Response:
+        from src.telemetry.metrics import render_latest
+
+        body, content_type = render_latest()
+        return Response(content=body, media_type=content_type)
 
     return app
 

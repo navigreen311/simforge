@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # Auth
     auth_mode: str = Field(default="dev-bypass", alias="AUTH_MODE")
+    clerk_secret_key: str = Field(default="", alias="CLERK_SECRET_KEY")
 
     # Village coupling
     village_data_path: str = Field(

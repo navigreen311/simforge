@@ -3,7 +3,7 @@
 > **Tier-1 governance & certification platform for Village OS agents.**
 > SimForge runs Village agents through simulated, high-stakes scenarios, scores them on a 15-dimension rubric (8 performance + 7 cognitive), gates them against per-Pack readiness thresholds, and issues cryptographically-signed capability certificates that gate each agent's autonomy in production.
 
-**Status:** v1.0.0 — in active development (Phase 0: Foundation).
+**Status:** v1.0.0 — **feature-complete** (Phases 0–9 shipped: full spine from scenario run → 15-dim eval → gate → gaps → signed cert → autonomy → governance → observability). See [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`CHANGELOG.md`](CHANGELOG.md).
 **Repo:** `navigreen311/simforge`
 **Docs:** see [`docs/SIMFORGE.md`](docs/SIMFORGE.md) (architecture), [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) (full engineering blueprint), [`docs/ROADMAP.md`](docs/ROADMAP.md) (phased build plan).
 
