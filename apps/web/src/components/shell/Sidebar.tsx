@@ -5,7 +5,7 @@ const NAV: Array<{ href: string; label: string; ready: boolean }> = [
   { href: "/dashboard", label: "Overview", ready: true },
   { href: "/dashboard/readiness", label: "Readiness Matrix", ready: false },
   { href: "/dashboard/runs", label: "Runs", ready: false },
-  { href: "/dashboard/packs", label: "Packs", ready: false },
+  { href: "/dashboard/packs", label: "Packs", ready: true },
   { href: "/dashboard/agents", label: "Agents", ready: false },
   { href: "/dashboard/departments", label: "Departments", ready: false },
   { href: "/dashboard/certs", label: "Certifications", ready: false },

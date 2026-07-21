@@ -46,6 +46,9 @@ class Settings(BaseSettings):
         default="./signing-keys/dev-ed25519.pem", alias="SIMFORGE_SIGNING_PRIVATE_KEY_PATH"
     )
 
+    # Packs
+    packs_root: str = Field(default="./packs", alias="PACKS_ROOT")
+
     # Budget
     simforge_budget_sandbox_monthly_usd: float = Field(
         default=50.0, alias="SIMFORGE_BUDGET_SANDBOX_MONTHLY_USD"

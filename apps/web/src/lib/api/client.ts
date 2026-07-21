@@ -39,6 +39,39 @@ export interface ReadyResponse {
   checks: Record<string, string>;
 }
 
+export interface ScenarioSummary {
+  id: string;
+  scenarioId: string;
+  title: string;
+  tier: string;
+  testedAgentVillageId: string;
+  sloSeconds: number;
+  isGolden: boolean;
+}
+
+export interface PackSummary {
+  id: string;
+  packId: string;
+  name: string;
+  version: string;
+  ownerVenture: string;
+  phiRequired: boolean;
+  executionModeDefault: string;
+  signedBy: string | null;
+  signedAt: string | null;
+}
+
+export interface PackDetail extends PackSummary {
+  complianceFlags: string[];
+  rubricProfile: string;
+  scenarios: ScenarioSummary[];
+}
+
+export interface PackList {
+  items: PackSummary[];
+  total: number;
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     // Dashboards are always fresh in dev; revalidation strategy tuned per-page later.
@@ -61,4 +94,6 @@ export const api = {
     return apiGet<AgentList>(`/api/agents/${qs ? `?${qs}` : ""}`);
   },
   departments: () => apiGet<DepartmentList>("/api/departments/"),
+  packs: () => apiGet<PackList>("/api/packs/"),
+  pack: (packId: string) => apiGet<PackDetail>(`/api/packs/${packId}`),
 };

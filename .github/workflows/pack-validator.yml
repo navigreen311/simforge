@@ -1,0 +1,25 @@
+name: pack-validator
+
+on:
+  pull_request:
+    paths:
+      - "packs/**"
+      - "packages/validator/**"
+  push:
+    branches: [main]
+    paths:
+      - "packs/**"
+      - "packages/validator/**"
+
+jobs:
+  validate-packs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validator
+        run: pip install -e packages/validator
+      - name: Validate all Packs
+        run: python -m validator.cli packs
