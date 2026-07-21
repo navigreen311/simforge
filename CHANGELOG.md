@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Deployable production seams (v1.1, ADR-0030)
+- **Production API image** (`apps/api/Dockerfile`) — multi-stage, **non-root**, `HEALTHCHECK` on `/api/health/`, installs the validator package + API, runs uvicorn.
+- **Self-contained stack** (`infra/compose/docker-compose.full.yml`) — API + Postgres 17 + Redis + Prometheus + Grafana in one file; Grafana mounts the ADR-0029 dashboards, Prometheus scrapes the API `/metrics`, the API waits on healthy datastores.
+- **Deploy-readiness endpoint** `GET /api/health/config` — reports every seam's *mode* (`auth_mode`, `hsm_provider`, `forge_mode`, `llm_provider`, `integrated_execution_enabled`, `linear_enabled`, …) + an `all_stub` flag; **never returns secrets**. So a "prod" env showing `all_stub: true` is an immediate red flag.
+- **Smoke test extended** (`scripts/smoke-test.sh`) — liveness + readiness + seam-config + `/metrics` + a real endpoint. `docs/deploy.md` gains a **seam matrix** (env var → stub→prod for each seam) + the compose recipe.
+- **Tests:** +6 (309 api) — the config endpoint reports all seam modes, reflects a flipped production seam (`all_stub` false), and **leaks no secrets**; the full-stack compose + Prometheus config parse and are complete; the Dockerfile is production-shaped (non-root + healthcheck + uvicorn + validator dep). ruff + mypy clean.
+- **Verified live:** smoke-test against the native API → liveness/readiness/seam-config(`all_stub:true`)/`/metrics`/`/api/forges` all pass. (`docker build` + cloud apply need Docker/creds — deploy-time; the artifacts are validated.)
+
 ### Added — Real Linear gap-ticketing + Grafana dashboards (v1.1, ADR-0029)
 - **Real Linear client** (`services/reporter/linear_client.py`) — creates real issues via the Linear `issueCreate` GraphQL mutation (`LINEAR_API_URL`/`LINEAR_API_KEY`/`LINEAR_TEAM_ID`); namespaced title + metadata folded into the body. **No-op by default** (empty key/team) and **best-effort** (any error → empty ticket, never blocks gap emission). Injectable httpx transport for hermetic tests. (Replaces the `NotImplementedError` stub.)
 - **Grafana dashboards as-code** (`infra/grafana/`) — a "Governance Overview" dashboard (10 panels: runs/gate/certs/gaps, PDP decisions+latency+cache-hit, eval latency, tokens) + datasource/dashboard provisioning. `docs/grafana.md`.
