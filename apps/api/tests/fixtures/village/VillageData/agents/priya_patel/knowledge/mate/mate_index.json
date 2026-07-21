@@ -1,0 +1,6 @@
+{
+  "budget_bucket": "engineering",
+  "resources": {
+    "tokens_month": 1000000
+  }
+}

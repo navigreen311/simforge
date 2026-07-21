@@ -5,6 +5,7 @@ from src.models.base import Base
 from src.models.ccb import CCB
 from src.models.department import Department
 from src.models.pack import Pack, ReadinessGate, Scenario
+from src.models.run import Run, TraceEvent
 from src.models.village_fingerprint import VillageFingerprint
 
 __all__ = [
@@ -16,4 +17,6 @@ __all__ = [
     "Pack",
     "Scenario",
     "ReadinessGate",
+    "Run",
+    "TraceEvent",
 ]

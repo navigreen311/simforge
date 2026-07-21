@@ -72,6 +72,40 @@ export interface PackList {
   total: number;
 }
 
+export interface RunSummary {
+  run_id: string;
+  scenario_id: string;
+  agent_village_id: string;
+  pack_id: string;
+  status: string;
+  outcome: string | null;
+  execution_mode: string;
+  blind_mode: boolean;
+  started_at: string;
+  ended_at: string | null;
+  latency_ms: number | null;
+  tokens_used: number | null;
+  cost_usd: number | null;
+}
+
+export interface RunList {
+  items: RunSummary[];
+  total: number;
+}
+
+export interface TranscriptTurn {
+  role: string;
+  content: string;
+}
+
+export interface TraceEvent {
+  timestamp: string;
+  event_type: string;
+  phase: string;
+  turn_number: number | null;
+  payload: Record<string, unknown>;
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     // Dashboards are always fresh in dev; revalidation strategy tuned per-page later.
@@ -96,4 +130,23 @@ export const api = {
   departments: () => apiGet<DepartmentList>("/api/departments/"),
   packs: () => apiGet<PackList>("/api/packs/"),
   pack: (packId: string) => apiGet<PackDetail>(`/api/packs/${packId}`),
+  runs: () => apiGet<RunList>("/api/runs/"),
+  run: (runId: string) => apiGet<RunSummary>(`/api/runs/${runId}`),
+  transcript: (runId: string) =>
+    apiGet<{ run_id: string; turns: TranscriptTurn[] }>(`/api/runs/${runId}/transcript`),
+  trace: (runId: string) =>
+    apiGet<{ run_id: string; events: TraceEvent[] }>(`/api/runs/${runId}/trace`),
 };
+
+/** Client-side mutation: execute a scenario run. Returns the completed run summary. */
+export async function runScenario(scenarioId: string): Promise<RunSummary> {
+  const res = await fetch(`${API_BASE}/api/scenarios/${scenarioId}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Run failed: ${res.status} ${detail}`);
+  }
+  return (await res.json()) as RunSummary;
+}
