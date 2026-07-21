@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Drift Canary: Forge version drift → auto-suspend (v1.1)
+- **Real Forge-version pin at issuance** — `issue_agent_cert` now pins `forge_versions={forge: await get_current_version()}` (was the placeholder `"sandbox.dev"`), so a cert is bound to the actual Forge version its battery ran against. Falls back to `"{forge}.unknown"` if the lookup errors (issuance never fails on a Forge hiccup).
+- **Drift Canary** (`services/drift/canary.py`) — `scan_forge_drift` compares every active cert's pinned Forge version against the Forge's current `get_current_version()`; on drift it auto-suspends the cert (status `suspended` + lifecycle event) and defensively demotes the agent one autonomy level, mirroring the constitution-amendment auto-suspend. Versions cached per scan (one hit per Forge). An **unreachable** Forge is reported but never suspended (a transient outage must not knock out certs).
+- **Router** `/api/drift` — `GET /status` (viewer, dry-run report) + `POST /scan` (admin, scan + auto-suspend). Composes with ADR-0016: drift is detected against the live HTTP sandbox's version when a forge is in http-mode.
+- **Tests:** +4 (182 api + 5 validator) — real-version pin, no-drift-when-matching, and drift→suspend+demote (dry-run reports without acting; scan suspends). ruff + mypy clean on touched files.
+- ADR-0017.
+
 ### Added — HTTP-backed Forge adapter + real-sandbox swap (post-v1)
 - **Uniform `exercise(tenant, cap, fault)` op** on the `ForgeAdapter` contract — every forge (Local or HTTP) is now driven through one method. The scenario runner's six `_run_<forge>` helpers + per-forge fault dicts collapsed into a single `_run_forge_side_effects` loop (group caps by forge → resolve adapter → exercise → trace); the runner's only forge-specific knowledge left is *which* fault to inject (`_FORGE_MODULE_FAULT`/`_FORGE_DEFAULT_FAULT`), not *how* to exercise. No more `cast(LocalX, …)`.
 - **`HttpForgeAdapter`** (`services/forges/http_adapter.py`) — implements the full contract against a real sandbox over HTTP (generic sandbox API: health/version/tenants/seed-state/audit-log/faults/exercise). Injectable httpx transport for hermetic tests.
