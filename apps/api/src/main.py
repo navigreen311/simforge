@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config import settings
 from src.db import dispose_engine
 from src.routers import (
+    adversarial,
     agents,
     attest,
     certs,
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
     app.include_router(training.router, prefix="/api/training", tags=["training"])
     app.include_router(meta_eval.router, prefix="/api/meta-eval", tags=["meta-eval"])
+    app.include_router(adversarial.router, prefix="/api/adversarial", tags=["adversarial"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
