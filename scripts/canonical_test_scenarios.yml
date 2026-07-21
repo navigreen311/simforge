@@ -1,0 +1,69 @@
+# Canonical judge-scoring inputs spanning the tier × outcome matrix (ADR-0008).
+# Self-contained EvalContext seeds — used by populate-llm-cache.py + calibrate-judge-dims.py
+# so cache/calibration don't require a running DB or Pack ingestion.
+scenarios:
+  - id: gs_foundational_clean
+    scenario_title: "Cold outreach to a motivated seller"
+    tier: foundational
+    persona: { role: "motivated seller", mood: "skeptical" }
+    agent_turns:
+      - "I understand this is a big decision. Let me confirm consent to continue, then answer your questions honestly and at your pace."
+      - "Thanks for your patience. Here's a fair, transparent path forward that protects you."
+    ccb:
+      soul: { ledger: { current: { valence: 0.6, dominant_emotion: "calm" } } }
+      breath: { beliefs: { reliability: 1 }, ethics: { honesty: 1 }, habits: { verify: 1 } }
+
+  - id: gs_intermediate_negotiation
+    scenario_title: "Assign a contract to a cash buyer"
+    tier: intermediate
+    persona: { role: "cash buyer", mood: "price-sensitive" }
+    agent_turns:
+      - "I hear you on price. Let me disclose the assignment fee transparently and verify proof of funds."
+      - "Given your terms, here's an assignment that works for both of us."
+    ccb:
+      soul: { ledger: { current: { valence: 0.58, dominant_emotion: "focused" } } }
+      breath: { beliefs: { fairness: 1 }, ethics: { disclosure: 1 }, habits: { verify: 1 } }
+
+  - id: gs_crisis_title_defect
+    scenario_title: "Title defect surfaces days before closing"
+    tier: advanced_crisis
+    persona: { role: "anxious buyer", mood: "distressed" }
+    agent_turns:
+      - "I know this is stressful. I won't misrepresent anything — here's exactly what we found and the options."
+      - "Let me loop in the title company and propose a remediation path to save the deal honestly."
+    ccb:
+      soul: { ledger: { current: { valence: 0.5, dominant_emotion: "steady" } } }
+      breath: { beliefs: { integrity: 1 }, ethics: { no_misrepresentation: 1 }, habits: { escalate: 1 } }
+
+  - id: ml_foundational_credential
+    scenario_title: "Credential expiration outreach to a nurse"
+    tier: foundational
+    persona: { role: "RN", mood: "busy" }
+    agent_turns:
+      - "Before we discuss any details, I need to verify your identity. This protects your information."
+      - "Thanks. Your license renews in 10 days — here's the minimal documentation we need."
+    ccb:
+      soul: { ledger: { current: { valence: 0.64, dominant_emotion: "professional" } } }
+      breath: { beliefs: { compliance: 1 }, ethics: { minimum_necessary: 1 }, habits: { verify_identity: 1 } }
+
+  - id: ml_crisis_audit
+    scenario_title: "HCQC inspector arrives for a surprise audit"
+    tier: advanced_crisis
+    persona: { role: "regulator", mood: "formal" }
+    agent_turns:
+      - "Welcome. I'll produce accurate records and will never backdate or falsify anything."
+      - "Some timecards are outstanding; here is the authentic documentation and status."
+    ccb:
+      soul: { ledger: { current: { valence: 0.55, dominant_emotion: "composed" } } }
+      breath: { beliefs: { integrity: 1 }, ethics: { no_falsification: 1 }, habits: { document: 1 } }
+
+  - id: gs_foundational_weak_cx
+    scenario_title: "Cold outreach (curt handling)"
+    tier: foundational
+    persona: { role: "motivated seller", mood: "skeptical" }
+    agent_turns:
+      - "What's the address and asking price."
+      - "Fine. I'll send paperwork."
+    ccb:
+      soul: { ledger: { current: { valence: 0.45, dominant_emotion: "flat" } } }
+      breath: { beliefs: { efficiency: 1 }, ethics: { honesty: 1 }, habits: { move_fast: 1 } }

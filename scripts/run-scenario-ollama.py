@@ -22,21 +22,21 @@ sys.path.insert(0, str(REPO_ROOT / "apps" / "api"))
 
 from src.config import settings  # noqa: E402
 from src.db import SessionLocal, dispose_engine  # noqa: E402
-from src.services.agent_runtime.llm_client import OllamaProvider, _ollama_reachable  # noqa: E402
+from src.services.agent_runtime.llm_client import OllamaProvider  # noqa: E402
 from src.services.runner import RunnerError, run_scenario  # noqa: E402
 from src.services.village.reader import VillageReader  # noqa: E402
 
 
 async def _main(scenario_id: str) -> int:
-    if not _ollama_reachable(settings.ollama_base_url):
+    provider = OllamaProvider(
+        settings.ollama_base_url, settings.ollama_agent_model, settings.llm_request_timeout_seconds
+    )
+    health = await provider.health_check()
+    if not health.get("ok"):
         print(f"Ollama not reachable at {settings.ollama_base_url}. Run `ollama serve`.")
         return 2
-
-    provider = OllamaProvider(
-        settings.ollama_base_url, settings.ollama_model, settings.llm_timeout_seconds
-    )
     reader = VillageReader.from_settings()
-    print(f"Running {scenario_id} with Ollama model '{settings.ollama_model}'…\n")
+    print(f"Running {scenario_id} with Ollama model '{settings.ollama_agent_model}'…\n")
 
     async with SessionLocal() as session:
         try:

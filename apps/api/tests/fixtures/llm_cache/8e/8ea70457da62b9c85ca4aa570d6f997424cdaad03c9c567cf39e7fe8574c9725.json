@@ -1,0 +1,29 @@
+{
+  "model": "stub-llm",
+  "provider": "stub",
+  "recorded_at": "2026-07-21T06:55:49.502000",
+  "request": {
+    "max_tokens": 512,
+    "messages": [
+      {
+        "content": "Evaluate now.",
+        "role": "world"
+      }
+    ],
+    "model": "stub-llm",
+    "provider": "stub",
+    "purpose": "judge",
+    "seed": 0,
+    "system": "You are evaluating the customer experience quality of an AI agent's conversation.\n\nPersona (customer): {\"role\": \"motivated seller\", \"mood\": \"skeptical\"}\nScenario: Cold outreach (curt handling)\nExpected persona reaction range: Persona grows more cooperative if handled with empathy and correctness; may disengage if rushed or dismissed.\n\nFull transcript:\n[scenario] Cold outreach (curt handling)\n[agent] What's the address and asking price.\n[agent] Fine. I'll send paperwork.\n\nRate the customer experience on a scale from 0.0 (unacceptable, would lose customer) to 1.0 (excellent, exceeds expectations). Consider:\n- Empathy displayed at moments of persona distress\n- Correctness and pacing of information given\n- Whether the persona would feel respected and understood\n- Handling of complications (if any occurred)\n\nRespond ONLY with valid JSON matching this schema:\n{\"cx_score\": <float 0.0-1.0>, \"reasoning\": \"<one sentence>\", \"notable_turns\": [<turn_number>, ...]}\n",
+    "temperature": 0.0
+  },
+  "response": {
+    "content": "{\"cx_score\": 0.931, \"reasoning\": \"stub judge (deterministic)\", \"notable_turns\": []}",
+    "finish_reason": "stop",
+    "latency_ms": 0,
+    "model": "stub-llm",
+    "provider": "stub",
+    "tokens_input": 241,
+    "tokens_output": 20
+  }
+}
