@@ -27,9 +27,14 @@ class Settings(BaseSettings):
     )
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
-    # Auth
+    # Auth (AUTH_MODE=clerk verifies real Clerk RS256 JWTs; dev-bypass is the local default)
     auth_mode: str = Field(default="dev-bypass", alias="AUTH_MODE")
     clerk_secret_key: str = Field(default="", alias="CLERK_SECRET_KEY")
+    clerk_jwks_url: str = Field(default="", alias="CLERK_JWKS_URL")
+    # Offline/test override: a JWKS document as JSON (used instead of fetching CLERK_JWKS_URL).
+    clerk_jwks_json: str = Field(default="", alias="CLERK_JWKS_JSON")
+    clerk_issuer: str = Field(default="", alias="CLERK_ISSUER")
+    clerk_audience: str = Field(default="", alias="CLERK_AUDIENCE")
 
     # LLM providers (ADR-0008). Agent-runtime + judge providers routed independently.
     llm_provider: str = Field(default="stub", alias="LLM_PROVIDER")  # stub|ollama|anthropic
@@ -60,11 +65,18 @@ class Settings(BaseSettings):
         default="dev-fingerprint", alias="VILLAGE_OS_VERSION_FINGERPRINT"
     )
 
-    # Signing
-    hsm_provider: str = Field(default="stub", alias="HSM_PROVIDER")
+    # Signing. stub = dev (auto-generates a local Ed25519 key). file = production Ed25519 that
+    # REQUIRES an existing key (never auto-generates) from SIMFORGE_SIGNING_PRIVATE_KEY_PEM (a
+    # secret-manager-injected PEM) or SIMFORGE_SIGNING_PRIVATE_KEY_PATH. yubihsm/cloudhsm = real
+    # HSMs (need the vendor SDK + credentials; not enabled here).
+    hsm_provider: str = Field(default="stub", alias="HSM_PROVIDER")  # stub|file|yubihsm|cloudhsm
     simforge_root_key_id: str = Field(default="dev-root", alias="SIMFORGE_ROOT_KEY_ID")
     simforge_signing_private_key_path: str = Field(
         default="./signing-keys/dev-ed25519.pem", alias="SIMFORGE_SIGNING_PRIVATE_KEY_PATH"
+    )
+    # Preferred in prod: inject the PEM directly from a secret manager (no key on disk).
+    simforge_signing_private_key_pem: str = Field(
+        default="", alias="SIMFORGE_SIGNING_PRIVATE_KEY_PEM"
     )
 
     # Certification (dev relaxes the prod 18-scenario battery minimum)

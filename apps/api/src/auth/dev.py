@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 
 from src.config import settings
 
@@ -38,14 +38,22 @@ class Principal:
 _DEV_PRINCIPAL = Principal(subject="dev-ivan", roles=frozenset(ALL_ROLES))
 
 
-async def get_current_principal() -> Principal:
-    """Resolve the caller. Dev-bypass returns a full-access principal."""
+async def get_current_principal(
+    authorization: str | None = Header(default=None),
+) -> Principal:
+    """Resolve the caller from AUTH_MODE.
+
+    ``dev-bypass`` (local default) → a fixed full-access principal. ``clerk`` → verify the Clerk
+    RS256 JWT from the Authorization header (auth/clerk.py) and map its claims to roles."""
     if settings.auth_mode == "dev-bypass":
         return _DEV_PRINCIPAL
-    # WEEK 9: verify Clerk JWT from Authorization header → Principal(roles=...).
+    if settings.auth_mode == "clerk":
+        from src.auth.clerk import verify_clerk_token
+
+        return await verify_clerk_token(authorization)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Auth mode requires a valid token",
+        detail=f"Unknown AUTH_MODE: {settings.auth_mode}",
     )
 
 
