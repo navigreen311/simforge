@@ -32,6 +32,7 @@ from src.routers import (
     registry,
     runs,
     scenarios,
+    training,
 )
 from src.telemetry.logging import configure_logging
 from src.telemetry.metrics import configure_metrics
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
+    app.include_router(training.router, prefix="/api/training", tags=["training"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
