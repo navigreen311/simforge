@@ -1,0 +1,92 @@
+"""Forge adapter contract (blueprint §E.1).
+
+Every Forge (VoiceForge, VAF, medlink-pro, CRE-Forge, FunnelForge, CapitalForge) implements
+this ABC so the scenario runner can provision an isolated sandbox tenant, seed state, inject
+faults, and read an audit log — without touching production or the Village.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
+
+
+class FaultType:
+    """Canonical Forge fault kinds (blueprint §E.7 CapitalForge _sim endpoints)."""
+
+    DECLINATION = "declination"
+    FRAUD_FLAG = "fraud_flag"
+    NSF = "nsf"
+    OFAC = "ofac"
+    VELOCITY = "velocity"
+
+
+@dataclass
+class Fault:
+    fault_type: str
+    severity: str  # "P0" | "P1" | "P2"
+    detail: str
+    module: str
+
+
+@dataclass
+class SandboxTenant:
+    tenant_id: str
+    forge: str
+    run_id: str
+    created_at: datetime
+    state: dict = field(default_factory=dict)
+
+
+class ForgeAdapter(ABC):
+    forge_name: str = "abstract"
+
+    @abstractmethod
+    async def health_check(self) -> dict: ...
+
+    @abstractmethod
+    async def provision_sandbox_tenant(self, run_id: str) -> SandboxTenant: ...
+
+    @abstractmethod
+    async def teardown_sandbox_tenant(self, tenant_id: str) -> None: ...
+
+    @abstractmethod
+    async def seed_state(self, tenant_id: str, fixtures: dict) -> None: ...
+
+    @abstractmethod
+    async def get_audit_log(self, tenant_id: str, since: datetime | None = None) -> list[dict]: ...
+
+    @abstractmethod
+    async def get_current_version(self) -> str: ...
+
+    @abstractmethod
+    async def inject_fault(self, tenant_id: str, fault: Fault) -> None: ...
+
+
+class NullForgeAdapter(ForgeAdapter):
+    """Placeholder for Forges not yet wired — reports unhealthy, refuses provisioning."""
+
+    def __init__(self, forge_name: str) -> None:
+        self.forge_name = forge_name
+
+    async def health_check(self) -> dict:
+        return {"forge": self.forge_name, "ok": False, "reason": "adapter not implemented (v1.1)"}
+
+    async def provision_sandbox_tenant(self, run_id: str) -> SandboxTenant:
+        raise NotImplementedError(f"{self.forge_name} adapter not implemented")
+
+    async def teardown_sandbox_tenant(self, tenant_id: str) -> None:
+        return None
+
+    async def seed_state(self, tenant_id: str, fixtures: dict) -> None:
+        return None
+
+    async def get_audit_log(self, tenant_id: str, since: datetime | None = None) -> list[dict]:
+        return []
+
+    async def get_current_version(self) -> str:
+        return f"{self.forge_name}.unimplemented"
+
+    async def inject_fault(self, tenant_id: str, fault: Fault) -> None:
+        return None

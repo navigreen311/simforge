@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — First real Forge: CapitalForge (Mock Bank) (post-v1)
+- **`ForgeAdapter` contract** (`services/forges/base.py`) — provision/teardown sandbox tenant, seed state, inject fault, audit log, version; `SandboxTenant`/`Fault`/`FaultType`; `NullForgeAdapter` for unwired Forges.
+- **CapitalForge = Mock Bank** — deterministic in-process engine (`mock_bank.py`) + `LocalCapitalForgeAdapter`: tenants, accounts, apply/wire/emd_release, fault injection (declination/fraud/nsf/ofac/velocity), audit log. Registry/factory `get_forge_adapter`.
+- **Runner wiring** — capitalforge scenarios provision a sandbox tenant, run the tested op, and record `forge_action`/`forge_fault` trace events (sandbox-isolated; deterministic fault on even seed). **Real Software Gaps** now derive from `forge_fault` events (`detect_forge_fault_gaps`), merged with heuristics.
+- **Router** `/api/forges` — list/health + CapitalForge demo flow.
+- **Tests:** 15 new (100 api + 5 validator) — Mock Bank engine, adapter **contract test** (§I.3), Null adapter, Forge router, and the fault→gap integration. ruff clean.
+- **Verified live:** `scn.gs.buy.002` → `emd/fraud_flag` fault → Software Gap `capitalforge/emd`. ADR-0010.
+
 ### Added — Real Ollama LLM provider (post-v1)
 - **`OllamaProvider`** — real `POST /api/chat` (non-streaming, seeded) against a local Ollama; transcript roles mapped (agent→assistant, scenario/world→user); token accounting from `prompt_eval_count`+`eval_count`.
 - **Provider selection** via `LLM_PROVIDER` (`stub` default · `ollama` · `auto` = Ollama-if-reachable-else-stub · `openai`); `OLLAMA_MODEL` (default `llama3.1:8b`). StubProvider stays default so tests/CI remain deterministic (ADR-0008).

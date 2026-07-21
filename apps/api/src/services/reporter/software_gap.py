@@ -45,6 +45,26 @@ def ticket_id(prefix: str, dedup_key: str) -> str:
     return f"{prefix}-{n:04d}"
 
 
+def detect_forge_fault_gaps(fault_events: list[dict]) -> list[GapCandidate]:
+    """Real Software Gaps from `forge_fault` trace events (Forge sandbox faults hit at runtime)."""
+    gaps: list[GapCandidate] = []
+    for payload in fault_events:
+        forge = payload.get("forge", "unknown")
+        module = payload.get("module", "core")
+        reason = payload.get("reason", "fault")
+        gaps.append(
+            GapCandidate(
+                forge,
+                module,
+                payload.get("severity", "P1"),
+                f"{forge}.{module} returned a '{reason}' fault during the run",
+                payload.get("detail", f"{forge}.{module} fault: {reason}"),
+                f"Verify {module} handling for the '{reason}' path in {forge}.",
+            )
+        )
+    return gaps
+
+
 def detect_software_gaps(run: Run, scenario: Scenario) -> list[GapCandidate]:
     gaps: list[GapCandidate] = []
     for cap in scenario.testedForgeCaps or []:

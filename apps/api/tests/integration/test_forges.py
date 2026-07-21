@@ -1,0 +1,45 @@
+"""Integration tests for the Forges router + Forge-fault → Software Gap loop."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from httpx import AsyncClient
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
+
+
+async def test_list_forges_and_health(client: AsyncClient) -> None:
+    resp = await client.get("/api/forges/")
+    assert resp.status_code == 200
+    forges = {f["forge"]: f["ok"] for f in resp.json()["forges"]}
+    assert forges["capitalforge"] is True  # real adapter
+    assert forges["voiceforge"] is False  # NullForgeAdapter until wired
+
+    health = await client.get("/api/forges/capitalforge/health")
+    assert health.json()["mode"] == "local"
+
+
+async def test_capitalforge_demo_fault(client: AsyncClient) -> None:
+    resp = await client.post("/api/forges/capitalforge/demo", json={"fault": "declination"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["result"]["outcome"] == "declined"
+    assert body["result"]["fault"]["type"] == "declination"
+
+
+async def test_capitalforge_scenario_run_emits_forge_gap(client: AsyncClient) -> None:
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    # scn.gs.buy.002 tests capitalforge.emd.release for david_kim (seeded), seed 202 (even) → fault
+    run = await client.post("/api/scenarios/scn.gs.buy.002/run")
+    assert run.status_code == 200, run.text
+
+    # The run's trace has a forge_fault event
+    trace = (await client.get(f"/api/runs/{run.json()['run_id']}/trace")).json()
+    assert any(e["event_type"] == "forge_fault" for e in trace["events"])
+
+    # …which surfaced a real Software Gap against capitalforge
+    gaps = (await client.get("/api/gaps/software", params={"forge": "capitalforge"})).json()
+    assert gaps["total"] >= 1
+    assert gaps["items"][0]["forge"] == "capitalforge"

@@ -22,11 +22,84 @@ from src.models.pack import Pack, Scenario
 from src.models.run import Run, TraceEvent
 from src.services.agent_runtime.llm_client import LLMProvider, get_llm_provider
 from src.services.agent_runtime.runtime import AgentRuntime
+from src.services.forges import Fault, FaultType, get_forge_adapter
+from src.services.forges.registry import forge_of_cap
 from src.services.mock_world.world import MockWorld
 from src.services.scenario_engine.complications import ComplicationInjector
 from src.services.scenario_engine.runner import ScenarioRunner
+from src.services.scenario_engine.state import Phase, TraceEntry
 from src.services.village.ccb_store import capture_ccb
 from src.services.village.reader import VillageReader, VillageReaderError
+from src.utils.time import utcnow
+
+# Deterministic fault per bank module (seeded), so capitalforge runs can surface real gaps.
+_MODULE_FAULT = {
+    "emd": (FaultType.FRAUD_FLAG, "P1", "EMD release held pending fraud review"),
+    "wire": (FaultType.NSF, "P0", "Wire failed: insufficient funds"),
+    "bank": (FaultType.DECLINATION, "P1", "Credit application declined"),
+    "deals": (FaultType.DECLINATION, "P1", "Financing declined for the deal"),
+}
+
+
+async def _run_capitalforge_side_effects(state, scenario, run_id: str) -> None:
+    """Provision a CapitalForge (Mock Bank) tenant, run the tested op, record trace events.
+
+    A fault is injected deterministically (even seed) so faults → Software Gaps are exercised;
+    real sandbox faults come from the live Forge. Sandbox-isolated: no Village writes."""
+    caps = [c for c in (scenario.testedForgeCaps or []) if forge_of_cap(c) == "capitalforge"]
+    if not caps:
+        return
+    adapter = get_forge_adapter("capitalforge")
+    tenant = await adapter.provision_sandbox_tenant(run_id)
+    inject = scenario.seed % 2 == 0
+
+    for cap in caps:
+        module = cap.split(".")[1] if "." in cap else "bank"
+        if inject and module in _MODULE_FAULT:
+            ftype, sev, detail = _MODULE_FAULT[module]
+            await adapter.inject_fault(tenant.tenant_id, Fault(ftype, sev, detail, module))
+        # Exercise the operation implied by the capability.
+        if module == "emd":
+            result = await adapter.emd_release(tenant.tenant_id, 10_000.0)
+        elif module == "wire":
+            result = await adapter.wire(tenant.tenant_id, 300_000.0)
+        else:
+            result = await adapter.apply(tenant.tenant_id, 200_000.0)
+
+        if result.get("fault"):
+            f = result["fault"]
+            state.trace.append(
+                TraceEntry(
+                    timestamp=utcnow(),
+                    event_type="forge_fault",
+                    phase=Phase.RESOLUTION.value,
+                    turn_number=state.turn_count,
+                    payload={
+                        "forge": "capitalforge",
+                        "module": module,
+                        "severity": f["severity"],
+                        "reason": result.get("reason"),
+                        "detail": f["detail"],
+                        "cap": cap,
+                    },
+                )
+            )
+        else:
+            state.trace.append(
+                TraceEntry(
+                    timestamp=utcnow(),
+                    event_type="forge_action",
+                    phase=Phase.RESOLUTION.value,
+                    turn_number=state.turn_count,
+                    payload={
+                        "forge": "capitalforge",
+                        "module": module,
+                        "outcome": result["outcome"],
+                    },
+                )
+            )
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}
 
@@ -124,6 +197,9 @@ async def run_scenario(
         await session.commit()
         await session.refresh(run)
         return run
+
+    # Forge side-effects (CapitalForge Mock Bank) → trace events (faults become Software Gaps).
+    await _run_capitalforge_side_effects(state, scenario, run.runId)
 
     # Persist results
     run.transcript = state.transcript
