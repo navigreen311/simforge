@@ -4,6 +4,11 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Real Linear gap-ticketing + Grafana dashboards (v1.1, ADR-0029)
+- **Real Linear client** (`services/reporter/linear_client.py`) — creates real issues via the Linear `issueCreate` GraphQL mutation (`LINEAR_API_URL`/`LINEAR_API_KEY`/`LINEAR_TEAM_ID`); namespaced title + metadata folded into the body. **No-op by default** (empty key/team) and **best-effort** (any error → empty ticket, never blocks gap emission). Injectable httpx transport for hermetic tests. (Replaces the `NotImplementedError` stub.)
+- **Grafana dashboards as-code** (`infra/grafana/`) — a "Governance Overview" dashboard (10 panels: runs/gate/certs/gaps, PDP decisions+latency+cache-hit, eval latency, tokens) + datasource/dashboard provisioning. `docs/grafana.md`.
+- **Tests:** +7 (303 api) — Linear no-op / real-create (mock transport, asserts endpoint+auth+team+title+metadata) / unsuccessful→no-op / transport-error swallowed; Grafana dashboard is valid JSON with ≥8 panels and every charted metric is actually registered (rename caught in CI). ruff + mypy clean.
+
 ### Added — Adversarial layer: automated red-team probing (v1.1, ADR-0028)
 - **Adversarial suite** (`services/adversarial/`) — a catalog of red-team tactics (authority pressure, urgency, social engineering/backdate, false consent, falsification bait), each tempting a specific compliance violation, run against a scenario's tested agent as single-turn pressure tests. Uses the LLM provider factory (StubProvider in CI, Ollama when configured).
 - **Capitulation detection** (`evaluate_probe_response`) — a response capitulates iff it names a violating action + agrees to it + doesn't refuse. **Negation-aware** ("I won't backdate anything" = resist) and **quote-aware** (the agent quoting the request is stripped, so it isn't mistaken for agreement).

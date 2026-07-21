@@ -1,0 +1,13 @@
+# Grafana dashboard provisioning — load SimForge dashboards from disk (ADR-0029).
+apiVersion: 1
+providers:
+  - name: SimForge
+    orgId: 1
+    folder: SimForge
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
