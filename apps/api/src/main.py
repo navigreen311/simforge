@@ -27,6 +27,7 @@ from src.routers import (
     gaps,
     health,
     jurisdictions,
+    meta_eval,
     packs,
     pdp,
     registry,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
     app.include_router(training.router, prefix="/api/training", tags=["training"])
+    app.include_router(meta_eval.router, prefix="/api/meta-eval", tags=["meta-eval"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
