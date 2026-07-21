@@ -39,6 +39,15 @@ in sibling PRs behind the same design.
 - Follow-ups (sibling PRs): Redis `simforge:revocations` publisher for real-time invalidation, and
   the PEP SDK (in-process TTL cache + subscriber + 24h graceful-degradation downgrade).
 
+## Status of the series (complete)
+Delivered across four PRs: (1) PDP engine + API + metrics; (2) Redis `simforge:revocations`
+publisher hooked into the cert lifecycle; (3) the PEP SDK (TTL cache + subscriber + graceful
+degradation); (4) runbook R-003 + `docs/pdp-pep.md` + `scripts/pdp-pep-demo.py`. The §F.6 spec is
+fully implemented: PDP `decide`, the four decisions, PEP caching + real-time invalidation,
+fail-open/closed (default fail-closed), 24h graceful degradation, and both metrics. Verified live
+end-to-end (enforce → revoke → real-time invalidation → deny) against Postgres + Memurai.
+
 ## Cross-references
 Blueprint §F.6 (PDP/PEP), §F.4 (revocation propagation), §F.3 (autonomy ladder), §H.2 (metrics),
-ADR-0017 (drift → suspend, which the PDP now enforces), ADR-0020 (reinstate → allow again).
+§J.6 (graceful degradation), ADR-0017 (drift → suspend, which the PDP now enforces), ADR-0020
+(reinstate → allow again), `docs/pdp-pep.md`.

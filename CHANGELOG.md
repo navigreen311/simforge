@@ -4,6 +4,11 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — PDP/PEP docs + runbook (v1.1, ADR-0024) — **series complete**
+- **`docs/pdp-pep.md`** — operator/architecture doc: the decision matrix, the PEP embed pattern, real-time revocation, graceful degradation, metrics, and a try-it recipe.
+- **Runbook R-003** (PDP latency spike / PEP degradation) rewritten to reference the real implementation — the `/metrics` names, the two indexed DB reads on the decide path, revocation-storm diagnosis, and "degradation is safe" guidance.
+- ADR-0024 marked complete: the §F.6 spec is fully implemented across the four PDP/PEP PRs (engine + API + metrics, Redis pub/sub, PEP SDK, docs), verified live end-to-end.
+
 ### Added — PEP SDK: enforcement cache + graceful degradation (v1.1, ADR-0024)
 - **PEP SDK** (`services/pep/`) — the client-side enforcement point a Village runtime or Forge service embeds. `Pep.authorize(req)` calls the PDP once, **caches** the decision for its `ttl_seconds` (bounded by `max_ttl`), and serves the cache until it expires or a revocation event invalidates it. Sets the `simforge_pdp_cache_hit_ratio` gauge.
 - **Decision sources** — `HttpDecisionSource` (POST `/api/pdp/decide`, injectable transport) for a remote PEP; `local_decision_source` (in-process PDP + session) for a co-located one.
