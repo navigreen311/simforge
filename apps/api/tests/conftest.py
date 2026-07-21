@@ -8,15 +8,26 @@ Postgres-backed integration path.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from src.db import get_session
+from src.deps import get_village_reader
 from src.main import create_app
 from src.models import Agent, Base, Department
+from src.services.village.reader import VillageReader
+
+VILLAGE_FIXTURE = Path(__file__).parent / "fixtures" / "village" / "VillageData"
+
+
+@pytest.fixture
+def village_reader() -> VillageReader:
+    return VillageReader(village_data_path=VILLAGE_FIXTURE)
 
 
 @pytest_asyncio.fixture
@@ -77,6 +88,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db_session
 
     app.dependency_overrides[get_session] = _override_get_session
+    app.dependency_overrides[get_village_reader] = lambda: VillageReader(
+        village_data_path=VILLAGE_FIXTURE
+    )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

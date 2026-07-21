@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,9 +48,20 @@ async def readiness(session: AsyncSession = Depends(get_session)) -> ReadyRespon
 
 @router.get("/village-fingerprint", response_model=FingerprintResponse)
 async def village_fingerprint() -> FingerprintResponse:
-    # Phase 2 wires the real VillageReader fingerprint; Phase 1 echoes configured value.
+    """Live Village schema fingerprint + drift flag vs the configured expected value."""
+    from src.services.village.reader import VillageReader, VillageReaderError
+
+    expected = settings.village_os_version_fingerprint
+    try:
+        reader = VillageReader.from_settings()
+        current = reader.get_village_schema_fingerprint()
+    except VillageReaderError:
+        # Village data not mounted in this environment — report the configured value.
+        return FingerprintResponse(fingerprint=expected, captured_at=None, drift_detected=False)
+
+    drift = expected not in ("", "dev-fingerprint") and current != expected
     return FingerprintResponse(
-        fingerprint=settings.village_os_version_fingerprint,
-        captured_at=None,
-        drift_detected=False,
+        fingerprint=current,
+        captured_at=datetime.now(UTC).isoformat(),
+        drift_detected=drift,
     )
