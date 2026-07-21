@@ -4,6 +4,11 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Meta-Eval: evaluating the evaluator (v1.1, ADR-0027)
+- **Meta-Eval** (`services/meta_eval/`) — `analyze_scorecards` computes, per numeric rubric dimension, `n`/mean/stddev/min/max + **discrimination** (`mean(dim | gate passed) − mean(dim | gate failed)`) over a run population, and **flags** dims that carry no signal: `constant` (stddev < 0.01) or `non_discriminating` (|discrimination| < 0.05). `no_data`/`insufficient_data` are reported but not actionable.
+- **API** `GET /api/meta-eval/report` (optional `?pack_id=`) — the per-dim table + `flagged_dimensions`. Read-only.
+- **Tests:** +8 (287 api) — discriminating dim not flagged, constant dim flagged (constant + non_discriminating), varying-but-non-discriminating dim flagged (not constant), absent dim → no_data (not actionable), population summary/pass-rate, empty population + the report over real run scorecards. ruff + mypy clean.
+
 ### Added — Agent training loop — approval-gated, re-certifying (v1.1, ADR-0026)
 - **Agent training** (`services/training/`) — closes the certifier → *improver* loop. `analyze_run_for_training` reads a run's scorecard; if an **LLM-judge** dim (P7/C1/C2 — what a prompt can move) is below 0.60 it generates a **`TrainingProposal`** (weak dims + a targeted prompt refinement + a bumped prompt version). **Never auto-applied** (`autoApplied` always false).
 - **Approval promotes + re-certifies** — `approve_proposal` promotes the agent's prompt version and **suspends every active cert pinned to the old prompt version** (reuses the drift/amendment auto-suspend), so those certs must be reinstated (re-certified, ADR-0020) against the improved prompt; the PDP denies them until then + a `simforge:revocations` event invalidates PEP caches. An improvement can't silently bypass governance.
