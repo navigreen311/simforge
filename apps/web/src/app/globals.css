@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — blueprint §D.4 (gold-on-ink). Kept in sync with tailwind.config.ts. */
+:root {
+  --gold-500: #d4af37;
+  --ink-50: #e8e8ea;
+  --ink-600: #1e1e26;
+  --ink-700: #161620;
+  --ink-800: #10101a;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --info: #58a6ff;
+}
+
+body {
+  background: var(--ink-700);
+  color: var(--ink-50);
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Playfair Display", serif;
+  color: var(--gold-500);
+}
