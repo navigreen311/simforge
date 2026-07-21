@@ -210,6 +210,37 @@ export const certs = {
   agent: () => apiGet<{ items: AgentCert[]; total: number }>("/api/certs/agent"),
 };
 
+export interface ConstitutionCurrent {
+  version: string;
+  ratified_at: string;
+  ratified_by: string;
+  content_hash: string;
+  superseded_by: string | null;
+}
+
+export interface Amendment {
+  amendment_id: string;
+  status: string;
+  proposed_by: string;
+  cooling_ends_at: string;
+  impact: Record<string, unknown> | null;
+}
+
+export interface LineageSubgraph {
+  nodes: string[];
+  edges: Array<{ from: string; to: string; relation: string }>;
+}
+
+export const governance = {
+  current: () => apiGet<ConstitutionCurrent>("/api/constitution/current"),
+  history: () => apiGet<{ amendments: Amendment[] }>("/api/constitution/history"),
+};
+
+export const lineage = {
+  subgraph: (urn: string, hops = 2) =>
+    apiGet<LineageSubgraph>(`/api/lineage/subgraph/${urn}?hops=${hops}`),
+};
+
 export async function runScenario(scenarioId: string): Promise<RunSummary> {
   const res = await fetch(`${API_BASE}/api/scenarios/${scenarioId}/run`, {
     method: "POST",

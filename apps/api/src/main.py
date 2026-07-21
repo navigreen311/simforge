@@ -18,10 +18,12 @@ from src.routers import (
     agents,
     attest,
     certs,
+    constitution,
     departments,
     gaps,
     health,
     packs,
+    registry,
     runs,
     scenarios,
 )
@@ -64,6 +66,9 @@ def create_app() -> FastAPI:
     app.include_router(certs.router, prefix="/api/certs", tags=["certs"])
     app.include_router(certs.snapshots_router, prefix="/api/snapshots", tags=["snapshots"])
     app.include_router(attest.router, prefix="/api/attest", tags=["attestation"])
+    app.include_router(constitution.router, prefix="/api/constitution", tags=["constitution"])
+    app.include_router(registry.router, prefix="/api/registry", tags=["registry"])
+    app.include_router(registry.lineage_router, prefix="/api/lineage", tags=["lineage"])
 
     return app
 

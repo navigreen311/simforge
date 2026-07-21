@@ -186,6 +186,27 @@ async def issue_agent_cert(
         )
     )
 
+    # Lineage + registry (blueprint §F.2 step 8).
+    from src.services.registry import add_edge, register_entry
+    from src.services.registry.urn import (
+        agent_urn,
+        cert_urn,
+        constitution_urn,
+        evidence_urn,
+        pack_urn,
+    )
+
+    c_urn = cert_urn(cert.id)
+    await register_entry(session, c_urn, "cert", cert.id, {"forge_cap": forge_cap, "tier": tier})
+    await register_entry(
+        session, agent_urn(agent.villageAgentId), "agent", agent.villageAgentId, {}
+    )
+    await register_entry(session, pack_urn(pack.packId), "pack", pack.packId, {})
+    await add_edge(session, c_urn, agent_urn(agent.villageAgentId), "produced_by")
+    await add_edge(session, c_urn, pack_urn(pack.packId), "derived_from")
+    await add_edge(session, c_urn, constitution_urn(pinned.constitution_version), "pinned_to")
+    await add_edge(session, c_urn, evidence_urn(snapshot_id), "evidenced_by")
+
     from_level = agent.currentAutonomyLevel
     await promote_on_first_cert(session, agent)
     to_level = agent.currentAutonomyLevel
