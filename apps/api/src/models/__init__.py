@@ -17,6 +17,7 @@ from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.registry import LineageEdge, ObjectRegistryEntry
 from src.models.run import Run, TraceEvent
 from src.models.scorecard import Scorecard
+from src.models.training import TrainingProposal
 from src.models.village_fingerprint import VillageFingerprint
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
     "Run",
     "TraceEvent",
     "Scorecard",
+    "TrainingProposal",
     "SoftwareGap",
     "VillageOSGap",
     "AgentCert",

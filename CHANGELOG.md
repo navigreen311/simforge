@@ -4,6 +4,12 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Agent training loop — approval-gated, re-certifying (v1.1, ADR-0026)
+- **Agent training** (`services/training/`) — closes the certifier → *improver* loop. `analyze_run_for_training` reads a run's scorecard; if an **LLM-judge** dim (P7/C1/C2 — what a prompt can move) is below 0.60 it generates a **`TrainingProposal`** (weak dims + a targeted prompt refinement + a bumped prompt version). **Never auto-applied** (`autoApplied` always false).
+- **Approval promotes + re-certifies** — `approve_proposal` promotes the agent's prompt version and **suspends every active cert pinned to the old prompt version** (reuses the drift/amendment auto-suspend), so those certs must be reinstated (re-certified, ADR-0020) against the improved prompt; the PDP denies them until then + a `simforge:revocations` event invalidates PEP caches. An improvement can't silently bypass governance.
+- **API** `/api/training` — `POST /proposals/from-run/{run}` (null if the run scored well), `GET /proposals` (list/filter), `POST /proposals/{id}/approve|reject` (admin). New `TrainingProposal` table (Prisma + SQLAlchemy).
+- **Tests:** +4 (279 api) — version-bump, a good run yields no proposal, and end-to-end: weak run → proposal (weak_dims `[p7_cx]`, prompt.v1→v2) → approve → the pinned cert **suspends** and the **PDP denies it** (`cert_suspended`); reject is terminal. ruff + mypy clean on touched files.
+
 ### Added — Integrated (write-enabled) execution — PDP-gated, off by default (v1.1, ADR-0025)
 - **Integrated execution** (`services/execution/`) — a run can now *commit* an agent's actions, not just simulate them. **Deliberately relaxes the sandbox-only guardrail (ADR-0001)** for this feature, with safety by construction:
   - **Triple-gated, off by default** — executes only when `INTEGRATED_EXECUTION_ENABLED` (default false) AND the pack's `integratedRunsAllowed` AND the run's `?integrated=true`. Any gate unmet → sandbox. CI runs entirely flag-off; the shipped default changes nothing.

@@ -454,6 +454,27 @@ model AutonomyEvent {
   @@index([createdAt])
 }
 
+// Agent training proposal — a candidate prompt improvement from a weak run (ADR-0026).
+// Approval-gated: never auto-applied. Approval promotes the prompt version + suspends old certs.
+model TrainingProposal {
+  id                    String    @id @default(cuid())
+  agentId               String
+  runId                 String? // run whose scorecard surfaced the weakness
+  weakDims              String[] // e.g. ["p7_cx"]
+  currentPromptVersion  String
+  proposedPromptVersion String
+  rationale             String
+  proposedRefinement    String
+  status                String    @default("proposed") // proposed | approved | rejected
+  autoApplied           Boolean   @default(false) // always false — approval-gated
+  reviewedBy            String?
+  reviewedAt            DateTime?
+  createdAt             DateTime  @default(now())
+
+  @@index([agentId])
+  @@index([status])
+}
+
 // ═══════════════════════════════════════════════════════════════
 // OBJECT REGISTRY & LINEAGE
 // ═══════════════════════════════════════════════════════════════
