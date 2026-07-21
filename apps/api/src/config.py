@@ -46,6 +46,10 @@ class Settings(BaseSettings):
         default="./signing-keys/dev-ed25519.pem", alias="SIMFORGE_SIGNING_PRIVATE_KEY_PATH"
     )
 
+    # Certification (dev relaxes the prod 18-scenario battery minimum)
+    cert_min_battery_size: int = Field(default=1, alias="CERT_MIN_BATTERY_SIZE")
+    cert_validity_days: int = Field(default=90, alias="CERT_VALIDITY_DAYS")
+
     # Packs
     packs_root: str = Field(default="./packs", alias="PACKS_ROOT")
 

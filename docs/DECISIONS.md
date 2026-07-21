@@ -61,6 +61,17 @@ map is the integration seam. Tracked as a spec-blueprint reconciliation item.
 bash `kill $!` — the real process keeps the port. Kill by port:
 `taskkill /F /PID (Get-NetTCPConnection -LocalPort 8000 -State Listen).OwningProcess`.
 
+## ADR-0007 — Persisted timestamps are naive UTC truncated to milliseconds
+**Status:** Accepted (2026-07-21, Phase 7).
+
+Prisma maps `DateTime` → Postgres **`timestamp(3)`** (no time zone, **millisecond** precision).
+Two consequences bit CertSnapshot verification (signed value must survive a DB round-trip byte-for-byte):
+1. Writing **tz-aware** datetimes made asyncpg shift them to local time on write.
+2. Full-**microsecond** values were rounded to ms on write, so the round-tripped value ≠ the signed value.
+
+**Decision:** all persisted timestamps use `src/utils/time.py::utcnow()` — **naive UTC, truncated to milliseconds**. `base._now()` and the cert path use it. Signing/verification thus operate on values that equal what Postgres stores. Canonical datetime encoding in `cert/snapshot.py::_canon_dt` also normalizes tz.
+**Verified:** a freshly issued CertSnapshot verifies `valid: True` against live Postgres.
+
 ### Open decisions (to confirm as phases land)
 - Scenario-engine branching model (Best-of-N in Phase 4).
 - Rubric aggregation weighting (Phase 5) — confirm against spec rubric profile.

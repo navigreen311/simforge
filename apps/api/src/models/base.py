@@ -6,11 +6,13 @@ and camelCase column names (via `Column("camelName", ...)`). See ADR-0003.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import DateTime, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from ulid import ULID
+
+from src.utils.time import utcnow
 
 
 def _new_id() -> str:
@@ -19,7 +21,8 @@ def _new_id() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    # Naive UTC — matches Prisma `timestamp` columns; avoids asyncpg local-time shift.
+    return utcnow()
 
 
 class Base(DeclarativeBase):

@@ -4,6 +4,18 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Phase 7 (Certification, signing & autonomy ladder)
+- **Signing** (`services/cert/signer.py`) — `Signer` ABC + Ed25519 **StubSigner** (dev; generates/persists a keypair); HSM providers drop in behind the ABC.
+- **CertSnapshot** (`snapshot.py`) — version-pinned payload with a stable canonical encoding; `content_hash` + signature.
+- **Registry** (`registry.py`) — `issue_agent_cert` (validates a passing-gate battery, no active duplicate), signs a CertSnapshot, writes an evidence bundle, advances the **Autonomy Ladder** L1→L2; `revoke_agent_cert` (audited, demotes one level).
+- **Verifier** (`verifier.py`) — recomputes canonical + checks hash & signature. **Autonomy ladder** state machine (`autonomy_ladder.py`). **Evidence** bundle storage (local FS in dev).
+- **Models:** AgentCert, DeptCert, CertSnapshot, CertLifecycleEvent, AutonomyEvent. **Workers:** `cert_lifecycle_worker` (expiry sweep).
+- **Endpoints:** `/api/certs/agent/*` (issue/list/detail/revoke), `/api/snapshots/{id}` + `/verify`, `/api/attest/cert/{id}` + `/public-keys`, agent autonomy promote/downgrade/history.
+- **Frontend:** Cert Registry + **Readiness Gate Matrix** (agent × Forge-cap grid); sidebar enabled.
+- **Tests:** 12 new (59 api + 5 validator) — signer roundtrip/tamper, full issue→verify→autonomy flow, duplicate/failing-battery rejection, revoke-demotes. ruff clean.
+- **Verified live:** passing run → signed cert issued, autonomy L1→L2, **signature verifies True against Postgres**, external attestation valid, revoke demotes L2→L1.
+- **ADR-0007:** persisted timestamps are **naive UTC truncated to ms** (Prisma `timestamp(3)`); fixed a signature-verification bug where microsecond/tz round-tripping broke the signed hash.
+
 ### Added — Phase 6 (Triple Reporter + Gaps)
 - **Software Gap detector** (`services/reporter/software_gap.py`) — surfaces Forge defects from run outcome + tier against tested Forge caps (v1 heuristic; real detection reads Forge sandbox error traces).
 - **Village-OS Gap detector** (`services/reporter/village_os_gap.py`) — principled CCB-threshold anomalies per framework (ARC fragmentation, high regret, drive imbalance, drift, low valence); healthy agents → no gaps.

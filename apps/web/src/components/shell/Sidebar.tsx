@@ -3,12 +3,12 @@ import Link from "next/link";
 // Nav mirrors the dashboard route tree (blueprint §A.5). Routes not yet built are marked.
 const NAV: Array<{ href: string; label: string; ready: boolean }> = [
   { href: "/dashboard", label: "Overview", ready: true },
-  { href: "/dashboard/readiness", label: "Readiness Matrix", ready: false },
+  { href: "/dashboard/readiness", label: "Readiness Matrix", ready: true },
   { href: "/dashboard/runs", label: "Runs", ready: true },
   { href: "/dashboard/packs", label: "Packs", ready: true },
   { href: "/dashboard/agents", label: "Agents", ready: false },
   { href: "/dashboard/departments", label: "Departments", ready: false },
-  { href: "/dashboard/certs", label: "Certifications", ready: false },
+  { href: "/dashboard/certs", label: "Certifications", ready: true },
   { href: "/dashboard/gaps/software", label: "Gaps", ready: true },
   { href: "/dashboard/constitution", label: "Constitution", ready: false },
 ];
