@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — PEP SDK: enforcement cache + graceful degradation (v1.1, ADR-0024)
+- **PEP SDK** (`services/pep/`) — the client-side enforcement point a Village runtime or Forge service embeds. `Pep.authorize(req)` calls the PDP once, **caches** the decision for its `ttl_seconds` (bounded by `max_ttl`), and serves the cache until it expires or a revocation event invalidates it. Sets the `simforge_pdp_cache_hit_ratio` gauge.
+- **Decision sources** — `HttpDecisionSource` (POST `/api/pdp/decide`, injectable transport) for a remote PEP; `local_decision_source` (in-process PDP + session) for a co-located one.
+- **Revocation subscriber** (`subscriber.py`) — `listen_for_revocations(pep)` subscribes to `simforge:revocations` and invalidates matching cache entries in real time.
+- **Graceful degradation** (§J.6) — if the PDP is unreachable the PEP serves the **last-known** decision (a Village keeps operating at its last-certified level); after a sustained outage (default **24h**) it downgrades any cached `allow` to `step_up_approval_required`; with no cached decision it applies the action's fail policy (default **fail-closed → deny**).
+- **Tests:** +12 (266 api) — cache hit/miss, TTL expiry + cap, invalidate, last-known/24h-downgrade/fail-closed degradation, recovery, event parsing (unit) + HTTP-source enforcement + caching + invalidation against the app (integration). ruff + mypy clean.
+- **Verified live** (Postgres 17 + Memurai, `scripts/pdp-pep-demo.py`): PEP authorizes (`downgrade_and_retry`, cache hit 0.50) → cert revoked → API publishes to `simforge:revocations` → subscriber **invalidates the PEP cache in real time (entries→0)** → next authorize `deny/cert_revoked`. **PASS.**
+
 ### Added — PDP/PEP: real-time revocation pub/sub (v1.1, ADR-0024)
 - **Revocation publisher** (`services/governance/revocation.py`) — publishes cert lifecycle events (`revoked`/`suspended`/`reinstated`) to the Redis channel `simforge:revocations` (§F.4), so PEPs can invalidate their decision caches fleet-wide in ~real time instead of at TTL expiry. **Best-effort**: a down/absent Redis never fails the cert operation (short connect timeout, swallow + log). Publish-only, sandbox-safe.
 - **Hooked into the cert lifecycle** — `revoke_agent_cert` → `revoked`; `reinstate_agent_cert` → `reinstated`; Drift Canary suspend → `suspended` (per drifted cert); amendment ratify → `suspended` (per affected cert).
