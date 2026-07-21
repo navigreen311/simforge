@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import yaml
 from sqlalchemy import select
@@ -23,7 +24,9 @@ from src.models.run import Run, TraceEvent
 from src.services.agent_runtime.llm_client import LLMProvider, get_llm_provider
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.forges import Fault, FaultType, get_forge_adapter
+from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.registry import forge_of_cap
+from src.services.forges.visionaudioforge import LocalVAFAdapter
 from src.services.mock_world.world import MockWorld
 from src.services.scenario_engine.complications import ComplicationInjector
 from src.services.scenario_engine.runner import ScenarioRunner
@@ -32,8 +35,8 @@ from src.services.village.ccb_store import capture_ccb
 from src.services.village.reader import VillageReader, VillageReaderError
 from src.utils.time import utcnow
 
-# Deterministic fault per bank module (seeded), so capitalforge runs can surface real gaps.
-_MODULE_FAULT = {
+# Deterministic fault per CapitalForge bank module.
+_BANK_FAULT = {
     "emd": (FaultType.FRAUD_FLAG, "P1", "EMD release held pending fraud review"),
     "wire": (FaultType.NSF, "P0", "Wire failed: insufficient funds"),
     "bank": (FaultType.DECLINATION, "P1", "Credit application declined"),
@@ -41,64 +44,83 @@ _MODULE_FAULT = {
 }
 
 
-async def _run_capitalforge_side_effects(state, scenario, run_id: str) -> None:
-    """Provision a CapitalForge (Mock Bank) tenant, run the tested op, record trace events.
+def _emit_forge_trace(state, forge: str, module: str, cap: str, result: dict) -> None:
+    if result.get("fault"):
+        f = result["fault"]
+        state.trace.append(
+            TraceEntry(
+                timestamp=utcnow(),
+                event_type="forge_fault",
+                phase=Phase.RESOLUTION.value,
+                turn_number=state.turn_count,
+                payload={
+                    "forge": forge,
+                    "module": module,
+                    "severity": f["severity"],
+                    "reason": result.get("reason") or f["type"],
+                    "detail": f["detail"],
+                    "cap": cap,
+                },
+            )
+        )
+    else:
+        state.trace.append(
+            TraceEntry(
+                timestamp=utcnow(),
+                event_type="forge_action",
+                phase=Phase.RESOLUTION.value,
+                turn_number=state.turn_count,
+                payload={"forge": forge, "module": module, "outcome": result["outcome"]},
+            )
+        )
 
-    A fault is injected deterministically (even seed) so faults → Software Gaps are exercised;
-    real sandbox faults come from the live Forge. Sandbox-isolated: no Village writes."""
-    caps = [c for c in (scenario.testedForgeCaps or []) if forge_of_cap(c) == "capitalforge"]
-    if not caps:
-        return
-    adapter = get_forge_adapter("capitalforge")
+
+async def _run_capitalforge(state, caps, run_id: str, inject: bool) -> None:
+    # Registry is the swap point (Local ↔ real HTTP); the bank ops are forge-specific.
+    adapter = cast(LocalCapitalForgeAdapter, get_forge_adapter("capitalforge"))
     tenant = await adapter.provision_sandbox_tenant(run_id)
-    inject = scenario.seed % 2 == 0
-
     for cap in caps:
         module = cap.split(".")[1] if "." in cap else "bank"
-        if inject and module in _MODULE_FAULT:
-            ftype, sev, detail = _MODULE_FAULT[module]
+        if inject and module in _BANK_FAULT:
+            ftype, sev, detail = _BANK_FAULT[module]
             await adapter.inject_fault(tenant.tenant_id, Fault(ftype, sev, detail, module))
-        # Exercise the operation implied by the capability.
         if module == "emd":
             result = await adapter.emd_release(tenant.tenant_id, 10_000.0)
         elif module == "wire":
             result = await adapter.wire(tenant.tenant_id, 300_000.0)
         else:
             result = await adapter.apply(tenant.tenant_id, 200_000.0)
-
-        if result.get("fault"):
-            f = result["fault"]
-            state.trace.append(
-                TraceEntry(
-                    timestamp=utcnow(),
-                    event_type="forge_fault",
-                    phase=Phase.RESOLUTION.value,
-                    turn_number=state.turn_count,
-                    payload={
-                        "forge": "capitalforge",
-                        "module": module,
-                        "severity": f["severity"],
-                        "reason": result.get("reason"),
-                        "detail": f["detail"],
-                        "cap": cap,
-                    },
-                )
-            )
-        else:
-            state.trace.append(
-                TraceEntry(
-                    timestamp=utcnow(),
-                    event_type="forge_action",
-                    phase=Phase.RESOLUTION.value,
-                    turn_number=state.turn_count,
-                    payload={
-                        "forge": "capitalforge",
-                        "module": module,
-                        "outcome": result["outcome"],
-                    },
-                )
-            )
+        _emit_forge_trace(state, "capitalforge", module, cap, result)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
+
+async def _run_vaf(state, caps, run_id: str, inject: bool) -> None:
+    # Registry is the swap point (Local ↔ real HTTP); the doc ops are forge-specific.
+    adapter = cast(LocalVAFAdapter, get_forge_adapter("vaf"))
+    tenant = await adapter.provision_sandbox_tenant(run_id)
+    for cap in caps:
+        module = cap.split(".")[1] if "." in cap else "doc_vault"
+        # A retrieved document may be forged/expired/revoked — VAF's OCR surfaces it.
+        fault_type = FaultType.FORGED_SIGNATURE if inject else None
+        result = await adapter.generate_and_extract(tenant.tenant_id, "title_report", fault_type)
+        _emit_forge_trace(state, "vaf", module, cap, result)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
+
+async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
+    """Provision Forge sandbox tenants for the tested caps, run ops, record trace events.
+
+    A fault is injected deterministically (advanced-crisis tier OR even seed) so faults →
+    Software Gaps are exercised; real sandbox faults come from the live Forge. Sandbox-isolated:
+    no Village writes."""
+    caps = scenario.testedForgeCaps or []
+    inject = scenario.tier == "advanced_crisis" or scenario.seed % 2 == 0
+    cf = [c for c in caps if forge_of_cap(c) == "capitalforge"]
+    vaf = [c for c in caps if forge_of_cap(c) == "vaf"]
+    if cf:
+        await _run_capitalforge(state, cf, run_id, inject)
+    if vaf:
+        await _run_vaf(state, vaf, run_id, inject)
 
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}
@@ -198,8 +220,9 @@ async def run_scenario(
         await session.refresh(run)
         return run
 
-    # Forge side-effects (CapitalForge Mock Bank) → trace events (faults become Software Gaps).
-    await _run_capitalforge_side_effects(state, scenario, run.runId)
+    # Forge side-effects (CapitalForge Mock Bank + VAF Doc Vault) → trace events
+    # (faults become Software Gaps).
+    await _run_forge_side_effects(state, scenario, run.runId)
 
     # Persist results
     run.transcript = state.transcript

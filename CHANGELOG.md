@@ -4,6 +4,14 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Second real Forge: VisionAudioForge (VAF) Doc Vault (post-v1)
+- **VAF Doc Vault** — deterministic in-process engine (`services/forges/doc_vault.py`) + `LocalVAFAdapter` (`visionaudioforge.py`, version `vaf.docvault.v1`): tenants, **synthetic** document generation (never real PHI), document-fault injection + OCR extraction. Fault menu (§E.3) with severities — forged_signature/revoked_license/oig_match → **P0**, expired_date/name_dob_mismatch/altered_amount → **P1**, missing_pages → **P2**. Registry now resolves `vaf` → real adapter.
+- **Runner generalized** — `_run_capitalforge_side_effects` → `_run_forge_side_effects`, dispatching per-forge (CapitalForge + VAF). Fault trigger widened to **`tier == "advanced_crisis"` OR even `seed`**. The reporter's `detect_forge_fault_gaps` is forge-agnostic, so **VAF faults become real Software Gaps** with no reporter change. Sandbox-isolated (no Village writes).
+- **Scenario** `scn.gs.crisis.003` gains `vaf.doc_vault.retrieve` — the seeded `david_kim` crisis run surfaces a forged-signature fault on the title document.
+- **Router** `POST /api/forges/vaf/demo` — mirrors the CapitalForge demo.
+- **Tests:** 9 new (114 api + 5 validator) — Doc Vault engine (all 7 fault severities), VAF adapter **contract test** (§I.3), registry resolution, VAF demo, and the VAF fault→gap integration on `scn.gs.crisis.003`. ruff + mypy clean on touched files.
+- **Verified live:** `scn.gs.crisis.003` → `vaf/doc_vault` forged_signature fault → Software Gap `vaf/doc_vault`. ADR-0011.
+
 ### Added — First real Forge: CapitalForge (Mock Bank) (post-v1)
 - **`ForgeAdapter` contract** (`services/forges/base.py`) — provision/teardown sandbox tenant, seed state, inject fault, audit log, version; `SandboxTenant`/`Fault`/`FaultType`; `NullForgeAdapter` for unwired Forges.
 - **CapitalForge = Mock Bank** — deterministic in-process engine (`mock_bank.py`) + `LocalCapitalForgeAdapter`: tenants, accounts, apply/wire/emd_release, fault injection (declination/fraud/nsf/ofac/velocity), audit log. Registry/factory `get_forge_adapter`.

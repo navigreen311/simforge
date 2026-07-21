@@ -9,6 +9,7 @@ from src.deps import require_role
 from src.services.forges import Fault, FaultType
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.registry import KNOWN_FORGES, get_forge_adapter
+from src.services.forges.visionaudioforge import LocalVAFAdapter
 
 router = APIRouter()
 
@@ -16,6 +17,11 @@ router = APIRouter()
 class DemoBankRequest(BaseModel):
     fault: str | None = None  # declination|fraud_flag|nsf|ofac|velocity
     amount: float = 200000.0
+
+
+class DemoDocRequest(BaseModel):
+    fault: str | None = None  # forged_signature|expired_date|revoked_license|oig_match|...
+    doc_type: str = "title_report"
 
 
 @router.get("/", dependencies=[Depends(require_role("viewer"))])
@@ -43,6 +49,17 @@ async def capitalforge_demo(body: DemoBankRequest) -> dict:
             tenant.tenant_id, Fault(body.fault, sev, f"injected {body.fault}", "bank")
         )
     result = await adapter.apply(tenant.tenant_id, body.amount)
+    audit = await adapter.get_audit_log(tenant.tenant_id)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+
+
+@router.post("/vaf/demo", dependencies=[Depends(require_role("admin"))])
+async def vaf_demo(body: DemoDocRequest) -> dict:
+    """Provision a Doc Vault tenant, retrieve a doc, optionally with an injected doc fault."""
+    adapter = LocalVAFAdapter()
+    tenant = await adapter.provision_sandbox_tenant("demo")
+    result = await adapter.generate_and_extract(tenant.tenant_id, body.doc_type, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
     return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
