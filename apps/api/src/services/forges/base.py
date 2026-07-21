@@ -58,6 +58,15 @@ class FaultType:
     TIMECARD_MISSING = "timecard_missing"
     MSA_TERMS_STALE = "msa_terms_stale"
 
+    # FunnelForge / Flows (blueprint §E.6 — lead/segment/campaign/sequence + webhooks)
+    WEBHOOK_DROPPED = "webhook_dropped"
+    CAMPAIGN_TO_UNSUBSCRIBED = "campaign_to_unsubscribed"
+    SEQUENCE_MISFIRE = "sequence_misfire"
+    SEGMENT_STALE = "segment_stale"
+    BOUNCE_UNHANDLED = "bounce_unhandled"
+    LEAD_MISATTRIBUTED = "lead_misattributed"
+    DUPLICATE_ENROLLMENT = "duplicate_enrollment"
+
 
 @dataclass
 class Fault:

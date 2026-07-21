@@ -9,6 +9,7 @@ from src.deps import require_role
 from src.services.forges import Fault, FaultType
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.cre_forge import LocalCREForgeAdapter
+from src.services.forges.funnelforge import LocalFunnelForgeAdapter
 from src.services.forges.medlink_pro import LocalMedLinkProAdapter
 from src.services.forges.registry import KNOWN_FORGES, get_forge_adapter
 from src.services.forges.visionaudioforge import LocalVAFAdapter
@@ -42,6 +43,11 @@ class DemoConsoleRequest(BaseModel):
         None  # credential_expired_unflagged|shift_double_booked|ui_blocking_modal|...
     )
     module: str = "scheduler"
+
+
+class DemoFlowRequest(BaseModel):
+    fault: str | None = None  # webhook_dropped|campaign_to_unsubscribed|sequence_misfire|...
+    module: str = "sequences"
 
 
 @router.get("/", dependencies=[Depends(require_role("viewer"))])
@@ -113,6 +119,17 @@ async def medlink_pro_demo(body: DemoConsoleRequest) -> dict:
     adapter = LocalMedLinkProAdapter()
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.start_and_run(tenant.tenant_id, body.module, body.fault)
+    audit = await adapter.get_audit_log(tenant.tenant_id)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+
+
+@router.post("/funnelforge/demo", dependencies=[Depends(require_role("admin"))])
+async def funnelforge_demo(body: DemoFlowRequest) -> dict:
+    """Provision a Funnel tenant, trigger+run a flow, optionally with an injected flow fault."""
+    adapter = LocalFunnelForgeAdapter()
+    tenant = await adapter.provision_sandbox_tenant("demo")
+    result = await adapter.trigger_and_run(tenant.tenant_id, body.module, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
     return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}

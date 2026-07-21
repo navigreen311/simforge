@@ -26,6 +26,7 @@ from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.forges import Fault, FaultType, get_forge_adapter
 from src.services.forges.capitalforge import LocalCapitalForgeAdapter
 from src.services.forges.cre_forge import LocalCREForgeAdapter
+from src.services.forges.funnelforge import LocalFunnelForgeAdapter
 from src.services.forges.medlink_pro import LocalMedLinkProAdapter
 from src.services.forges.registry import forge_of_cap
 from src.services.forges.visionaudioforge import LocalVAFAdapter
@@ -159,6 +160,28 @@ async def _run_medlink_pro(state, caps, run_id: str, inject: bool) -> None:
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
 
 
+# Deterministic fault per funnelforge flow module (delivery/compliance faults are critical).
+_FUNNEL_FAULT = {
+    "leads": FaultType.WEBHOOK_DROPPED,
+    "campaigns": FaultType.CAMPAIGN_TO_UNSUBSCRIBED,
+    "sequences": FaultType.SEQUENCE_MISFIRE,
+    "segments": FaultType.SEGMENT_STALE,
+}
+
+
+async def _run_funnelforge(state, caps, run_id: str, inject: bool) -> None:
+    # Registry is the swap point (Local ↔ real HTTP/webhooks); the flow ops are forge-specific.
+    adapter = cast(LocalFunnelForgeAdapter, get_forge_adapter("funnelforge"))
+    tenant = await adapter.provision_sandbox_tenant(run_id)
+    for cap in caps:
+        module = cap.split(".")[1] if "." in cap else "sequences"
+        # A triggered flow may drop a webhook, misfire a step, or message an unsubscribed lead.
+        fault_type = _FUNNEL_FAULT.get(module, FaultType.WEBHOOK_DROPPED) if inject else None
+        result = await adapter.trigger_and_run(tenant.tenant_id, module, fault_type)
+        _emit_forge_trace(state, "funnelforge", module, cap, result)
+    await adapter.teardown_sandbox_tenant(tenant.tenant_id)
+
+
 async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     """Provision Forge sandbox tenants for the tested caps, run ops, record trace events.
 
@@ -172,6 +195,7 @@ async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
     voice = [c for c in caps if forge_of_cap(c) == "voiceforge"]
     cre = [c for c in caps if forge_of_cap(c) == "cre-forge"]
     mlp = [c for c in caps if forge_of_cap(c) == "medlink-pro"]
+    ff = [c for c in caps if forge_of_cap(c) == "funnelforge"]
     if cf:
         await _run_capitalforge(state, cf, run_id, inject)
     if vaf:
@@ -182,6 +206,8 @@ async def _run_forge_side_effects(state, scenario, run_id: str) -> None:
         await _run_cre_forge(state, cre, run_id, inject)
     if mlp:
         await _run_medlink_pro(state, mlp, run_id, inject)
+    if ff:
+        await _run_funnelforge(state, ff, run_id, inject)
 
 
 _OUTCOME_STATUS = {"resolved": "passed", "max_turns_reached": "failed", "slo_exceeded": "failed"}
