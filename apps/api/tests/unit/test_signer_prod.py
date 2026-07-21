@@ -57,7 +57,7 @@ def test_get_signer_dispatches_to_file_provider(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_unknown_provider_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "hsm_provider", "cloudhsm")
+    monkeypatch.setattr(settings, "hsm_provider", "azure-keyvault")  # not a known provider
     reset_signer_cache()
     try:
         with pytest.raises(NotImplementedError):

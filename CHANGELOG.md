@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — YubiHSM / CloudHSM signer providers (v1.1)
+- **Backend-agnostic HSM signer** (`services/cert/hsm_signer.py`) — `HsmEd25519Signer(Signer)` holds no private key: it delegates `sign` to an on-device `HsmBackend` and derives verify/public-key/key-id from the backend's public key. Every HSM shares this one class.
+- **`HsmBackend` protocol** (`sign` + `public_key_der`) with concrete lazy-SDK backends: `_YubiHsmBackend` (the `yubihsm` SDK — connector→session→on-device Ed25519 `sign_eddsa`) and `_Pkcs11Backend` (the `pkcs11` SDK/vendor `.so` — EDDSA sign, for AWS CloudHSM or any PKCS#11 HSM). Each raises a clear `SignerConfigError` naming the missing SDK/config instead of crashing.
+- **Dispatch** — `get_signer` resolves `HSM_PROVIDER=yubihsm|cloudhsm` to these builders (stub/file unchanged); a genuinely unknown provider still raises `NotImplementedError`. Optional deps under the `hsm` extra (`yubihsm[http]`, `python-pkcs11`) — **not** pulled by dev/CI. Config: `YUBIHSM_*` / `PKCS11_*`.
+- **Tests:** +6 (214 api + 8 validator) — shared signer sign/verify/public-key/key-id round-trip via a fake Ed25519 backend, non-Ed25519-key rejection, and dispatch/SDK-missing guards for both providers. ruff + mypy clean on touched files.
+- **Boundary (honest):** the shared crypto logic + dispatch/guards are unit-tested; the thin per-vendor connection wrappers need real hardware and activate at deploy time (`pip install '.[hsm]'` + a reachable HSM + creds — no code change). ADR-0022.
+
 ### Changed — Enforce jurisdiction coverage in the pack validator (v1.1)
 - **Jurisdiction registry moved to `validator.jurisdiction`** (single source of truth). The API (which already imports the validator for ingestion) now **re-exports** from it in `services/jurisdiction/{registry,engine}.py`, so the two can't drift.
 - **Corrected federal model** — the federal `oig_sam`/`i9`/`hipaa` flags are **PHI-gated** (healthcare-staffing requirements, not universal), so non-healthcare packs (e.g. real-estate greenstone, `phi_required: false`) aren't forced to declare them. State flags stay self-satisfying (a state is in scope only because its flag was declared).

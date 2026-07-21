@@ -33,6 +33,12 @@ dev = [
     "mypy>=1.10",
     "pytest-recording>=0.13.0",
 ]
+# HSM signing backends (HSM_PROVIDER=yubihsm|cloudhsm). Optional: only needed to activate a real
+# HSM — install alongside a reachable device + credentials. Not pulled by dev/CI.
+hsm = [
+    "yubihsm[http]>=3.0",
+    "python-pkcs11>=0.7",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
