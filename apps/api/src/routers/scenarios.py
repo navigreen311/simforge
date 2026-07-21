@@ -73,13 +73,15 @@ async def run_scenario_endpoint(
     """
     from src.routers.runs import _summarize
     from src.services.evaluation import evaluate_run
+    from src.services.reporter import emit_reports
 
     try:
         run = await run_scenario(session, scenario_id, reader)
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-    # Evaluate the completed run (15-dim rubric + readiness gate) and persist its Scorecard.
+    # Evaluate the completed run (15-dim rubric + gate) then emit the gap reports.
     if run.status != "errored":
         await evaluate_run(session, run.id)
+        await emit_reports(session, run.id)
     return await _summarize(session, run)

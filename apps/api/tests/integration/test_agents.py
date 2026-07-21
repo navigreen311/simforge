@@ -9,16 +9,16 @@ async def test_list_agents(client: AsyncClient) -> None:
     resp = await client.get("/api/agents/")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 3
+    assert body["total"] == 4
     ids = {a["villageAgentId"] for a in body["items"]}
-    assert {"taylor_zhang", "gardner", "jennifer_adams"} <= ids
+    assert {"taylor_zhang", "gardner", "jennifer_adams", "david_kim"} <= ids
 
 
 async def test_list_agents_filter_by_autonomy(client: AsyncClient) -> None:
     resp = await client.get("/api/agents/", params={"autonomy_level": "L1"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 2
+    assert body["total"] == 3
     assert all(a["currentAutonomyLevel"] == "L1" for a in body["items"])
 
 

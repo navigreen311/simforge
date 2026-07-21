@@ -9,7 +9,7 @@ const NAV: Array<{ href: string; label: string; ready: boolean }> = [
   { href: "/dashboard/agents", label: "Agents", ready: false },
   { href: "/dashboard/departments", label: "Departments", ready: false },
   { href: "/dashboard/certs", label: "Certifications", ready: false },
-  { href: "/dashboard/gaps/software", label: "Gaps", ready: false },
+  { href: "/dashboard/gaps/software", label: "Gaps", ready: true },
   { href: "/dashboard/constitution", label: "Constitution", ready: false },
 ];
 

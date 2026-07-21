@@ -57,6 +57,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
                     currentAutonomyLevel="L2",
                 ),
                 Agent(
+                    villageAgentId="david_kim",
+                    name="David Kim",
+                    role="Account Executive",
+                    departmentId=eng.id,
+                    currentAutonomyLevel="L1",
+                ),
+                Agent(
                     villageAgentId="gardner",
                     name="Gardner",
                     role="Executive Agent",

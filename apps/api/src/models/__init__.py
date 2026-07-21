@@ -4,6 +4,7 @@ from src.models.agent import Agent
 from src.models.base import Base
 from src.models.ccb import CCB
 from src.models.department import Department
+from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.run import Run, TraceEvent
 from src.models.scorecard import Scorecard
@@ -21,4 +22,6 @@ __all__ = [
     "Run",
     "TraceEvent",
     "Scorecard",
+    "SoftwareGap",
+    "VillageOSGap",
 ]

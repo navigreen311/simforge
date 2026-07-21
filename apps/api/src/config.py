@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # Packs
     packs_root: str = Field(default="./packs", alias="PACKS_ROOT")
 
+    # Gap routing (empty in dev → no Linear posting)
+    linear_api_key: str = Field(default="", alias="LINEAR_API_KEY")
+
+    # Evidence storage (dev = local filesystem)
+    evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
+
     # Budget
     simforge_budget_sandbox_monthly_usd: float = Field(
         default=50.0, alias="SIMFORGE_BUDGET_SANDBOX_MONTHLY_USD"
