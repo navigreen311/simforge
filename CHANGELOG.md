@@ -4,6 +4,13 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added — Real LLM-judge activation (Ollama) + first-signal report (v1.1, ADR-0023)
+- **`auto` provider mode** — `LLM_JUDGE_PROVIDER=auto` (and `LLM_PROVIDER=auto`) resolves to the Ollama judge when `OLLAMA_BASE_URL` answers `GET /api/tags`, else StubProvider. Cached per-process reachability probe that only runs on the `auto` path; **defaults unchanged (`stub`)** so CI stays hermetic + offline. `resolve_provider()` + `reset_reachability_cache()`.
+- **Committed real-judge cache** — the 9 canonical scenarios (now spanning all 3 packs incl. new CareGrid `cg_*`) scored once against a live `llama3.1:8b`; entries in `tests/fixtures/llm_cache/` (+27). CI replays them in `replay_strict` with **no live model** via a new offline test (`test_cached_llm_judge_replay.py`), so the real-judge path is exercised in CI.
+- **First-signal report** — `docs/calibration/first-real-signal-2026-07-21.md` + `scripts/first-real-signal.py`: stub-vs-Ollama delta (identical inputs) + temperature-0 calibration (3 runs/scenario, mean/stddev/min/max, stddev>0.1 flags). **Headline: the real judge scored the weak-CX scenario P7=0.20 vs stub's blind 0.93 (Δ −0.73); all dims stddev 0.000 at temp 0 → 0 flags.**
+- **Tests:** +18 (235 api + 9 validator) — auto-provider resolution/dispatch/guards (8) + canonical-scenario cache replay incl. weak-CX assertion (10). ruff + mypy clean on CI-scoped code.
+- **Verified:** `LLM_JUDGE_PROVIDER=ollama` + `LLM_CACHE_MODE=replay_strict` pytest passes from committed cache (no live Ollama); `LLM_JUDGE_PROVIDER=stub` full suite green. Rollback is config-only (unset → stub). Guardrails preserved: sandbox-only, no Village writes, no integrated execution; Constitution/Pack-schema/jurisdiction untouched. ADR-0023.
+
 ### Added — CareGrid venture Pack (California home-health staffing) (content)
 - **`pack.caregrid.v1`** — a third venture Pack (after greenstone + medlink-pro) exercising the platform across a new domain and **jurisdiction**: California home-health staffing (PHI). Declares the full US-CA + federal compliance set (`hipaa`, `cdph_ca`, `ccpa`, `oig_sam`, `i9`) — so it validates under the enforced jurisdiction rule (ADR-0021) and showcases the multi-state engine (US-CA, not just NV).
 - **3 scenarios** spanning four real Forges: `scn.cg.cred.001` (F — VAF license retrieval + medlink-pro credential check), `scn.cg.place.002` (I — medlink-pro shift-fill + funnelforge sequence), `scn.cg.audit.003` (AC — a CDPH surprise audit exercising medlink-pro + VAF + VoiceForge in one run).

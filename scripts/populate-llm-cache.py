@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api"))
 
 from _judge_scenarios import build_ctx, load_scenarios, score_all  # noqa: E402
+
 from src.config import settings  # noqa: E402
 from src.services.agent_runtime.cache import LLMResponseCache  # noqa: E402
 from src.services.agent_runtime.llm_client import get_judge_llm  # noqa: E402

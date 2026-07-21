@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     clerk_audience: str = Field(default="", alias="CLERK_AUDIENCE")
 
     # LLM providers (ADR-0008). Agent-runtime + judge providers routed independently.
-    llm_provider: str = Field(default="stub", alias="LLM_PROVIDER")  # stub|ollama|anthropic
+    # stub|ollama|anthropic|auto. `auto` = ollama-if-OLLAMA_BASE_URL-reachable-else-stub (ADR-0023):
+    # safe everywhere — real Ollama locally, deterministic StubProvider in CI. Default stays stub so
+    # CI is hermetic with no probe; set LLM_JUDGE_PROVIDER=auto for real-signal runs.
+    llm_provider: str = Field(default="stub", alias="LLM_PROVIDER")
     llm_judge_provider: str = Field(default="stub", alias="LLM_JUDGE_PROVIDER")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_agent_model: str = Field(default="llama3.1:8b", alias="OLLAMA_AGENT_MODEL")

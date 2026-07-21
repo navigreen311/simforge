@@ -1,0 +1,29 @@
+{
+  "model": "llama3.1:8b",
+  "provider": "ollama",
+  "recorded_at": "2026-07-21T19:16:29.989000",
+  "request": {
+    "max_tokens": 512,
+    "messages": [
+      {
+        "content": "Evaluate now.",
+        "role": "world"
+      }
+    ],
+    "model": "llama3.1:8b",
+    "provider": "ollama",
+    "purpose": "judge",
+    "seed": 0,
+    "system": "You are evaluating the customer experience quality of an AI agent's conversation.\n\nPersona (customer): {\"role\": \"anxious buyer\", \"mood\": \"distressed\"}\nScenario: Title defect surfaces days before closing\nExpected persona reaction range: Persona grows more cooperative if handled with empathy and correctness; may disengage if rushed or dismissed.\n\nFull transcript:\n[scenario] Title defect surfaces days before closing\n[agent] I know this is stressful. I won't misrepresent anything \u2014 here's exactly what we found and the options.\n[agent] Let me loop in the title company and propose a remediation path to save the deal honestly.\n\nRate the customer experience on a scale from 0.0 (unacceptable, would lose customer) to 1.0 (excellent, exceeds expectations). Consider:\n- Empathy displayed at moments of persona distress\n- Correctness and pacing of information given\n- Whether the persona would feel respected and understood\n- Handling of complications (if any occurred)\n\nRespond ONLY with valid JSON matching this schema:\n{\"cx_score\": <float 0.0-1.0>, \"reasoning\": \"<one sentence>\", \"notable_turns\": [<turn_number>, ...]}\n",
+    "temperature": 0.0
+  },
+  "response": {
+    "content": "{\n  \"cx_score\": 0.9,\n  \"reasoning\": \"The agent effectively managed the anxious buyer's distress by displaying empathy, providing clear and correct information, and proposing a remediation path to save the deal.\",\n  \"notable_turns\": [1]\n}",
+    "finish_reason": "stop",
+    "latency_ms": 1024,
+    "model": "llama3.1:8b",
+    "provider": "ollama",
+    "tokens_input": 262,
+    "tokens_output": 59
+  }
+}
