@@ -164,6 +164,7 @@ async def run_scenario(
     provider: LLMProvider | None = None,
     *,
     blind_mode: bool = False,
+    integrated: bool = False,
 ) -> Run:
     scenario = (
         await session.execute(select(Scenario).where(Scenario.scenarioId == scenario_id))
@@ -180,12 +181,17 @@ async def run_scenario(
     if agent is None:
         raise RunnerError(f"Tested agent not registered: {scenario.testedAgentVillageId}")
 
+    # Integrated (write-enabled) mode is triple-gated (ADR-0025); otherwise the run is sandboxed.
+    from src.services.execution import is_integrated_enabled
+
+    use_integrated = is_integrated_enabled(pack.integratedRunsAllowed, integrated)
+
     run = Run(
         runId=str(ULID()),
         scenarioId=scenario.id,
         packId=pack.id,
         agentId=agent.id,
-        executionMode=pack.executionModeDefault,
+        executionMode="integrated" if use_integrated else "sandbox",
         narrativeMode=pack.narrativeModeDefault,
         blindMode=blind_mode,
         status="running",
@@ -232,6 +238,13 @@ async def run_scenario(
     # Forge side-effects (CapitalForge Mock Bank + VAF Doc Vault) → trace events
     # (faults become Software Gaps).
     await _run_forge_side_effects(state, scenario, run.runId)
+
+    # Integrated (write-enabled) execution: PDP-gate each tested capability and commit the allowed
+    # ones as an auditable ledger (ADR-0025). Only runs when triple-gated; sandbox runs skip this.
+    if use_integrated:
+        from src.services.execution import apply_integrated_actions
+
+        await apply_integrated_actions(session, run, scenario, agent)
 
     # Persist results
     run.transcript = state.transcript

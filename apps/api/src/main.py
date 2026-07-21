@@ -22,6 +22,7 @@ from src.routers import (
     dashboard,
     departments,
     drift,
+    execution,
     forges,
     gaps,
     health,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(drift.router, prefix="/api/drift", tags=["drift"])
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
+    app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

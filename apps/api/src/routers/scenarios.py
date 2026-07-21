@@ -63,13 +63,14 @@ async def get_scenario(
 )
 async def run_scenario_endpoint(
     scenario_id: str,
+    integrated: bool = False,
     session: AsyncSession = Depends(get_session),
     reader: VillageReader = Depends(get_village_reader),
 ) -> RunSummary:
-    """Execute a scenario run (sandbox, deterministic stub LLM) and return the result.
+    """Execute a scenario run and return the result.
 
-    Phase 4 runs inline for a fast, reproducible demo; the RQ `runner_worker` path is the
-    production async execution route.
+    Sandbox by default. `integrated=true` requests write-enabled execution (ADR-0025) — honored only
+    when INTEGRATED_EXECUTION_ENABLED is on and the pack allows it; otherwise the run stays sandbox.
     """
     from src.routers.runs import _summarize
     from src.services.evaluation import evaluate_run
@@ -77,7 +78,7 @@ async def run_scenario_endpoint(
     from src.telemetry.metrics import GATE_PASSED_TOTAL, RUN_DURATION, RUNS_TOTAL
 
     try:
-        run = await run_scenario(session, scenario_id, reader)
+        run = await run_scenario(session, scenario_id, reader, integrated=integrated)
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
