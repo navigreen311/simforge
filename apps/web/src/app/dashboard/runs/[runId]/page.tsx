@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { FifteenDimChart } from "@/components/runs/FifteenDimChart";
+import { ReplayRunButton } from "@/components/runs/ReplayRunButton";
 import { RunStatusBadge } from "@/components/runs/RunStatusBadge";
 import { api, type Scorecard, type RunSummary, type TranscriptTurn } from "@/lib/api/client";
 
@@ -59,7 +60,10 @@ export default async function RunDetailPage({ params }: { params: { runId: strin
         <h1 className="text-2xl">
           <span className="font-mono text-gold-400">{run.scenario_id}</span>
         </h1>
-        <RunStatusBadge status={run.status} />
+        <div className="flex items-start gap-3">
+          <RunStatusBadge status={run.status} />
+          <ReplayRunButton runId={run.run_id} />
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">

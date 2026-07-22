@@ -266,6 +266,29 @@ export async function runScenario(scenarioId: string): Promise<RunSummary> {
   return (await res.json()) as RunSummary;
 }
 
+// ---- Time-travel run replay (ADR-0032) ----
+export interface ReplayDimDiff {
+  dim: string;
+  original: number | string | boolean | null;
+  replay: number | string | boolean | null;
+}
+
+export interface ReplayComparison {
+  original_run_id: string;
+  replay_run_id: string;
+  scenario_id: string;
+  deterministic: boolean;
+  transcript_identical: boolean;
+  original_outcome: string | null;
+  replay_outcome: string | null;
+  original_gate_passed: boolean | null;
+  replay_gate_passed: boolean | null;
+  scorecard_diffs: ReplayDimDiff[];
+}
+
+export const replayRun = (runId: string) =>
+  apiPost<ReplayComparison>(`/api/runs/${runId}/replay`);
+
 // ---- Jurisdiction Engine (ADR-0019) ----
 export interface Jurisdiction {
   code: string;
