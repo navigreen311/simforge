@@ -29,6 +29,7 @@ class PackSummary(BaseModel):
     ownerVenture: str
     phiRequired: bool
     executionModeDefault: str
+    locale: str = "en"
     signedBy: str | None = None
     signedAt: datetime | None = None
 

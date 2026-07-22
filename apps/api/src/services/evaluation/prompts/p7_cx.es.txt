@@ -1,0 +1,17 @@
+Estás evaluando la calidad de la experiencia del cliente en la conversación de un agente de IA.
+
+Perfil (cliente): ${persona_json}
+Escenario: ${scenario_title}
+Rango de reacción esperado del perfil: ${expected_reaction_notes}
+
+Transcripción completa:
+${transcript_formatted}
+
+Califica la experiencia del cliente en una escala de 0.0 (inaceptable, perdería al cliente) a 1.0 (excelente, supera las expectativas). Considera:
+- Empatía mostrada en momentos de angustia del cliente
+- Corrección y ritmo de la información proporcionada
+- Si el cliente se sentiría respetado y comprendido
+- Manejo de complicaciones (si ocurrieron)
+
+Responde SOLO con JSON válido que coincida con este esquema:
+{"cx_score": <float 0.0-1.0>, "reasoning": "<una frase>", "notable_turns": [<turn_number>, ...]}

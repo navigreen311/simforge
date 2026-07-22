@@ -52,6 +52,11 @@ export default async function PacksPage() {
                 <span className="rounded bg-ink-600 px-2 py-0.5 text-ink-100">
                   {p.executionModeDefault}
                 </span>
+                {p.locale && p.locale !== "en" && (
+                  <span className="rounded bg-info/15 px-2 py-0.5 uppercase text-info">
+                    {p.locale}
+                  </span>
+                )}
                 {p.signedBy && (
                   <span className="rounded bg-success/15 px-2 py-0.5 text-success">
                     signed

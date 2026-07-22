@@ -24,6 +24,7 @@ class Pack(IdTimestampMixin, Base):
     integratedRunsAllowed: Mapped[bool] = mapped_column(Boolean, default=False)
     executionModeDefault: Mapped[str] = mapped_column(String, default="sandbox")
     narrativeModeDefault: Mapped[str] = mapped_column(String, default="protected")
+    locale: Mapped[str] = mapped_column(String, default="en")
     rubricProfile: Mapped[str] = mapped_column(String)
     yamlPath: Mapped[str] = mapped_column(String)
     yamlHash: Mapped[str] = mapped_column(String)

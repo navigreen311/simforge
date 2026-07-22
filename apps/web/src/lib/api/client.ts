@@ -57,6 +57,7 @@ export interface PackSummary {
   ownerVenture: string;
   phiRequired: boolean;
   executionModeDefault: string;
+  locale: string;
   signedBy: string | null;
   signedAt: string | null;
 }

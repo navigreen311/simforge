@@ -25,6 +25,7 @@ async def score(
     pre, post = _soul_current(ctx.ccb_pre), _soul_current(ctx.ccb_post)
     system = render_prompt(
         "c2_soul",
+        locale=ctx.locale,
         pre_primary_type=pre.get("dominant_emotion", "neutral"),
         pre_primary_intensity=pre.get("valence", 0.5),
         pre_secondary=pre.get("arousal", "n/a"),

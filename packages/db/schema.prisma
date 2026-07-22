@@ -74,6 +74,7 @@ model Pack {
   integratedRunsAllowed Boolean   @default(false)
   executionModeDefault  String    @default("sandbox")
   narrativeModeDefault  String    @default("protected")
+  locale                String    @default("en")
   rubricProfile         String
   yamlPath              String
   yamlHash              String

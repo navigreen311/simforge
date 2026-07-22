@@ -21,6 +21,7 @@ async def score(ctx: EvalContext, judge_llm: LLMProvider, run_id: str | None = N
     )
     system = render_prompt(
         "p7_cx",
+        locale=ctx.locale,
         persona_json=json.dumps(ctx.persona) if ctx.persona else "{}",
         scenario_title=ctx.scenario_title or "(untitled)",
         expected_reaction_notes=expected,

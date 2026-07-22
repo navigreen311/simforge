@@ -55,6 +55,29 @@ def test_pack_id_pattern_rejected() -> None:
         )
 
 
+def _min_pack(**overrides: object) -> dict:
+    base = {
+        "pack_id": "pack.test.v1",
+        "name": "x",
+        "version": "1",
+        "owner_venture": "v",
+        "owner_human": "h",
+        "rubric_profile": "r",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_locale_defaults_to_en_and_accepts_supported() -> None:
+    assert PackSpec.model_validate(_min_pack()).locale == "en"
+    assert PackSpec.model_validate(_min_pack(locale="es")).locale == "es"
+
+
+def test_unsupported_locale_rejected() -> None:
+    with pytest.raises(ValidationError):
+        PackSpec.model_validate(_min_pack(locale="fr"))
+
+
 def test_phi_guard_flags_ssn(tmp_path: Path) -> None:
     pack_dir = tmp_path / "badpack"
     (pack_dir / "scenarios").mkdir(parents=True)

@@ -50,6 +50,7 @@ def _apply_spec(pack: Pack, loaded: LoadedPack) -> None:
     pack.integratedRunsAllowed = spec.integrated_runs_allowed
     pack.executionModeDefault = spec.execution_mode_default
     pack.narrativeModeDefault = spec.narrative_mode_default
+    pack.locale = spec.locale
     pack.rubricProfile = spec.rubric_profile
     pack.yamlPath = loaded.pack_yaml_path
     pack.yamlHash = loaded.pack_yaml_hash
