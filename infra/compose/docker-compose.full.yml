@@ -36,12 +36,15 @@ services:
       REDIS_URL: redis://redis:6379/0
       PACKS_ROOT: ./packs
       VILLAGE_DATA_PATH: ./tests/fixtures/village/VillageData
+      # Distributed tracing → Tempo (ADR-0031). Remove this line to disable.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       # Seams default to stub/local; flip to production per docs/deploy.md:
       #   AUTH_MODE, HSM_PROVIDER, FORGE_MODE, LLM_PROVIDER, INTEGRATED_EXECUTION_ENABLED, LINEAR_*
     ports: ["8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      tempo: { condition: service_started }
 
   prometheus:
     image: prom/prometheus:latest
@@ -50,16 +53,26 @@ services:
     ports: ["9090:9090"]
     depends_on: [api]
 
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempodata:/var/tempo
+    ports: ["3200:3200", "4318:4318"]
+
   grafana:
     image: grafana/grafana:latest
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       PROMETHEUS_URL: http://prometheus:9090
+      TEMPO_URL: http://tempo:3200
     volumes:
       - ../grafana/provisioning:/etc/grafana/provisioning:ro
       - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports: ["3001:3000"]
-    depends_on: [prometheus]
+    depends_on: [prometheus, tempo]
 
 volumes:
   pgdata: {}
+  tempodata: {}

@@ -30,6 +30,7 @@ from src.services.scenario_engine.runner import ScenarioRunner
 from src.services.scenario_engine.state import Phase, TraceEntry
 from src.services.village.ccb_store import capture_ccb
 from src.services.village.reader import VillageReader, VillageReaderError
+from src.telemetry.tracing import span
 from src.utils.time import utcnow
 
 # Which fault to inject when exercising a forge cap (test policy lives here; how to exercise
@@ -226,7 +227,16 @@ async def run_scenario(
     )
 
     try:
-        state = await runner.run(run.runId, agent.villageAgentId)
+        with span(
+            "scenario.run",
+            **{
+                "scenario.id": scenario.scenarioId,
+                "scenario.tier": scenario.tier,
+                "agent.village_id": agent.villageAgentId,
+                "execution.mode": run.executionMode,
+            },
+        ):
+            state = await runner.run(run.runId, agent.villageAgentId)
     except Exception as exc:  # noqa: BLE001 — a failed run is data, not a crash
         run.status = "errored"
         run.outcome = f"error: {type(exc).__name__}"

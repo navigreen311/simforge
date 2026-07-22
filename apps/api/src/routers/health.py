@@ -62,6 +62,9 @@ async def seam_config() -> dict:
         "llm_judge_provider": settings.llm_judge_provider,
         "integrated_execution_enabled": settings.integrated_execution_enabled,
         "linear_enabled": bool(settings.linear_api_key and settings.linear_team_id),
+        "tracing_enabled": settings.otel_traces_enabled
+        or bool(settings.otel_exporter_otlp_endpoint),
+        "tracing_exporter": bool(settings.otel_exporter_otlp_endpoint),  # exports to a collector
         "all_stub": (
             settings.auth_mode == "dev-bypass"
             and settings.hsm_provider == "stub"

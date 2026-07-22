@@ -9,8 +9,9 @@
 - **Prod:** AWS ECS Fargate (multi-AZ) + RDS Postgres (Multi-AZ + replica) + ElastiCache Redis + S3 (tiered) + CloudHSM + CloudFront. IaC in `infra/terraform/`.
 
 ## Observability
-- `/metrics` (Prometheus) — `simforge_runs_total`, `simforge_readiness_gate_total`, `simforge_certs_issued_total`, `simforge_tokens_used_total`, `simforge_run_duration_seconds`, …
-- Structured JSON logs (structlog) → Loki; OTEL traces → Tempo (wire `OTEL_EXPORTER_OTLP_ENDPOINT`).
+- `/metrics` (Prometheus) — `simforge_runs_total`, `simforge_readiness_gate_total`, `simforge_certs_issued_total`, `simforge_tokens_used_total`, `simforge_run_duration_seconds`, `simforge_pdp_decision_latency_seconds`, …
+- Structured JSON logs (structlog) → Loki.
+- **OTEL traces → Tempo** (ADR-0031). No-op unless activated: set `OTEL_EXPORTER_OTLP_ENDPOINT` (export) or `OTEL_TRACES_ENABLED=true` (build spans without exporting). FastAPI requests are auto-instrumented; `scenario.run` and `pdp.decide` add manual spans. The compose stack runs Tempo (OTLP/HTTP :4318) with a provisioned Grafana datasource; confirm with `tracing_enabled` in `GET /api/health/config`.
 - Dashboards + alerts per blueprint §H.4/§H.5 (PagerDuty).
 
 ## CI/CD
@@ -43,6 +44,7 @@ secrets — `all_stub: false` once any seam is live).
 | Gap tickets | `LINEAR_API_KEY` + `LINEAR_TEAM_ID` | no-op → real Linear issues — ADR-0029 |
 | Integrated exec | `INTEGRATED_EXECUTION_ENABLED` | `false` (sandbox) → `true` (PDP-gated) — ADR-0025 |
 | Revocation push | `REDIS_URL` | required for real-time PEP invalidation — ADR-0024 |
+| Tracing | `OTEL_EXPORTER_OTLP_ENDPOINT` | off → OTLP/HTTP export to Tempo — ADR-0031 |
 
 ## Self-contained stack (compose)
 The whole stack — API + Postgres + Redis + Prometheus + Grafana (dashboards pre-provisioned, ADR-0029) — runs from one file:
