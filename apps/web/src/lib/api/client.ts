@@ -289,6 +289,40 @@ export interface ReplayComparison {
 export const replayRun = (runId: string) =>
   apiPost<ReplayComparison>(`/api/runs/${runId}/replay`);
 
+// ---- Golden Benchmark (ADR-0033) ----
+export interface GoldenScenario {
+  scenario_id: string;
+  title: string;
+  tier: string;
+}
+
+export interface GoldenDiff {
+  dim: string;
+  expected: number | string | boolean | null;
+  actual: number | string | boolean | null;
+}
+
+export interface GoldenResult {
+  scenario_id: string;
+  status: string; // match | regression | no_baseline | missing
+  diffs: GoldenDiff[];
+}
+
+export interface GoldenReport {
+  total: number;
+  matched: number;
+  regressions: number;
+  passed: boolean;
+  results: GoldenResult[];
+}
+
+export const golden = {
+  scenarios: () =>
+    apiGet<{ scenarios: GoldenScenario[]; total: number }>("/api/golden/scenarios"),
+};
+
+export const runGoldenSuite = () => apiPost<GoldenReport>("/api/golden/run");
+
 // ---- Jurisdiction Engine (ADR-0019) ----
 export interface Jurisdiction {
   code: string;

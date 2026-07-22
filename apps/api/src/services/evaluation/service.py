@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.ccb import CCB as CCBModel
-from src.models.pack import ReadinessGate, Scenario
+from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.run import Run, TraceEvent
 from src.models.scorecard import Scorecard
 from src.services.evaluation.gate import check_readiness_gate
@@ -33,6 +33,7 @@ async def evaluate_run(session: AsyncSession, run_id_internal: str) -> Scorecard
     scenario = (
         await session.execute(select(Scenario).where(Scenario.id == run.scenarioId))
     ).scalar_one()
+    pack = (await session.execute(select(Pack).where(Pack.id == run.packId))).scalar_one()
     gate_cfg = (
         await session.execute(select(ReadinessGate).where(ReadinessGate.packId == run.packId))
     ).scalar_one_or_none()
@@ -61,7 +62,9 @@ async def evaluate_run(session: AsyncSession, run_id_internal: str) -> Scorecard
         ccb_pre=await _ccb_frameworks(session, run.ccbPreId),
         ccb_post=await _ccb_frameworks(session, run.ccbPostId),
         scenario_title=scenario.title,
-        persona={"venue": run.packId, "forge_caps": list(scenario.testedForgeCaps or [])},
+        # Use the stable pack business key, not the random DB cuid — the persona feeds the LLM-judge
+        # prompt, so a surrogate key here makes judge scores non-reproducible across ingestions.
+        persona={"venue": pack.packId, "forge_caps": list(scenario.testedForgeCaps or [])},
         complications=complications,
     )
 

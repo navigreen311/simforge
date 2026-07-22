@@ -16,4 +16,4 @@ cold_open: >
   You are calling a homeowner who submitted a "sell my house fast" web form three days ago.
   They are busy and slightly skeptical. Open the call, confirm TCPA consent to continue, build
   rapport, and qualify the property and their motivation without being pushy.
-is_golden: false
+is_golden: true
