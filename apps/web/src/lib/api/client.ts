@@ -289,6 +289,28 @@ export interface ReplayComparison {
 export const replayRun = (runId: string) =>
   apiPost<ReplayComparison>(`/api/runs/${runId}/replay`);
 
+// ---- Village narrative mode (ADR-0035) ----
+export interface NarrativeBeat {
+  agent: string;
+  scenario_id: string;
+  outcome: string | null;
+  arc_state: string;
+  reputation_delta: number;
+  beat: string;
+}
+
+export interface NarrativeArc {
+  agent: string;
+  beats: NarrativeBeat[];
+  cumulative_reputation_delta: number;
+  arc_length: number;
+}
+
+export const narrative = {
+  arc: (agentVillageId: string) =>
+    apiGet<NarrativeArc>(`/api/narrative/agent/${agentVillageId}/arc`),
+};
+
 // ---- Cohort analytics + cognitive canary (ADR-0034) ----
 export interface CohortAgentRow {
   agent: string;

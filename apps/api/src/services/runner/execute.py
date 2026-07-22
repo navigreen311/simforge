@@ -166,6 +166,7 @@ async def run_scenario(
     *,
     blind_mode: bool = False,
     integrated: bool = False,
+    narrative_mode: str | None = None,
 ) -> Run:
     scenario = (
         await session.execute(select(Scenario).where(Scenario.scenarioId == scenario_id))
@@ -193,7 +194,7 @@ async def run_scenario(
         packId=pack.id,
         agentId=agent.id,
         executionMode="integrated" if use_integrated else "sandbox",
-        narrativeMode=pack.narrativeModeDefault,
+        narrativeMode=narrative_mode or pack.narrativeModeDefault,
         blindMode=blind_mode,
         status="running",
         startedAt=datetime.now(UTC),
