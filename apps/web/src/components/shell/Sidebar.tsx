@@ -1,17 +1,52 @@
 import Link from "next/link";
 
-// Nav mirrors the dashboard route tree (blueprint §A.5). Routes not yet built are marked.
-const NAV: Array<{ href: string; label: string; ready: boolean }> = [
-  { href: "/dashboard", label: "Overview", ready: true },
-  { href: "/dashboard/readiness", label: "Readiness Matrix", ready: true },
-  { href: "/dashboard/runs", label: "Runs", ready: true },
-  { href: "/dashboard/packs", label: "Packs", ready: true },
-  { href: "/dashboard/agents", label: "Agents", ready: false },
-  { href: "/dashboard/departments", label: "Departments", ready: false },
-  { href: "/dashboard/certs", label: "Certifications", ready: true },
-  { href: "/dashboard/gaps/software", label: "Gaps", ready: true },
-  { href: "/dashboard/constitution", label: "Constitution", ready: true },
-  { href: "/dashboard/lineage", label: "Lineage", ready: true },
+// Nav mirrors the dashboard route tree (blueprint §A.5), grouped by concern.
+type NavItem = { href: string; label: string };
+type NavSection = { title: string; items: NavItem[] };
+
+const SECTIONS: NavSection[] = [
+  {
+    title: "Certification",
+    items: [
+      { href: "/dashboard", label: "Overview" },
+      { href: "/dashboard/readiness", label: "Readiness Matrix" },
+      { href: "/dashboard/runs", label: "Runs" },
+      { href: "/dashboard/packs", label: "Packs" },
+      { href: "/dashboard/certs", label: "Certifications" },
+    ],
+  },
+  {
+    title: "Roster",
+    items: [
+      { href: "/dashboard/agents", label: "Agents" },
+      { href: "/dashboard/departments", label: "Departments" },
+    ],
+  },
+  {
+    title: "Enforcement",
+    items: [
+      { href: "/dashboard/policy", label: "Policy (PDP)" },
+      { href: "/dashboard/execution", label: "Integrated Execution" },
+      { href: "/dashboard/drift", label: "Drift Canary" },
+      { href: "/dashboard/jurisdictions", label: "Jurisdictions" },
+    ],
+  },
+  {
+    title: "Quality",
+    items: [
+      { href: "/dashboard/meta-eval", label: "Meta-Eval" },
+      { href: "/dashboard/adversarial", label: "Adversarial" },
+      { href: "/dashboard/training", label: "Agent Training" },
+      { href: "/dashboard/gaps/software", label: "Gaps" },
+    ],
+  },
+  {
+    title: "Governance",
+    items: [
+      { href: "/dashboard/constitution", label: "Constitution" },
+      { href: "/dashboard/lineage", label: "Lineage" },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -21,18 +56,24 @@ export function Sidebar() {
         <span className="font-display text-2xl text-gold-500">SimForge</span>
         <p className="mt-1 text-xs text-ink-200">Agent certification</p>
       </div>
-      <nav className="flex flex-col gap-1">
-        {NAV.map((item) => (
-          <Link
-            key={item.href}
-            href={item.ready ? item.href : "/dashboard"}
-            className={`rounded-md px-3 py-2 text-sm transition-colors hover:bg-ink-600 ${
-              item.ready ? "text-ink-50" : "cursor-not-allowed text-ink-300"
-            }`}
-          >
-            {item.label}
-            {!item.ready && <span className="ml-2 text-[10px] text-ink-400">soon</span>}
-          </Link>
+      <nav className="flex flex-col gap-6">
+        {SECTIONS.map((section) => (
+          <div key={section.title}>
+            <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+              {section.title}
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {section.items.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-md px-3 py-2 text-sm text-ink-50 transition-colors hover:bg-ink-600"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
     </aside>
