@@ -30,6 +30,7 @@ from src.routers import (
     gaps,
     golden,
     health,
+    incident,
     jurisdictions,
     meta_eval,
     narrative,
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(cohort.router, prefix="/api/cohort", tags=["cohort"])
     app.include_router(narrative.router, prefix="/api/narrative", tags=["narrative"])
     app.include_router(budget.router, prefix="/api/budget", tags=["budget"])
+    app.include_router(incident.router, prefix="/api/incident", tags=["incident"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

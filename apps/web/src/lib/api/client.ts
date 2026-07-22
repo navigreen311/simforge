@@ -289,6 +289,41 @@ export interface ReplayComparison {
 export const replayRun = (runId: string) =>
   apiPost<ReplayComparison>(`/api/runs/${runId}/replay`);
 
+// ---- Incident Command + budget (ADR-0039/0040) ----
+export interface BlastRadius {
+  agents: string[];
+  forge_caps: string[];
+  departments: string[];
+}
+
+export interface Incident {
+  kind: string;
+  severity: string; // critical | high | medium
+  summary: string;
+  count: number;
+  blast_radius: BlastRadius;
+}
+
+export interface BudgetMode {
+  spent_usd: number;
+  cap_usd: number;
+  remaining_usd: number;
+  exceeded: boolean;
+}
+
+export interface IncidentReport {
+  safe_mode: { active: boolean; reason: string | null; activated_by: string | null; domains: string[] };
+  budget: { month: string; modes: Record<string, BudgetMode> };
+  incidents: Incident[];
+  counts: Record<string, number>;
+  total_incidents: number;
+  status: string; // ok | degraded | critical
+}
+
+export const incident = {
+  status: () => apiGet<IncidentReport>("/api/incident/status"),
+};
+
 // ---- Village narrative mode (ADR-0035) ----
 export interface NarrativeBeat {
   agent: string;
