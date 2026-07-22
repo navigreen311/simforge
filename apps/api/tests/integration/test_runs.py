@@ -47,6 +47,36 @@ async def test_run_scenario_end_to_end(client: AsyncClient) -> None:
     assert {"cold_open", "agent_response", "wrap"} <= types
 
 
+async def test_replay_is_deterministic(client: AsyncClient) -> None:
+    """A stub replay reproduces the run: deterministic, identical transcript, no scorecard diff."""
+    await _ingest_medlink(client)
+    run = (await client.post("/api/scenarios/scn.ml.place.002/run")).json()
+    original_id = run["run_id"]
+
+    resp = await client.post(f"/api/runs/{original_id}/replay")
+    assert resp.status_code == 200, resp.text
+    cmp = resp.json()
+
+    assert cmp["original_run_id"] == original_id
+    assert cmp["replay_run_id"] != original_id  # replay is a fresh run
+    assert cmp["scenario_id"] == "scn.ml.place.002"
+    assert cmp["deterministic"] is True
+    assert cmp["transcript_identical"] is True
+    assert cmp["scorecard_diffs"] == []
+    assert cmp["original_gate_passed"] == cmp["replay_gate_passed"]
+
+    # The replay run exists and is tagged with a provenance trace event pointing at the original.
+    trace = await client.get(f"/api/runs/{cmp['replay_run_id']}/trace")
+    assert trace.status_code == 200
+    replay_events = [e for e in trace.json()["events"] if e["event_type"] == "replay"]
+    assert replay_events and replay_events[0]["payload"]["original_run_id"] == original_id
+
+
+async def test_replay_missing_run_404(client: AsyncClient) -> None:
+    resp = await client.post("/api/runs/does-not-exist/replay")
+    assert resp.status_code == 404
+
+
 async def test_run_unregistered_agent_404(client: AsyncClient) -> None:
     await _ingest_medlink(client)
     # scn.ml.cred.001 tests nina_okafor, who is NOT seeded in the test DB

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
-from src.deps import require_role
+from src.deps import get_village_reader, require_role
 from src.models.agent import Agent
 from src.models.pack import Pack, Scenario
 from src.models.run import Run, TraceEvent
@@ -21,6 +21,7 @@ from src.schemas.run import (
     TranscriptTurn,
 )
 from src.schemas.scorecard import ScorecardResponse
+from src.services.village.reader import VillageReader
 
 router = APIRouter()
 
@@ -127,6 +128,27 @@ async def get_scorecard(
         turn_annotations=card.turnAnnotations or [],
         remediation_recs=card.remediationRecs,
     )
+
+
+@router.post("/{run_id}/replay", dependencies=[Depends(require_role("prompt_engineer"))])
+async def replay_run_endpoint(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+    reader: VillageReader = Depends(get_village_reader),
+) -> dict:
+    """Time-travel replay (ADR-0032): re-execute this run's scenario and diff against the original.
+
+    Deterministic (stub) replays reproduce the run bit-for-bit (`deterministic: true`, empty diff);
+    divergence under a real LLM provider is surfaced as scorecard/transcript diffs. Always sandboxed
+    — never re-commits integrated side effects.
+    """
+    from src.services.replay import replay_run
+
+    try:
+        comparison = await replay_run(session, run_id, reader)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return comparison.as_dict()
 
 
 @router.get(
