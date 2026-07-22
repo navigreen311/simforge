@@ -18,6 +18,7 @@ from src.routers import (
     adversarial,
     agents,
     attest,
+    budget,
     certs,
     cohort,
     constitution,
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(golden.router, prefix="/api/golden", tags=["golden"])
     app.include_router(cohort.router, prefix="/api/cohort", tags=["cohort"])
     app.include_router(narrative.router, prefix="/api/narrative", tags=["narrative"])
+    app.include_router(budget.router, prefix="/api/budget", tags=["budget"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
