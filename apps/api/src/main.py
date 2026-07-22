@@ -31,6 +31,7 @@ from src.routers import (
     health,
     jurisdictions,
     meta_eval,
+    narrative,
     packs,
     pdp,
     registry,
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(adversarial.router, prefix="/api/adversarial", tags=["adversarial"])
     app.include_router(golden.router, prefix="/api/golden", tags=["golden"])
     app.include_router(cohort.router, prefix="/api/cohort", tags=["cohort"])
+    app.include_router(narrative.router, prefix="/api/narrative", tags=["narrative"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

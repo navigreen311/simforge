@@ -47,6 +47,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/constitution", label: "Constitution" },
       { href: "/dashboard/lineage", label: "Lineage" },
+      { href: "/dashboard/narrative", label: "Narrative" },
     ],
   },
 ];

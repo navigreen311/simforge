@@ -64,6 +64,7 @@ async def get_scenario(
 async def run_scenario_endpoint(
     scenario_id: str,
     integrated: bool = False,
+    narrative_mode: str | None = None,
     session: AsyncSession = Depends(get_session),
     reader: VillageReader = Depends(get_village_reader),
 ) -> RunSummary:
@@ -71,14 +72,19 @@ async def run_scenario_endpoint(
 
     Sandbox by default. `integrated=true` requests write-enabled execution (ADR-0025) — honored only
     when INTEGRATED_EXECUTION_ENABLED is on and the pack allows it; otherwise the run stays sandbox.
+    `narrative_mode=integrated` produces Village narrative effects (ADR-0035); default follows the
+    pack's `narrativeModeDefault` (`protected`). Narrative effects never write VillageData.
     """
     from src.routers.runs import _summarize
     from src.services.evaluation import evaluate_run
+    from src.services.narrative import apply_narrative_effects
     from src.services.reporter import emit_reports
     from src.telemetry.metrics import GATE_PASSED_TOTAL, RUN_DURATION, RUNS_TOTAL
 
     try:
-        run = await run_scenario(session, scenario_id, reader, integrated=integrated)
+        run = await run_scenario(
+            session, scenario_id, reader, integrated=integrated, narrative_mode=narrative_mode
+        )
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -92,4 +98,6 @@ async def run_scenario_endpoint(
         card = await evaluate_run(session, run.id)
         GATE_PASSED_TOTAL.labels(tier="all", passed=str(card.readinessGatePassed).lower()).inc()
         await emit_reports(session, run.id)
+        # Integrated-narrative runs also accrete a story-level beat (ADR-0035); protected → no-op.
+        await apply_narrative_effects(session, run, card)
     return await _summarize(session, run)
