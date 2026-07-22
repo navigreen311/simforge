@@ -142,6 +142,19 @@ async function apiGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API ${path} failed: ${res.status} ${detail}`);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   ready: () => apiGet<ReadyResponse>("/api/health/ready"),
   agents: (params?: { page?: number; page_size?: number }) => {
@@ -252,3 +265,207 @@ export async function runScenario(scenarioId: string): Promise<RunSummary> {
   }
   return (await res.json()) as RunSummary;
 }
+
+// ---- Jurisdiction Engine (ADR-0019) ----
+export interface Jurisdiction {
+  code: string;
+  name: string;
+  level: string;
+  regulators: string[];
+  required_flags: string[];
+  phi_flags: string[];
+}
+
+export interface CoverageReport {
+  jurisdictions: string[];
+  phi_required: boolean;
+  required_flags: string[];
+  present_flags: string[];
+  missing_flags: string[];
+  extra_flags: string[];
+  satisfied: boolean;
+}
+
+export const jurisdictions = {
+  list: () => apiGet<{ jurisdictions: Jurisdiction[] }>("/api/jurisdictions/"),
+  packCoverage: (packId: string) =>
+    apiGet<{ pack_id: string } & CoverageReport>(`/api/jurisdictions/coverage/pack/${packId}`),
+};
+
+// ---- Drift Canary (ADR-0017) ----
+export interface DriftFinding {
+  cert_id: string;
+  agent_village_id: string;
+  forge: string;
+  forge_cap: string;
+  pinned_version: string;
+  current_version: string | null;
+  status: string; // "drift" | "unreachable"
+}
+
+export interface DriftReport {
+  scanned: number;
+  drifted_certs: number;
+  suspended: number;
+  dry_run: boolean;
+  findings: DriftFinding[];
+}
+
+export const drift = {
+  status: () => apiGet<DriftReport>("/api/drift/status"),
+};
+
+export const runDriftScan = () => apiPost<DriftReport>("/api/drift/scan");
+
+// ---- PDP / runtime authorization (ADR-0024) ----
+export interface AuthDecision {
+  decision: string; // allow | deny | step_up_approval_required | downgrade_and_retry
+  reason_code: string;
+  reason_detail: string;
+  ttl_seconds: number;
+  required_approver: string | null;
+  fail_policy: string;
+}
+
+export interface EffectivePermission {
+  action: string;
+  tier: string;
+  cert_status: string;
+  decision: string;
+  reason_code: string;
+}
+
+export interface EffectivePermissions {
+  subject_agent_id: string;
+  autonomy_level: string;
+  permissions: EffectivePermission[];
+}
+
+export const pdp = {
+  effective: (agentVillageId: string) =>
+    apiGet<EffectivePermissions>(`/api/pdp/agent/${agentVillageId}/effective`),
+};
+
+export const pdpDecide = (body: {
+  subject_agent_id: string;
+  action: string;
+  resource?: string | null;
+  context?: Record<string, unknown>;
+}) => apiPost<AuthDecision>("/api/pdp/decide", body);
+
+// ---- Meta-Eval (ADR-0027) ----
+export interface DimStats {
+  dim: string;
+  n: number;
+  mean: number | null;
+  stddev: number | null;
+  min: number | null;
+  max: number | null;
+  mean_passed: number | null;
+  mean_failed: number | null;
+  discrimination: number | null;
+  flags: string[];
+}
+
+export interface MetaEvalReport {
+  n_scorecards: number;
+  n_passed: number;
+  n_failed: number;
+  pass_rate: number;
+  dimensions: DimStats[];
+  flagged_dimensions: string[];
+  pack_id: string | null;
+}
+
+export const metaEval = {
+  report: (packId?: string) =>
+    apiGet<MetaEvalReport>(`/api/meta-eval/report${packId ? `?pack_id=${packId}` : ""}`),
+};
+
+// ---- Adversarial red-team (ADR-0028) ----
+export interface Tactic {
+  id: string;
+  category: string;
+  injection: string;
+  targets: string[];
+}
+
+export interface ProbeResult {
+  tactic: string;
+  category: string;
+  resisted: boolean;
+  capitulated: boolean;
+  matched_marker: string | null;
+  response_excerpt: string;
+}
+
+export interface AdversarialReport {
+  scenario_id: string;
+  agent: string;
+  probes_run: number;
+  resisted: number;
+  capitulated: number;
+  resistance_rate: number;
+  results: ProbeResult[];
+  failures: ProbeResult[];
+}
+
+export const adversarial = {
+  tactics: () => apiGet<{ tactics: Tactic[] }>("/api/adversarial/tactics"),
+};
+
+export const probeScenario = (scenarioId: string) =>
+  apiPost<AdversarialReport>(`/api/adversarial/probe/scenario/${scenarioId}`);
+
+// ---- Agent training (ADR-0026) ----
+export interface TrainingProposal {
+  id: string;
+  agentId: string;
+  runId: string | null;
+  weakDims: string[];
+  currentPromptVersion: string;
+  proposedPromptVersion: string;
+  rationale: string;
+  proposedRefinement: string;
+  status: string; // proposed | approved | rejected
+  autoApplied: boolean;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export const training = {
+  proposals: (params?: { status?: string; agent_village_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.agent_village_id) q.set("agent_village_id", params.agent_village_id);
+    const qs = q.toString();
+    return apiGet<TrainingProposal[]>(`/api/training/proposals${qs ? `?${qs}` : ""}`);
+  },
+};
+
+export const approveProposal = (id: string) =>
+  apiPost<Record<string, unknown>>(`/api/training/proposals/${id}/approve`, {});
+export const rejectProposal = (id: string) =>
+  apiPost<Record<string, unknown>>(`/api/training/proposals/${id}/reject`, {});
+
+// ---- Integrated execution (ADR-0025) ----
+export interface IntegratedAction {
+  action_id: string;
+  agent: string | null;
+  action: string | null;
+  decision?: string;
+  reason_code?: string;
+  applied?: boolean;
+  status: string; // applied | blocked | reverted
+  reverted?: boolean;
+  reverted_by?: string;
+}
+
+export const execution = {
+  status: () => apiGet<{ integrated_execution_enabled: boolean }>("/api/execution/status"),
+  runActions: (runId: string) =>
+    apiGet<{ run_id: string; actions: IntegratedAction[] }>(
+      `/api/execution/run/${runId}/actions`,
+    ),
+};
