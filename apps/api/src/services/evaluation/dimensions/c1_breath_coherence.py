@@ -26,6 +26,7 @@ async def score(
     breath = ctx.ccb_pre.get("breath") or {}
     system = render_prompt(
         "c1_breath",
+        locale=ctx.locale,
         worldview_summary=_summarize(breath.get("beliefs")),
         top_values=_summarize(breath.get("ethics")) + "; " + _summarize(breath.get("attachments")),
         will_not_compromise=_summarize(breath.get("ethics")),

@@ -66,6 +66,7 @@ async def evaluate_run(session: AsyncSession, run_id_internal: str) -> Scorecard
         # prompt, so a surrogate key here makes judge scores non-reproducible across ingestions.
         persona={"venue": pack.packId, "forge_caps": list(scenario.testedForgeCaps or [])},
         complications=complications,
+        locale=pack.locale,  # the pack's declared rubric-prompt language (ADR-0041)
     )
 
     from src.services.agent_runtime.llm_client import get_judge_llm

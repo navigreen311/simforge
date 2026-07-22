@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 TIERS = ("foundational", "intermediate", "advanced_crisis")
 EXECUTION_MODES = ("sandbox", "integrated")
 NARRATIVE_MODES = ("protected", "integrated")
+# Locales with a translated rubric-prompt set (blueprint §L.4 locale Packs; ADR-0041).
+LOCALES = ("en", "es")
 
 
 class ReadinessGateSpec(BaseModel):
@@ -30,8 +32,16 @@ class PackSpec(BaseModel):
     integrated_runs_allowed: bool = False
     execution_mode_default: str = "sandbox"
     narrative_mode_default: str = "protected"
+    locale: str = "en"
     rubric_profile: str
     readiness_gate: ReadinessGateSpec = Field(default_factory=ReadinessGateSpec)
+
+    @field_validator("locale")
+    @classmethod
+    def _locale(cls, v: str) -> str:
+        if v not in LOCALES:
+            raise ValueError(f"locale must be one of {LOCALES}")
+        return v
 
     @field_validator("execution_mode_default")
     @classmethod

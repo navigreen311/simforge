@@ -24,6 +24,7 @@ class EvalContext:
     scenario_title: str = ""
     persona: dict = field(default_factory=dict)
     complications: list[str] = field(default_factory=list)
+    locale: str = "en"  # selects the rubric-prompt language (ADR-0041)
 
     @property
     def agent_turns(self) -> list[str]:
