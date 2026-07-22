@@ -19,6 +19,7 @@ from src.routers import (
     agents,
     attest,
     certs,
+    cohort,
     constitution,
     dashboard,
     departments,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(meta_eval.router, prefix="/api/meta-eval", tags=["meta-eval"])
     app.include_router(adversarial.router, prefix="/api/adversarial", tags=["adversarial"])
     app.include_router(golden.router, prefix="/api/golden", tags=["golden"])
+    app.include_router(cohort.router, prefix="/api/cohort", tags=["cohort"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

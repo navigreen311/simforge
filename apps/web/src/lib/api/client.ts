@@ -289,6 +289,32 @@ export interface ReplayComparison {
 export const replayRun = (runId: string) =>
   apiPost<ReplayComparison>(`/api/runs/${runId}/replay`);
 
+// ---- Cohort analytics + cognitive canary (ADR-0034) ----
+export interface CohortAgentRow {
+  agent: string;
+  role: string;
+  runs: number;
+  dims: Record<string, number | null>;
+  aggregate_percentile: number | null;
+}
+
+export interface CohortAnalytics {
+  department: string;
+  cohort_size: number;
+  dimensions: string[];
+  agents: CohortAgentRow[];
+}
+
+export const cohort = {
+  analytics: (departmentKey: string) =>
+    apiGet<CohortAnalytics>(`/api/cohort/department/${departmentKey}/analytics`),
+};
+
+export const captureCognitiveSnapshots = () =>
+  apiPost<{ date: string; captured: number; agents: { agent: string; drift_magnitude: number }[] }>(
+    "/api/cohort/snapshots",
+  );
+
 // ---- Golden Benchmark (ADR-0033) ----
 export interface GoldenScenario {
   scenario_id: string;

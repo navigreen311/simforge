@@ -10,6 +10,7 @@ from src.models.cert import (
     CertSnapshot,
     DeptCert,
 )
+from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
 from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.governance import Constitution, ConstitutionalAmendment
@@ -25,6 +26,7 @@ __all__ = [
     "Agent",
     "Department",
     "CCB",
+    "CognitiveSnapshot",
     "VillageFingerprint",
     "Pack",
     "Scenario",
