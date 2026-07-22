@@ -14,6 +14,7 @@ from src.deps import require_role
 from src.models.cert import AgentCert, CertSnapshot
 from src.schemas.cert import AttestResponse, PublicKeyOut, PublicKeysResponse
 from src.services.cert import get_signer, verify_snapshot
+from src.services.cert.crl import build_crl, crl_snapshot_ids
 
 router = APIRouter()
 
@@ -44,9 +45,17 @@ async def attest_cert(cert_id: str, session: AsyncSession = Depends(get_session)
 
 
 @router.get("/public-keys", response_model=PublicKeysResponse)
-async def public_keys() -> PublicKeysResponse:
+async def public_keys(session: AsyncSession = Depends(get_session)) -> PublicKeysResponse:
+    """Published signing keys + the CRL (revoked/suspended snapshot ids) for external verifiers."""
     signer = get_signer()
     return PublicKeysResponse(
         keys=[PublicKeyOut(key_id=signer.key_id(), public_key_pem=signer.public_key_pem())],
-        crl=[],  # WEEK 9: populate the certificate revocation list on key rotation.
+        crl=await crl_snapshot_ids(session),
     )
+
+
+@router.get("/crl", dependencies=[Depends(require_role("viewer"))])
+async def crl(session: AsyncSession = Depends(get_session)) -> dict:
+    """The full CRL — every governance-invalidated cert with its reason + timestamp."""
+    entries = await build_crl(session)
+    return {"entries": entries, "total": len(entries)}

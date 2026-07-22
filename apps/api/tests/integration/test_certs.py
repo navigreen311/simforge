@@ -102,6 +102,44 @@ async def test_revoke_demotes_autonomy(client: AsyncClient) -> None:
     assert (await client.get("/api/agents/david_kim")).json()["currentAutonomyLevel"] == "L1"
 
 
+async def test_crl_populates_on_revocation(client: AsyncClient) -> None:
+    """A revoked cert appears in the CRL (structured) and in /public-keys' crl list (ADR-0038)."""
+    run_id = await _passing_run(client)
+    issue = (
+        await client.post(
+            "/api/certs/agent/issue",
+            json={
+                "agent_village_id": "david_kim",
+                "forge_cap": FORGE_CAP,
+                "tier": "foundational",
+                "battery_run_ids": [run_id],
+                "approver_id": "ivan",
+                "pack_id": "pack.greenstone.v1",
+            },
+        )
+    ).json()
+    cert_id = issue["cert"]["id"]
+    snapshot_id = issue["cert"]["certSnapshotId"]
+
+    # Before revocation the CRL is empty and the snapshot is not listed.
+    assert (await client.get("/api/attest/crl")).json()["total"] == 0
+    assert snapshot_id not in (await client.get("/api/attest/public-keys")).json()["crl"]
+
+    await client.post(f"/api/certs/agent/{cert_id}/revoke", json={"reason": "policy change"})
+
+    crl = (await client.get("/api/attest/crl")).json()
+    assert crl["total"] == 1
+    entry = crl["entries"][0]
+    assert entry["cert_id"] == cert_id
+    assert entry["status"] == "revoked"
+    assert entry["reason"] == "policy change"
+    assert entry["at"] is not None
+
+    # And the published /public-keys CRL lists the revoked snapshot id.
+    keys = (await client.get("/api/attest/public-keys")).json()
+    assert entry["snapshot_id"] in keys["crl"]
+
+
 async def test_issue_rejects_failing_battery(client: AsyncClient) -> None:
     # A crisis run fails the gate → cannot be used as a battery
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
