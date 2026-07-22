@@ -125,9 +125,15 @@ class Settings(BaseSettings):
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 
-    # Budget
+    # Budget caps (ADR-0039). Per-calendar-month USD ceilings on metered run cost, enforced before a
+    # run starts. Sandbox runs and integrated (write-enabled) runs have separate caps. Stub/local
+    # providers are free (cost 0), so caps never trip in dev/CI — they bind once a real metered LLM
+    # or Forge is active.
     simforge_budget_sandbox_monthly_usd: float = Field(
         default=50.0, alias="SIMFORGE_BUDGET_SANDBOX_MONTHLY_USD"
+    )
+    simforge_budget_integrated_monthly_usd: float = Field(
+        default=500.0, alias="SIMFORGE_BUDGET_INTEGRATED_MONTHLY_USD"
     )
 
     # Distributed tracing (OpenTelemetry → OTLP/HTTP → Grafana Tempo; ADR-0031). No-op unless

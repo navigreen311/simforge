@@ -188,6 +188,11 @@ async def run_scenario(
 
     use_integrated = is_integrated_enabled(pack.integratedRunsAllowed, integrated)
 
+    # Enforce the monthly cost cap for this mode before doing any (billable) work (ADR-0039).
+    from src.services.budget import enforce_budget
+
+    await enforce_budget(session, "integrated" if use_integrated else "sandbox")
+
     run = Run(
         runId=str(ULID()),
         scenarioId=scenario.id,

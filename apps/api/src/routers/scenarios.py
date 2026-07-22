@@ -76,6 +76,7 @@ async def run_scenario_endpoint(
     pack's `narrativeModeDefault` (`protected`). Narrative effects never write VillageData.
     """
     from src.routers.runs import _summarize
+    from src.services.budget import BudgetExceededError
     from src.services.evaluation import evaluate_run
     from src.services.narrative import apply_narrative_effects
     from src.services.reporter import emit_reports
@@ -87,6 +88,8 @@ async def run_scenario_endpoint(
         )
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BudgetExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc)) from exc
 
     # Metrics (token counts are emitted per-call by the LLM providers).
     RUNS_TOTAL.labels(status=run.status, execution_mode=run.executionMode).inc()
