@@ -1,0 +1,72 @@
+{
+  "note": "Golden Benchmark baseline (ADR-0033). Regenerate via scripts/golden-baseline.py only when a change to golden behavior is intended. p4_time_to_resolution is wall-clock-derived and compared with a coarse tolerance.",
+  "provider": "stub",
+  "scenarios": {
+    "scn.gs.buy.002": {
+      "outcome": "resolved",
+      "gate_passed": true,
+      "dims": {
+        "p1_correctness": 0.9,
+        "p2_compliance": true,
+        "p3_process_fidelity": 1.0,
+        "p4_time_to_resolution": 0.9999986666666667,
+        "p5_escalation": 0.8,
+        "p6_doc_quality": 0.9416666666666667,
+        "p7_customer_experience": 0.823,
+        "p8_cost_discipline": 0.9308,
+        "c1_breath_coherence": 0.936,
+        "c2_soul_stability": 0.844,
+        "c3_fot_pressure_management": 0.9,
+        "c4_arc_narrative_coherence": "stable",
+        "c5_echo_regret_load": 0.88,
+        "c6_hfm_drive_balance": 0.66,
+        "c7_ame_reputation_trajectory": 0.8300000000000001,
+        "cognitive_aggregate": 0.8417
+      }
+    },
+    "scn.gs.crisis.003": {
+      "outcome": "resolved",
+      "gate_passed": false,
+      "dims": {
+        "p1_correctness": 0.9,
+        "p2_compliance": true,
+        "p3_process_fidelity": 1.0,
+        "p4_time_to_resolution": 0.9999988148148148,
+        "p5_escalation": 0.6,
+        "p6_doc_quality": 0.8916666666666666,
+        "p7_customer_experience": 0.937,
+        "p8_cost_discipline": 0.9324,
+        "c1_breath_coherence": 0.824,
+        "c2_soul_stability": 0.763,
+        "c3_fot_pressure_management": 0.9,
+        "c4_arc_narrative_coherence": "stable",
+        "c5_echo_regret_load": 0.88,
+        "c6_hfm_drive_balance": 0.66,
+        "c7_ame_reputation_trajectory": 0.8300000000000001,
+        "cognitive_aggregate": 0.8095
+      }
+    },
+    "scn.gs.src.001": {
+      "outcome": "resolved",
+      "gate_passed": true,
+      "dims": {
+        "p1_correctness": 0.9,
+        "p2_compliance": true,
+        "p3_process_fidelity": 1.0,
+        "p4_time_to_resolution": 0.9999973333333333,
+        "p5_escalation": 0.8,
+        "p6_doc_quality": 0.8583333333333334,
+        "p7_customer_experience": 0.772,
+        "p8_cost_discipline": 0.9334,
+        "c1_breath_coherence": 0.757,
+        "c2_soul_stability": 0.811,
+        "c3_fot_pressure_management": 0.9,
+        "c4_arc_narrative_coherence": "stable",
+        "c5_echo_regret_load": 0.88,
+        "c6_hfm_drive_balance": 0.66,
+        "c7_ame_reputation_trajectory": 0.8300000000000001,
+        "cognitive_aggregate": 0.8063
+      }
+    }
+  }
+}
