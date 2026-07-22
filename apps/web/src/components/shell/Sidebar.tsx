@@ -26,6 +26,7 @@ const SECTIONS: NavSection[] = [
   {
     title: "Enforcement",
     items: [
+      { href: "/dashboard/incident", label: "Incident Command" },
       { href: "/dashboard/policy", label: "Policy (PDP)" },
       { href: "/dashboard/execution", label: "Integrated Execution" },
       { href: "/dashboard/drift", label: "Drift Canary" },

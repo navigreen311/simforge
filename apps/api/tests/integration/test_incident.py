@@ -1,0 +1,69 @@
+"""Incident Command report (ADR-0040)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from httpx import AsyncClient
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
+FORGE_CAP = "cre-forge.call_center.outbound_seller_outreach"
+
+
+@pytest.fixture(autouse=True)
+def _reset_safe_mode():
+    from src.services.governance.safe_mode import safe_mode
+
+    safe_mode.deactivate()
+    yield
+    safe_mode.deactivate()
+
+
+async def test_incident_report_clean(client: AsyncClient) -> None:
+    resp = await client.get("/api/incident/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["total_incidents"] == 0
+    assert body["safe_mode"]["active"] is False
+
+
+async def test_safe_mode_is_a_critical_incident(client: AsyncClient) -> None:
+    await client.post(
+        "/api/constitution/safe-mode", json={"active": True, "reason": "drill", "domains": ["cre"]}
+    )
+    body = (await client.get("/api/incident/status")).json()
+    assert body["status"] == "critical"
+    sm = next(i for i in body["incidents"] if i["kind"] == "safe_mode")
+    assert sm["severity"] == "critical"
+    assert sm["blast_radius"]["departments"] == ["cre"]
+
+
+async def test_revoked_cert_incident_with_blast_radius(client: AsyncClient) -> None:
+    # Issue a cert, then revoke it → a governance incident with the agent + cap in the blast radius.
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
+    issue = (
+        await client.post(
+            "/api/certs/agent/issue",
+            json={
+                "agent_village_id": "david_kim",
+                "forge_cap": FORGE_CAP,
+                "tier": "foundational",
+                "battery_run_ids": [run["run_id"]],
+                "approver_id": "ivan",
+                "pack_id": "pack.greenstone.v1",
+            },
+        )
+    ).json()
+    await client.post(f"/api/certs/agent/{issue['cert']['id']}/revoke", json={"reason": "policy"})
+
+    body = (await client.get("/api/incident/status")).json()
+    assert body["status"] == "degraded"
+    revoked = next(i for i in body["incidents"] if i["kind"] == "certs_revoked")
+    assert revoked["severity"] == "high"
+    assert "david_kim" in revoked["blast_radius"]["agents"]
+    assert FORGE_CAP in revoked["blast_radius"]["forge_caps"]
+    assert "Engineering" in revoked["blast_radius"]["departments"]
