@@ -20,6 +20,7 @@ from src.schemas.pdp import (
 )
 from src.services.governance.pdp import AuthRequest, pdp
 from src.telemetry.metrics import PDP_DECISION_LATENCY, PDP_DECISIONS_TOTAL
+from src.telemetry.tracing import span
 
 router = APIRouter()
 
@@ -38,7 +39,12 @@ async def decide(
         resource=body.resource,
         context=body.context,
     )
-    decision = await pdp.decide(session, req)
+    with span(
+        "pdp.decide", **{"pdp.subject": body.subject_agent_id, "pdp.action": body.action}
+    ) as s:
+        decision = await pdp.decide(session, req)
+        s.set_attribute("pdp.decision", decision.decision)
+        s.set_attribute("pdp.reason_code", decision.reason_code)
     PDP_DECISION_LATENCY.labels(decision=decision.decision).observe(time.perf_counter() - started)
     PDP_DECISIONS_TOTAL.labels(decision=decision.decision, reason_code=decision.reason_code).inc()
     return AuthDecisionOut(**decision.as_dict())

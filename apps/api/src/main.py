@@ -38,7 +38,7 @@ from src.routers import (
 )
 from src.telemetry.logging import configure_logging
 from src.telemetry.metrics import configure_metrics
-from src.telemetry.tracing import configure_tracing
+from src.telemetry.tracing import configure_tracing, instrument_app
 
 
 @asynccontextmanager
@@ -94,6 +94,10 @@ def create_app() -> FastAPI:
 
         body, content_type = render_latest()
         return Response(content=body, media_type=content_type)
+
+    # Auto-instrument request handling for distributed tracing (no-op unless activated; ADR-0031).
+    configure_tracing()
+    instrument_app(app)
 
     return app
 

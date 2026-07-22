@@ -1,0 +1,14 @@
+# Grafana datasource provisioning — SimForge Tempo traces (ADR-0031).
+apiVersion: 1
+datasources:
+  - name: SimForge-Tempo
+    type: tempo
+    access: proxy
+    uid: simforge-tempo
+    url: ${TEMPO_URL:-http://tempo:3200}
+    jsonData:
+      # Correlate a trace's service back to its Prometheus metrics.
+      tracesToMetrics:
+        datasourceUid: simforge-prom
+      serviceMap:
+        datasourceUid: simforge-prom

@@ -130,6 +130,15 @@ class Settings(BaseSettings):
         default=50.0, alias="SIMFORGE_BUDGET_SANDBOX_MONTHLY_USD"
     )
 
+    # Distributed tracing (OpenTelemetry → OTLP/HTTP → Grafana Tempo; ADR-0031). No-op unless
+    # activated: set OTEL_EXPORTER_OTLP_ENDPOINT to a collector to export spans, or
+    # OTEL_TRACES_ENABLED=true to build spans locally without exporting. Default off keeps CI
+    # hermetic (spans compile to a no-op tracer; no collector dependency).
+    otel_traces_enabled: bool = Field(default=False, alias="OTEL_TRACES_ENABLED")
+    otel_exporter_otlp_endpoint: str = Field(default="", alias="OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_service_name: str = Field(default="simforge-api", alias="OTEL_SERVICE_NAME")
+    otel_sample_ratio: float = Field(default=1.0, alias="OTEL_SAMPLE_RATIO")
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_origins_raw.split(",") if o.strip()]
