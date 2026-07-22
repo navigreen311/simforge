@@ -236,7 +236,9 @@ model CognitiveSnapshot {
   agent         Agent    @relation(fields: [agentId], references: [id])
   date          DateTime // truncated to day
   ccbSnapshotId String
-  deltas        Json // vs. baseline
+  values        Json     @default("{}") // flat {signal: value} of the day's cognitive state
+  deltas        Json     @default("{}") // {signal: delta vs. baseline (earliest) snapshot}
+  driftMagnitude Float   @default(0) // L1 norm of the delta vector
 
   createdAt DateTime @default(now())
 
