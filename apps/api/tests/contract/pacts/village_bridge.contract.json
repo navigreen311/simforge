@@ -1,0 +1,19 @@
+{
+  "consumer": "SimForgeVillageReader",
+  "provider": "VillageData",
+  "boundary": "filesystem",
+  "agent_framework_shapes": {
+    "get_agent_identity": "dict",
+    "get_agent_breath": "dict",
+    "get_agent_fot": "dict",
+    "get_agent_hfm": "dict",
+    "get_agent_mate": "dict",
+    "get_agent_soul": "dict",
+    "get_agent_arc": "dict",
+    "get_agent_echo": "dict",
+    "get_agent_drift": "dict",
+    "get_agent_ame": "dict",
+    "get_agent_game": "dict",
+    "get_agent_episodes": "list"
+  }
+}

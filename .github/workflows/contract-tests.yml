@@ -10,5 +10,5 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -e "apps/api[dev]" && pip install -e packages/validator
-      # WEEK 9: Pact-style village_bridge + Forge-adapter contract tests.
-      - run: cd apps/api && pytest tests/contract -q || echo "no contract tests yet (v1.1)"
+      # Consumer-driven contract tests (ADR-0036): Forge-sandbox Pact + village_bridge contract.
+      - run: cd apps/api && pytest tests/contract -q

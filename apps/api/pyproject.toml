@@ -35,6 +35,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "pytest-recording>=0.13.0",
+    "pact-python>=3.0",
 ]
 # HSM signing backends (HSM_PROVIDER=yubihsm|cloudhsm). Optional: only needed to activate a real
 # HSM — install alongside a reachable device + credentials. Not pulled by dev/CI.
