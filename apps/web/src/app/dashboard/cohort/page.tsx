@@ -1,19 +1,21 @@
 import { SnapshotCaptureButton } from "@/components/cohort/SnapshotCaptureButton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RefreshButton } from "@/components/ui/RefreshButton";
 import { api, cohort, type CohortAnalytics } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
 
-const SHORT: Record<string, string> = {
-  c1_breath_coherence: "C1 Breath",
-  c2_soul_stability: "C2 Soul",
-  c3_fot_pressure_management: "C3 FoT",
-  c5_echo_regret_load: "C5 Echo",
-  c6_hfm_drive_balance: "C6 HFM",
-  c7_ame_reputation_trajectory: "C7 AME",
-  cognitive_aggregate: "Aggregate",
+// Canonical dimension labels (blueprint §5.2) with a short tooltip.
+const DIM: Record<string, { label: string; tip: string }> = {
+  c1_breath_coherence: { label: "C1 BREATH Coherence", tip: "Consistency with declared beliefs/values" },
+  c2_soul_stability: { label: "C2 SOUL Stability", tip: "Emotional trajectory & proportionality" },
+  c3_fot_pressure_management: { label: "C3 FOT Management", tip: "Flow-of-time pressure handling" },
+  c5_echo_regret_load: { label: "C5 ECHO Regret Load", tip: "Accumulated regret signal" },
+  c6_hfm_drive_balance: { label: "C6 HFM Drive Balance", tip: "Human-fundamental-motive balance" },
+  c7_ame_reputation_trajectory: { label: "C7 AME Trajectory", tip: "Reputation / standing trend" },
+  cognitive_aggregate: { label: "Aggregate", tip: "Mean of cognitive dimensions" },
 };
 
-// Value 0..1 → a gold-tinted cell; null → muted.
 function cellStyle(v: number | null): React.CSSProperties {
   if (v === null || v === undefined) return { background: "rgba(255,255,255,0.02)" };
   const alpha = 0.12 + 0.5 * Math.max(0, Math.min(1, v));
@@ -29,8 +31,8 @@ function Heatmap({ data }: { data: CohortAnalytics }) {
             <th className="px-4 py-3 font-medium">Agent</th>
             <th className="px-3 py-3 font-medium">Runs</th>
             {data.dimensions.map((d) => (
-              <th key={d} className="px-3 py-3 text-center font-medium">
-                {SHORT[d] ?? d}
+              <th key={d} className="px-3 py-3 text-center font-medium" title={DIM[d]?.tip}>
+                {DIM[d]?.label ?? d}
               </th>
             ))}
             <th className="px-3 py-3 font-medium">Pctile</th>
@@ -48,10 +50,7 @@ function Heatmap({ data }: { data: CohortAnalytics }) {
                 const v = a.dims[d];
                 return (
                   <td key={d} className="px-1 py-1 text-center">
-                    <div
-                      className="rounded px-2 py-1 text-[11px] text-ink-50"
-                      style={cellStyle(v)}
-                    >
+                    <div className="rounded px-2 py-1 text-[11px] text-ink-50" style={cellStyle(v)}>
                       {v === null || v === undefined ? "—" : v.toFixed(2)}
                     </div>
                   </td>
@@ -70,6 +69,16 @@ function Heatmap({ data }: { data: CohortAnalytics }) {
   );
 }
 
+const COG_DIMS = [
+  "c1_breath_coherence",
+  "c2_soul_stability",
+  "c3_fot_pressure_management",
+  "c5_echo_regret_load",
+  "c6_hfm_drive_balance",
+  "c7_ame_reputation_trajectory",
+  "cognitive_aggregate",
+];
+
 export default async function CohortPage() {
   let analytics: CohortAnalytics[] = [];
   let error: string | null = null;
@@ -85,40 +94,90 @@ export default async function CohortPage() {
           }
         }),
       )
-    ).filter((a): a is CohortAnalytics => a !== null && a.agents.length > 0);
+    ).filter((a): a is CohortAnalytics => a !== null);
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load cohort analytics";
   }
+
+  const hasData = (a: CohortAnalytics) => a.agents.some((ag) => ag.runs > 0);
+
+  // Village-wide mean per dimension across every scored agent.
+  const villageAgg: Record<string, number | null> = {};
+  for (const d of COG_DIMS) {
+    const vals: number[] = [];
+    for (const dept of analytics) {
+      for (const ag of dept.agents) {
+        const v = ag.dims[d];
+        if (v !== null && v !== undefined) vals.push(v);
+      }
+    }
+    villageAgg[d] = vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : null;
+  }
+  const anyData = analytics.some(hasData);
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-1 flex items-start justify-between">
         <h1 className="text-3xl">Cohort Analytics</h1>
-        <SnapshotCaptureButton />
+        <div className="flex items-center gap-2">
+          <SnapshotCaptureButton />
+          <RefreshButton />
+        </div>
       </div>
-      <p className="mb-8 text-ink-200">
-        Department-level cognitive drift — each agent&apos;s mean cognitive-dimension scores across its
-        scored runs, with percentile rank within the cohort. Surfaces an agent sliding below its peers
-        before it fails a run (ADR-0034).
+      <p className="mb-2 text-ink-200">
+        Department-level cognitive drift — each agent&apos;s mean cognitive-dimension scores across
+        scored runs, with percentile rank within the cohort (ADR-0034).
       </p>
+      <p className="mb-8 text-xs text-ink-400">as of {new Date().toLocaleString()}</p>
 
       {error ? (
         <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm">
           Could not load cohort analytics: <code className="text-danger">{error}</code>
         </div>
-      ) : analytics.length === 0 ? (
-        <div className="rounded-lg border border-ink-500 bg-ink-800 p-6 text-ink-200">
-          No cohort data yet — run some scenarios so agents have cognitive scores.
-        </div>
       ) : (
         <div className="flex flex-col gap-8">
+          {anyData && (
+            <section>
+              <h2 className="mb-3 text-xl">Village-wide average</h2>
+              <div className="overflow-x-auto rounded-xl border border-gold-700/40">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-ink-800 text-ink-200">
+                    <tr>
+                      {COG_DIMS.map((d) => (
+                        <th key={d} className="px-3 py-3 text-center font-medium" title={DIM[d]?.tip}>
+                          {DIM[d]?.label ?? d}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {COG_DIMS.map((d) => (
+                        <td key={d} className="px-3 py-3 text-center text-ink-50">
+                          {villageAgg[d] === null ? "—" : villageAgg[d]!.toFixed(2)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {analytics.map((a) => (
             <section key={a.department}>
               <h2 className="mb-3 text-xl">
-                {a.department}{" "}
-                <span className="text-sm text-ink-400">· {a.cohort_size} agents</span>
+                {a.department} <span className="text-sm text-ink-400">· {a.cohort_size} agents</span>
               </h2>
-              <Heatmap data={a} />
+              {hasData(a) ? (
+                <Heatmap data={a} />
+              ) : (
+                <EmptyState
+                  title="No scored runs yet"
+                  description={`This department will populate as agents are certified and exercised. Currently 0 scored runs across ${a.cohort_size} agent${a.cohort_size === 1 ? "" : "s"}.`}
+                  icon="📊"
+                />
+              )}
             </section>
           ))}
         </div>

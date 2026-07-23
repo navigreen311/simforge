@@ -42,8 +42,9 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Typecheck + lint + build
+      - name: Typecheck + lint + test + build
         run: |
           pnpm --filter web typecheck
           pnpm --filter web lint
+          pnpm --filter web test
           pnpm --filter web build

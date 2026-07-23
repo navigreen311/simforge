@@ -1,68 +1,50 @@
-import Link from "next/link";
-
-import { RunStatusBadge } from "@/components/runs/RunStatusBadge";
-import { api, type RunSummary } from "@/lib/api/client";
+import { RunsExplorer } from "@/components/runs/RunsExplorer";
+import { api, type AgentSummary, type PackSummary, type ScenarioSummary } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
 
-export default async function RunsPage() {
-  let runs: RunSummary[] = [];
+export default async function RunsPage({
+  searchParams,
+}: {
+  searchParams: { agent?: string };
+}) {
+  let agents: AgentSummary[] = [];
+  let packs: PackSummary[] = [];
+  let scenarios: ScenarioSummary[] = [];
   let error: string | null = null;
   try {
-    runs = (await api.runs()).items;
+    const [a, p, s] = await Promise.all([
+      api.agents({ page_size: 500 }),
+      api.packs(),
+      api.scenarios(),
+    ]);
+    agents = a.items;
+    packs = p.items;
+    scenarios = s.items;
   } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to load runs";
+    error = e instanceof Error ? e.message : "Failed to load runs metadata";
   }
+  const tierByScenario = Object.fromEntries(scenarios.map((s) => [s.scenarioId, s.tier]));
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <h1 className="mb-1 text-3xl">Runs</h1>
-      <p className="mb-8 text-ink-200">Scenario executions, newest first.</p>
+      <p className="mb-6 text-ink-200">
+        Scenario executions — filter by status, tier, agent, pack, mode, and time; click a row for
+        the full run.
+      </p>
 
       {error ? (
         <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm">
-          Could not load runs: <code className="text-danger">{error}</code>
-        </div>
-      ) : runs.length === 0 ? (
-        <div className="rounded-lg border border-ink-500 bg-ink-800 p-6 text-ink-200">
-          No runs yet. Open a Pack, pick a scenario, and hit <strong>Run</strong>.
+          Could not load runs metadata: <code className="text-danger">{error}</code>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-ink-500">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-ink-800 text-ink-200">
-              <tr>
-                <th className="px-4 py-3 font-medium">Scenario</th>
-                <th className="px-4 py-3 font-medium">Agent</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Outcome</th>
-                <th className="px-4 py-3 font-medium">Latency</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-600">
-              {runs.map((r) => (
-                <tr key={r.run_id} className="hover:bg-ink-800/60">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/dashboard/runs/${r.run_id}`}
-                      className="font-mono text-xs text-gold-400 hover:underline"
-                    >
-                      {r.scenario_id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-ink-100">{r.agent_village_id}</td>
-                  <td className="px-4 py-3">
-                    <RunStatusBadge status={r.status} />
-                  </td>
-                  <td className="px-4 py-3 text-ink-100">{r.outcome ?? "—"}</td>
-                  <td className="px-4 py-3 text-ink-100">
-                    {r.latency_ms != null ? `${r.latency_ms}ms` : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <RunsExplorer
+          agents={agents}
+          packs={packs}
+          tierByScenario={tierByScenario}
+          initialAgent={searchParams.agent}
+        />
       )}
     </div>
   );
