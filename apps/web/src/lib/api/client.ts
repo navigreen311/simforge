@@ -352,9 +352,36 @@ export interface LineageSubgraph {
   edges: Array<{ from: string; to: string; relation: string }>;
 }
 
+export interface ConstitutionVersion {
+  version: string;
+  ratified_at: string;
+  ratified_by: string;
+  content_hash: string;
+  superseded_by: string | null;
+  active: boolean;
+}
+
+export interface ConstitutionContent extends ConstitutionCurrent {
+  yaml: string;
+}
+
+export interface AmendmentFull {
+  amendment_id: string;
+  status: string;
+  proposed_by: string;
+  proposed_at: string | null;
+  cooling_ends_at: string;
+  ratified_at: string | null;
+  ratified_by: string | null;
+  diff_yaml: string;
+  impact: Record<string, unknown> | null;
+}
+
 export const governance = {
   current: () => apiGet<ConstitutionCurrent>("/api/constitution/current"),
-  history: () => apiGet<{ amendments: Amendment[] }>("/api/constitution/history"),
+  history: () => apiGet<{ amendments: AmendmentFull[] }>("/api/constitution/history"),
+  versions: () => apiGet<{ versions: ConstitutionVersion[] }>("/api/constitution/versions"),
+  version: (v: string) => apiGet<ConstitutionContent>(`/api/constitution/${v}`),
 };
 
 export const lineage = {
@@ -454,6 +481,9 @@ export const narrative = {
     apiGet<NarrativeArc>(`/api/narrative/agent/${agentVillageId}/arc`),
 };
 
+export const runNarrativeScenario = (scenarioId: string) =>
+  apiPost<RunSummary>(`/api/scenarios/${scenarioId}/run?narrative_mode=integrated`);
+
 // ---- Cohort analytics + cognitive canary (ADR-0034) ----
 export interface CohortAgentRow {
   agent: string;
@@ -507,9 +537,22 @@ export interface GoldenReport {
   results: GoldenResult[];
 }
 
+export interface GoldenBaselineEntry {
+  outcome: string | null;
+  gate_passed: boolean | null;
+  dims: Record<string, number | string | boolean | null>;
+}
+
+export interface GoldenBaseline {
+  note?: string;
+  provider?: string;
+  scenarios: Record<string, GoldenBaselineEntry>;
+}
+
 export const golden = {
   scenarios: () =>
     apiGet<{ scenarios: GoldenScenario[]; total: number }>("/api/golden/scenarios"),
+  baseline: () => apiGet<GoldenBaseline>("/api/golden/baseline"),
 };
 
 export const runGoldenSuite = () => apiPost<GoldenReport>("/api/golden/run");
@@ -522,6 +565,8 @@ export interface Jurisdiction {
   regulators: string[];
   required_flags: string[];
   phi_flags: string[];
+  effective_date: string | null;
+  source_citation: string | null;
 }
 
 export interface CoverageReport {
@@ -559,8 +604,27 @@ export interface DriftReport {
   findings: DriftFinding[];
 }
 
+export interface ConstitutionDriftFinding {
+  cert_id: string;
+  agent: string;
+  cert_status: string;
+  pinned_constitution: string | null;
+  current_constitution: string | null;
+  stale: boolean;
+}
+
+export interface ConstitutionDriftReport {
+  current_constitution: string | null;
+  scanned: number;
+  stale_certs: number;
+  active_stale_certs: number;
+  enforced: boolean;
+  findings: ConstitutionDriftFinding[];
+}
+
 export const drift = {
   status: () => apiGet<DriftReport>("/api/drift/status"),
+  constitution: () => apiGet<ConstitutionDriftReport>("/api/drift/constitution"),
 };
 
 export const runDriftScan = () => apiPost<DriftReport>("/api/drift/scan");

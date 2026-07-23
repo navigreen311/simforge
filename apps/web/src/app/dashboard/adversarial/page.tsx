@@ -1,4 +1,5 @@
 import { AdversarialProbeRunner } from "@/components/adversarial/AdversarialProbeRunner";
+import { PageMeta } from "@/components/ui/PageMeta";
 import { adversarial, api, type Tactic } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +30,26 @@ export default async function AdversarialPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="mb-1 text-3xl">Adversarial Suite</h1>
-      <p className="mb-8 text-ink-200">
+      <div className="mb-1 flex items-start justify-between">
+        <h1 className="text-3xl">Adversarial Suite</h1>
+        <PageMeta />
+      </div>
+      <p className="mb-4 text-ink-200">
         Red-team probes pressure the agent toward a specific compliance violation. Capitulation =
-        naming a violating action, agreeing to it, and not refusing (ADR-0028).
+        naming a violating action, agreeing to it, and not refusing (ADR-0028). A probe fires the
+        full tactic set at the scenario&apos;s bound agent.
       </p>
+      <div className="mb-6 flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-ink-100">
+        <span>
+          ⚠ Probes use the <strong>live LLM provider</strong> (one call per tactic; may incur cost +
+          latency). Currently the stub provider — free + deterministic.
+        </span>
+        <span className="text-ink-300">
+          Certification impact: capitulation → cert block is <strong>not wired</strong> in the data
+          model — probe results are <em>advisory only</em>. Arbitrary-agent probing + persisted
+          history need backend work (deferred).
+        </span>
+      </div>
 
       {error ? (
         <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm">

@@ -1,3 +1,5 @@
+import { NarrativeRunButton } from "@/components/narrative/NarrativeRunButton";
+import { PageMeta } from "@/components/ui/PageMeta";
 import { api, narrative, type NarrativeArc } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +17,14 @@ function RepDelta({ v }: { v: number }) {
 
 export default async function NarrativePage() {
   let arcs: NarrativeArc[] = [];
+  let scenarios: { scenarioId: string; title: string }[] = [];
   let error: string | null = null;
   try {
-    const agents = await api.agents({ page_size: 200 });
+    const [agents, scen] = await Promise.all([
+      api.agents({ page_size: 200 }),
+      api.scenarios().catch(() => ({ items: [], total: 0 })),
+    ]);
+    scenarios = scen.items.map((s) => ({ scenarioId: s.scenarioId, title: s.title }));
     arcs = (
       await Promise.all(
         agents.items.map(async (a) => {
@@ -35,12 +42,29 @@ export default async function NarrativePage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="mb-1 text-3xl">Narrative</h1>
-      <p className="mb-8 text-ink-200">
+      <div className="mb-1 flex items-start justify-between">
+        <h1 className="text-3xl">Narrative</h1>
+        <PageMeta />
+      </div>
+      <p className="mb-4 text-ink-200">
         Integrated-narrative runs accrete story beats into an agent&apos;s arc — how its character held
         and which way its standing moved. Effects are recorded SimForge-side; VillageData is never
         written (ADR-0035).
       </p>
+
+      {/* Explainer + one-click run (replaces the manual query-string instruction). */}
+      <div className="mb-6 rounded-xl border border-ink-500 bg-ink-800 p-4">
+        <div className="mb-3 text-sm text-ink-200">
+          <strong className="text-ink-100">What&apos;s a narrative arc?</strong> An ordered list of
+          <em> beats</em> — one per integrated-narrative run — each recording the scenario, the
+          agent&apos;s arc state (stable / drifting / …), and a reputation delta. A sample beat:
+          <span className="ml-1 italic text-ink-300">
+            &ldquo;david_kim works through &lsquo;Cold outreach&rsquo; (resolved); the agent holds a
+            steady line and its standing rises.&rdquo;
+          </span>
+        </div>
+        <NarrativeRunButton scenarios={scenarios} />
+      </div>
 
       {error ? (
         <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm">
@@ -48,8 +72,7 @@ export default async function NarrativePage() {
         </div>
       ) : arcs.length === 0 ? (
         <div className="rounded-lg border border-ink-500 bg-ink-800 p-6 text-ink-200">
-          No narrative arcs yet. Run a scenario with{" "}
-          <code>?narrative_mode=integrated</code> to accrete story beats.
+          No narrative arcs yet — run a narrative scenario above to accrete the first beat.
         </div>
       ) : (
         <div className="flex flex-col gap-8">
