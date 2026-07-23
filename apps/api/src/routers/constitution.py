@@ -72,12 +72,27 @@ async def history(session: AsyncSession = Depends(get_session)) -> dict:
                 "amendment_id": a.amendmentId,
                 "status": a.status,
                 "proposed_by": a.proposedBy,
+                "proposed_at": a.proposedAt,
                 "cooling_ends_at": a.coolingPeriodEndsAt,
+                "ratified_at": a.ratifiedAt,
+                "ratified_by": a.ratifiedBy,
+                "diff_yaml": a.diffYaml,  # the amendment body / change set
                 "impact": a.impactAnalysis,
             }
             for a in amendments
         ]
     }
+
+
+@router.get("/versions", dependencies=[Depends(require_role("viewer"))])
+async def versions(session: AsyncSession = Depends(get_session)) -> dict:
+    """All constitution versions with their active/superseded status (version history)."""
+    rows = (
+        (await session.execute(select(Constitution).order_by(Constitution.ratifiedAt.asc())))
+        .scalars()
+        .all()
+    )
+    return {"versions": [{**_const_out(c), "active": c.supersededByVersion is None} for c in rows]}
 
 
 @router.get("/{version}", dependencies=[Depends(require_role("viewer"))])

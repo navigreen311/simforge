@@ -19,6 +19,9 @@ class Jurisdiction:
     regulators: tuple[str, ...]
     required_flags: tuple[str, ...]  # flags a pack in this jurisdiction must declare
     phi_flags: tuple[str, ...] = field(default_factory=tuple)  # required only when handling PHI
+    # Compliance-evidence metadata (P0-B audit): a matrix without an as-of date is a liability.
+    effective_date: str | None = None
+    source_citation: str | None = None
 
 
 _FEDERAL = Jurisdiction(
@@ -31,15 +34,37 @@ _FEDERAL = Jurisdiction(
     # declare them. `phi_required=true` is the marker for a healthcare-staffing (PHI) pack.
     required_flags=(),
     phi_flags=("oig_sam", "i9", "hipaa"),
+    effective_date="2024-01-01",
+    source_citation="42 CFR §1001 (OIG); 8 USC §1324a (I-9); 45 CFR §160 (HIPAA)",
 )
 
 _STATES = (
-    Jurisdiction("US-NV", "Nevada", "state", ("HCQC",), ("hcqc_nv",)),
-    Jurisdiction("US-CA", "California", "state", ("CDPH", "CPPA"), ("cdph_ca", "ccpa")),
+    Jurisdiction(
+        "US-NV",
+        "Nevada",
+        "state",
+        ("HCQC",),
+        ("hcqc_nv",),
+        effective_date="2024-01-01",
+        source_citation="NRS 449 (Health Care Facilities)",
+    ),
+    Jurisdiction(
+        "US-CA",
+        "California",
+        "state",
+        ("CDPH", "CPPA"),
+        ("cdph_ca", "ccpa"),
+        effective_date="2023-01-01",
+        source_citation="Cal. Civ. Code §1798.100 (CCPA); H&S §1200",
+    ),
     Jurisdiction("US-TX", "Texas", "state", ("HHSC",), ("hhsc_tx",)),
     Jurisdiction("US-FL", "Florida", "state", ("AHCA",), ("ahca_fl",)),
     Jurisdiction("US-AZ", "Arizona", "state", ("ADHS",), ("adhs_az",)),
     Jurisdiction("US-NY", "New York", "state", ("NYSDOH",), ("nysdoh_ny",)),
+    # Greenstone Phase-1 target geographies. Real-estate wholesaling is non-PHI, so no required
+    # flags — added for coverage visibility; real regulatory reqs are a v2 workstream.
+    Jurisdiction("US-UT", "Utah", "state", ("UTREC",), ()),
+    Jurisdiction("US-ID", "Idaho", "state", ("IREC",), ()),
 )
 
 JURISDICTIONS: dict[str, Jurisdiction] = {j.code: j for j in (_FEDERAL, *_STATES)}
