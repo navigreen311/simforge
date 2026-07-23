@@ -65,14 +65,42 @@ async def issue_cert(
 async def list_agent_certs(
     session: AsyncSession = Depends(get_session),
     cert_status: str | None = Query(default=None, alias="status"),
+    tier: str | None = Query(default=None),
+    forge: str | None = Query(default=None, description="Match the forge prefix of forgeCap"),
+    agent: str | None = Query(default=None, description="Filter by tested agent villageAgentId"),
+    expiring_within: int | None = Query(default=None, ge=1, description="Days-to-expiry window"),
+    search: str | None = Query(default=None, description="Match forgeCap / cert id"),
 ) -> AgentCertList:
+    from datetime import timedelta
+
+    from src.models.agent import Agent
+    from src.utils.time import utcnow
+
     stmt = select(AgentCert)
     count_stmt = select(func.count()).select_from(AgentCert)
-    if cert_status:
-        stmt = stmt.where(AgentCert.status == cert_status)
-        count_stmt = count_stmt.where(AgentCert.status == cert_status)
-    total = (await session.execute(count_stmt)).scalar_one()
-    rows = (await session.execute(stmt.order_by(AgentCert.issuedAt.desc()))).scalars().all()
+
+    def _apply(s):  # noqa: ANN001, ANN202
+        if cert_status:
+            s = s.where(AgentCert.status == cert_status)
+        if tier:
+            s = s.where(AgentCert.tier == tier)
+        if forge:
+            s = s.where(AgentCert.forgeCap.like(f"{forge}.%"))
+        if agent:
+            s = s.where(
+                AgentCert.agentId.in_(select(Agent.id).where(Agent.villageAgentId == agent))
+            )
+        if expiring_within is not None:
+            s = s.where(AgentCert.expiresAt <= utcnow() + timedelta(days=expiring_within))
+        if search:
+            like = f"%{search.lower()}%"
+            s = s.where(
+                func.lower(AgentCert.forgeCap).like(like) | func.lower(AgentCert.id).like(like)
+            )
+        return s
+
+    total = (await session.execute(_apply(count_stmt))).scalar_one()
+    rows = (await session.execute(_apply(stmt).order_by(AgentCert.issuedAt.desc()))).scalars().all()
     return AgentCertList(items=[AgentCertOut.model_validate(r) for r in rows], total=total)
 
 

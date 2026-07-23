@@ -143,6 +143,38 @@ async function apiGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Build a `?a=1&b=2` query string from a params object, skipping null/undefined/empty. */
+function qs<T extends object>(params?: T): string {
+  if (!params) return "";
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== null && v !== undefined && v !== "") sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
+export interface RunQuery {
+  status?: string;
+  tier?: string;
+  execution_mode?: string;
+  blind?: boolean;
+  agent?: string;
+  pack?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface RunCounts {
+  total: number;
+  by_status: Record<string, number>;
+  passed: number;
+  failed: number;
+  errored: number;
+}
+
 async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -158,17 +190,22 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 
 export const api = {
   ready: () => apiGet<ReadyResponse>("/api/health/ready"),
-  agents: (params?: { page?: number; page_size?: number }) => {
-    const q = new URLSearchParams();
-    if (params?.page) q.set("page", String(params.page));
-    if (params?.page_size) q.set("page_size", String(params.page_size));
-    const qs = q.toString();
-    return apiGet<AgentList>(`/api/agents/${qs ? `?${qs}` : ""}`);
-  },
+  agents: (params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    department_id?: string;
+    autonomy_level?: string;
+    gardner_flag?: boolean;
+    level10?: boolean;
+    has_active_certs?: boolean;
+  }) => apiGet<AgentList>(`/api/agents/${qs(params)}`),
   departments: () => apiGet<DepartmentList>("/api/departments/"),
+  scenarios: () => apiGet<{ items: ScenarioSummary[]; total: number }>("/api/scenarios/"),
   packs: () => apiGet<PackList>("/api/packs/"),
   pack: (packId: string) => apiGet<PackDetail>(`/api/packs/${packId}`),
-  runs: () => apiGet<RunList>("/api/runs/"),
+  runs: (params?: RunQuery) => apiGet<RunList>(`/api/runs/${qs(params)}`),
+  runCounts: (params?: RunQuery) => apiGet<RunCounts>(`/api/runs/counts${qs(params)}`),
   run: (runId: string) => apiGet<RunSummary>(`/api/runs/${runId}`),
   transcript: (runId: string) =>
     apiGet<{ run_id: string; turns: TranscriptTurn[] }>(`/api/runs/${runId}/transcript`),
@@ -220,8 +257,78 @@ export interface AgentCert {
   certSnapshotId: string;
 }
 
+export interface CertQuery {
+  status?: string;
+  tier?: string;
+  forge?: string;
+  agent?: string;
+  expiring_within?: number;
+  search?: string;
+}
+
 export const certs = {
-  agent: () => apiGet<{ items: AgentCert[]; total: number }>("/api/certs/agent"),
+  agent: (params?: CertQuery) =>
+    apiGet<{ items: AgentCert[]; total: number }>(`/api/certs/agent${qs(params)}`),
+};
+
+// ---- UI-support endpoints (UI P0 audit) ----
+export interface LlmMode {
+  agent_provider: string;
+  judge_provider: string;
+  agent_effective: string;
+  judge_effective: string;
+  stub_scores: boolean;
+}
+
+export interface SystemStatus {
+  llm_provider: string;
+  llm_judge_provider: string;
+  llm_judge_effective: string;
+  village_fingerprint: string;
+  constitution_version: string | null;
+  hsm_provider: string;
+  hsm_status: string;
+}
+
+export interface IntegrityWarning {
+  agent_id: string;
+  warning_type: string;
+  detail: string;
+  autonomy_level: string;
+  active_certs: number;
+  severity: string;
+}
+
+export interface AgentCertRollup {
+  agent_village_id: string;
+  active_certs: number;
+  total_certs: number;
+  last_certified_at: string | null;
+}
+
+export const health = {
+  llmMode: () => apiGet<LlmMode>("/api/health/llm-mode"),
+  systemStatus: () => apiGet<SystemStatus>("/api/health/system-status"),
+};
+
+export interface DashboardSummary {
+  agents: number;
+  runs: number;
+  active_certs: number;
+  issued_certs: number;
+  open_software_gaps: number;
+  open_village_os_gaps: number;
+}
+
+export const dashboard = {
+  summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
+  integrityWarnings: () =>
+    apiGet<{ warnings: IntegrityWarning[]; total: number }>("/api/dashboard/integrity-warnings"),
+  runsPerDay: (days = 14) =>
+    apiGet<{ days: number; series: { date: string; count: number }[] }>(
+      `/api/dashboard/runs-per-day?days=${days}`,
+    ),
+  agentCerts: () => apiGet<{ items: AgentCertRollup[] }>("/api/dashboard/agent-certs"),
 };
 
 export interface ConstitutionCurrent {

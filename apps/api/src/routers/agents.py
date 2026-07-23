@@ -31,20 +31,44 @@ async def list_agents(
     session: AsyncSession = Depends(get_session),
     department_id: str | None = Query(default=None),
     autonomy_level: str | None = Query(default=None),
+    search: str | None = Query(default=None, description="Match name / villageAgentId / role"),
+    gardner_flag: bool | None = Query(default=None),
+    level10: bool | None = Query(default=None, alias="level10"),
+    has_active_certs: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
+    page_size: int = Query(default=50, ge=1, le=500),
 ) -> AgentList:
-    stmt = select(Agent)
-    count_stmt = select(func.count()).select_from(Agent)
-    if department_id:
-        stmt = stmt.where(Agent.departmentId == department_id)
-        count_stmt = count_stmt.where(Agent.departmentId == department_id)
-    if autonomy_level:
-        stmt = stmt.where(Agent.currentAutonomyLevel == autonomy_level)
-        count_stmt = count_stmt.where(Agent.currentAutonomyLevel == autonomy_level)
+    from src.models.cert import AgentCert
 
-    total = (await session.execute(count_stmt)).scalar_one()
-    stmt = stmt.order_by(Agent.name).offset((page - 1) * page_size).limit(page_size)
+    def _apply(stmt):  # noqa: ANN001, ANN202
+        if department_id:
+            stmt = stmt.where(Agent.departmentId == department_id)
+        if autonomy_level:
+            stmt = stmt.where(Agent.currentAutonomyLevel == autonomy_level)
+        if gardner_flag is not None:
+            stmt = stmt.where(Agent.gardnerFlag == gardner_flag)
+        if level10 is not None:
+            stmt = stmt.where(Agent.level10Enabled == level10)
+        if search:
+            like = f"%{search.lower()}%"
+            stmt = stmt.where(
+                func.lower(Agent.name).like(like)
+                | func.lower(Agent.villageAgentId).like(like)
+                | func.lower(Agent.role).like(like)
+            )
+        if has_active_certs is not None:
+            with_active = select(AgentCert.agentId).where(AgentCert.status == "active")
+            stmt = (
+                stmt.where(Agent.id.in_(with_active))
+                if has_active_certs
+                else stmt.where(Agent.id.not_in(with_active))
+            )
+        return stmt
+
+    total = (await session.execute(_apply(select(func.count()).select_from(Agent)))).scalar_one()
+    stmt = (
+        _apply(select(Agent)).order_by(Agent.name).offset((page - 1) * page_size).limit(page_size)
+    )
     rows = (await session.execute(stmt)).scalars().all()
 
     return AgentList(
