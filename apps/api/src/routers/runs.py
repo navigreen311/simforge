@@ -56,20 +56,113 @@ async def _get_run_or_404(session: AsyncSession, run_id: str) -> Run:
     return run
 
 
+def _apply_run_filters(
+    stmt,  # noqa: ANN001 — a SQLAlchemy Select whose type is verbose to spell
+    *,
+    run_status: str | None,
+    tier: str | None,
+    execution_mode: str | None,
+    blind: bool | None,
+    agent: str | None,
+    pack: str | None,
+    from_date: str | None,
+    to_date: str | None,
+):  # noqa: ANN201
+    """Apply the optional Runs filters to a base select. All params are backward-compatible."""
+    if run_status:
+        stmt = stmt.where(Run.status == run_status)
+    if execution_mode:
+        stmt = stmt.where(Run.executionMode == execution_mode)
+    if blind is not None:
+        stmt = stmt.where(Run.blindMode == blind)
+    if tier:
+        stmt = stmt.where(Run.scenarioId.in_(select(Scenario.id).where(Scenario.tier == tier)))
+    if agent:
+        stmt = stmt.where(Run.agentId.in_(select(Agent.id).where(Agent.villageAgentId == agent)))
+    if pack:
+        stmt = stmt.where(Run.packId.in_(select(Pack.id).where(Pack.packId == pack)))
+    if from_date:
+        stmt = stmt.where(Run.startedAt >= from_date)
+    if to_date:
+        stmt = stmt.where(Run.startedAt <= to_date)
+    return stmt
+
+
 @router.get("/", response_model=RunList, dependencies=[Depends(require_role("viewer"))])
 async def list_runs(
     session: AsyncSession = Depends(get_session),
     run_status: str | None = Query(default=None, alias="status"),
-    limit: int = Query(default=50, ge=1, le=200),
+    tier: str | None = Query(default=None),
+    execution_mode: str | None = Query(default=None),
+    blind: bool | None = Query(default=None),
+    agent: str | None = Query(default=None, description="Filter by tested agent villageAgentId"),
+    pack: str | None = Query(default=None, description="Filter by pack packId"),
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ) -> RunList:
-    stmt = select(Run)
-    count_stmt = select(func.count()).select_from(Run)
-    if run_status:
-        stmt = stmt.where(Run.status == run_status)
-        count_stmt = count_stmt.where(Run.status == run_status)
+    filters = {
+        "run_status": run_status,
+        "tier": tier,
+        "execution_mode": execution_mode,
+        "blind": blind,
+        "agent": agent,
+        "pack": pack,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    count_stmt = _apply_run_filters(select(func.count()).select_from(Run), **filters)
     total = (await session.execute(count_stmt)).scalar_one()
-    rows = (await session.execute(stmt.order_by(Run.startedAt.desc()).limit(limit))).scalars().all()
+    stmt = _apply_run_filters(select(Run), **filters)
+    rows = (
+        (await session.execute(stmt.order_by(Run.startedAt.desc()).offset(offset).limit(limit)))
+        .scalars()
+        .all()
+    )
     return RunList(items=[await _summarize(session, r) for r in rows], total=total)
+
+
+@router.get("/counts", dependencies=[Depends(require_role("viewer"))])
+async def run_counts(
+    session: AsyncSession = Depends(get_session),
+    run_status: str | None = Query(default=None, alias="status"),
+    tier: str | None = Query(default=None),
+    execution_mode: str | None = Query(default=None),
+    blind: bool | None = Query(default=None),
+    agent: str | None = Query(default=None),
+    pack: str | None = Query(default=None),
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
+) -> dict:
+    """Total + per-status + per-outcome counts for the (optionally filtered) run set."""
+    filters = {
+        "run_status": run_status,
+        "tier": tier,
+        "execution_mode": execution_mode,
+        "blind": blind,
+        "agent": agent,
+        "pack": pack,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    by_status = dict(
+        (
+            await session.execute(
+                _apply_run_filters(
+                    select(Run.status, func.count()).select_from(Run), **filters
+                ).group_by(Run.status)
+            )
+        ).all()
+    )
+    total = sum(by_status.values())
+    return {
+        "total": total,
+        "by_status": by_status,
+        "passed": by_status.get("passed", 0),
+        "failed": by_status.get("failed", 0),
+        "errored": by_status.get("errored", 0),
+    }
 
 
 @router.get("/{run_id}", response_model=RunSummary, dependencies=[Depends(require_role("viewer"))])
