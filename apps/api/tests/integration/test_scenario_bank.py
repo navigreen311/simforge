@@ -115,8 +115,10 @@ async def test_bank_detail(client: AsyncClient, db_session: AsyncSession) -> Non
 
 
 async def test_vocabulary_endpoint(client: AsyncClient) -> None:
+    # Packs now come from the Venture Registry (source of truth), not a hardcoded list.
     v = (await client.get("/api/scenario-bank/vocabulary")).json()
-    assert v["packs"] == ["greenstone", "medlink", "caregrid"]
+    assert {"greenstone", "medlink-pro", "caregrid"} <= set(v["packs"])
+    assert "medlink" not in v["packs"]  # the old short name is gone
     assert "crisis" in v["families"]
     assert "foundational" in v["tiers"]
 
@@ -229,7 +231,7 @@ def test_validate_extraction_keeps_good_content_flags_unmapped_category() -> Non
             "found": True,
             "confidence": 0.8,
             "title": "PIH Health settles with OCR for HIPAA violations",
-            "pack": "medlink",
+            "pack": "medlink-pro",
             "family": "audit",
             "tier": "intermediate_crisis",  # NOT in the vocab
             "situation": "A healthcare network settles a $600k OCR case after a phishing breach.",
@@ -238,7 +240,7 @@ def test_validate_extraction_keeps_good_content_flags_unmapped_category() -> Non
     )
     assert result.ok is True
     assert result.scenario is not None
-    assert result.scenario["pack"] == "medlink"
+    assert result.scenario["pack"] == "medlink-pro"
     assert result.scenario["family"] == "audit"
     assert result.scenario["tier"] is None  # unmappable → left for the human
     assert result.scenario["unmapped_fields"] == ["tier"]

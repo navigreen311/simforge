@@ -17,7 +17,8 @@ class Pack(IdTimestampMixin, Base):
     packId: Mapped[str] = mapped_column(String, unique=True)
     name: Mapped[str] = mapped_column(String)
     version: Mapped[str] = mapped_column(String)
-    ownerVenture: Mapped[str] = mapped_column(String)
+    # FK into the Venture registry (the source of truth for the venture field).
+    ownerVenture: Mapped[str] = mapped_column(String, ForeignKey("Venture.slug"))
     ownerHuman: Mapped[str] = mapped_column(String)
     phiRequired: Mapped[bool] = mapped_column(Boolean, default=False)
     complianceFlags: Mapped[list[str]] = mapped_column(StrArray, default=list)

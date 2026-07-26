@@ -19,22 +19,20 @@ from ulid import ULID
 from src.models.bank_scenario import BankScenario
 from src.models.pack import Scenario
 from src.services.registry.lineage import add_edge
+from src.services.venture.registry import scenario_code_for
 from src.utils.time import utcnow
-
-_PACK_CODE = {"greenstone": "gs", "medlink": "ml", "caregrid": "cg"}
 
 
 class PromotionError(Exception):
     """A promotion action was invalid (e.g. committing an already-committed scenario)."""
 
 
-def _pack_code(pack: str) -> str:
-    return _PACK_CODE.get(pack, pack[:2].lower())
-
-
 async def next_scenario_id(session: AsyncSession, pack: str, family: str) -> str:
-    """The next free scn.{code}.{family}.{nnn}, scanning BOTH the bank and the runtime table."""
-    code = _pack_code(pack)
+    """The next free scn.{code}.{family}.{nnn}, scanning BOTH the bank and the runtime table.
+
+    The scenario-code prefix comes from the Venture Registry (was a hardcoded map).
+    """
+    code = await scenario_code_for(session, pack)
     prefix = f"scn.{code}.{family}."
     like = f"{prefix}%"
     bank_ids = (

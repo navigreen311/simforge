@@ -135,6 +135,63 @@ export interface PackCreateResponse {
   error: string | null;
 }
 
+// ---- Venture Registry (source of truth for the venture field) ----
+export interface Venture {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  status: string; // active | in_development | archived
+  scenarioCode: string;
+  defaultComplianceFlags: string[];
+  internalForges: string[];
+  capabilities: string[];
+  createdBy: string;
+  createdAt: string;
+  packCount: number;
+  committedScenarioCount: number;
+  capabilityCount: number;
+}
+
+export interface VenturePackRef {
+  packId: string;
+  name: string;
+  version: string;
+  scenarioCount: number;
+}
+
+export interface SpecDocumentRef {
+  id: string;
+  filename: string;
+  uploadedAt: string;
+  proposalsCount: number;
+  scenariosCount: number;
+}
+
+export interface VentureDetail extends Venture {
+  packs: VenturePackRef[];
+  specDocuments: SpecDocumentRef[];
+}
+
+export interface VentureCreateRequest {
+  name: string;
+  slug: string;
+  description?: string;
+  status?: string;
+  scenarioCode?: string | null;
+  defaultComplianceFlags?: string[];
+  internalForges?: string[];
+  capabilities?: string[];
+}
+
+export const ventures = {
+  list: () => apiGet<{ items: Venture[]; total: number }>("/api/ventures/"),
+  detail: (slug: string) => apiGet<VentureDetail>(`/api/ventures/${slug}`),
+  create: (body: VentureCreateRequest) => apiPost<Venture>("/api/ventures/", body),
+  update: (slug: string, body: Partial<VentureCreateRequest>) =>
+    apiPatch<Venture>(`/api/ventures/${slug}`, body),
+};
+
 export interface RunSummary {
   run_id: string;
   scenario_id: string;
