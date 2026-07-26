@@ -25,6 +25,10 @@ dependencies = [
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp-proto-http>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
+    # Document ingestion (Scenario Bank Batch 3). Both pure-Python, no native/system deps.
+    "pypdf>=4.2",
+    "python-docx>=1.1",
+    "python-multipart>=0.0.9",  # FastAPI UploadFile form parsing
 ]
 
 [project.optional-dependencies]
