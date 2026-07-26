@@ -42,6 +42,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with maker() as session:
+        # The Venture registry is the source of truth for the venture field, so seed the base
+        # ventures before anything creates a Pack (Pack.ownerVenture → Venture.slug).
+        from src.services.venture.registry import seed_base_ventures
+
+        await seed_base_ventures(session)
         # Seed a small fixture set
         eng = Department(villageKey="Engineering", name="Engineering", totalAgents=2)
         rec = Department(villageKey="Recruitment", name="Recruitment", totalAgents=1)

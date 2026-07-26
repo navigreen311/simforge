@@ -20,6 +20,7 @@ from src.models.registry import LineageEdge, ObjectRegistryEntry
 from src.models.run import Run, TraceEvent
 from src.models.scorecard import Scorecard
 from src.models.training import TrainingProposal
+from src.models.venture import Venture
 from src.models.village_fingerprint import VillageFingerprint
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "ConstitutionalAmendment",
     "ObjectRegistryEntry",
     "LineageEdge",
+    "Venture",
 ]

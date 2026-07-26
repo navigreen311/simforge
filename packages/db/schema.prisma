@@ -62,12 +62,32 @@ model Department {
 // PACK & SCENARIO
 // ═══════════════════════════════════════════════════════════════
 
+model Venture {
+  id                     String   @id @default(cuid())
+  slug                   String   @unique // canonical id, e.g. "medlink-pro"
+  name                   String
+  description            String   @default("")
+  status                 String   @default("in_development") // active | in_development | archived
+  scenarioCode           String // scn.{scenarioCode}.{family}.{nnn}
+  defaultComplianceFlags String[]
+  internalForges         String[]
+  capabilities           String[]
+  createdBy              String   @default("system")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  packs Pack[]
+
+  @@index([status])
+}
+
 model Pack {
   id                    String    @id @default(cuid())
   packId                String    @unique // "pack.greenstone.v1"
   name                  String
   version               String
-  ownerVenture          String
+  ownerVenture          String // FK → Venture.slug (the source of truth for the venture field)
+  venture               Venture   @relation(fields: [ownerVenture], references: [slug])
   ownerHuman            String
   phiRequired           Boolean   @default(false)
   complianceFlags       String[]

@@ -36,7 +36,7 @@ from src.services.scenario_bank import (
     reject_draft,
 )
 from src.services.scenario_bank.documents import extract_document_text
-from src.services.scenario_bank.extraction import FAMILIES, PACKS, TIERS
+from src.services.scenario_bank.extraction import FAMILIES, TIERS
 from src.services.scenario_bank.promotion import edit_draft
 from src.services.scenario_bank.transcript import (
     TranscriptUnavailable,
@@ -51,6 +51,7 @@ from src.services.scenario_bank.web_search import (
     search_web,
     web_search_available,
 )
+from src.services.venture.registry import venture_slugs
 
 _EXCERPT_CHARS = 2000  # how much source text to retain as provenance on the draft
 
@@ -130,9 +131,10 @@ async def bank_counts(session: AsyncSession = Depends(get_session)) -> dict:
     response_model=VocabularyOut,
     dependencies=[Depends(require_role("viewer"))],
 )
-async def get_vocabulary() -> VocabularyOut:
-    """The fixed pack/family/tier vocabularies the authoring & extraction UI must use."""
-    return VocabularyOut(packs=list(PACKS), families=list(FAMILIES), tiers=list(TIERS))
+async def get_vocabulary(session: AsyncSession = Depends(get_session)) -> VocabularyOut:
+    """The pack/family/tier vocabularies. Packs come from the Venture Registry (source of truth)."""
+    packs = await venture_slugs(session)
+    return VocabularyOut(packs=packs, families=list(FAMILIES), tiers=list(TIERS))
 
 
 @router.get(
@@ -190,9 +192,11 @@ async def get_bank_scenario(
 @router.post(
     "/extract", response_model=ExtractResponse, dependencies=[Depends(require_role("pack_owner"))]
 )
-async def extract(body: ExtractRequest) -> ExtractResponse:
+async def extract(
+    body: ExtractRequest, session: AsyncSession = Depends(get_session)
+) -> ExtractResponse:
     """Propose a candidate scenario from raw text. Saves NOTHING — the caller reviews it first."""
-    result = await extract_scenario(body.source_text)
+    result = await extract_scenario(body.source_text, tuple(await venture_slugs(session)))
     excerpt = body.source_text.strip()[:_EXCERPT_CHARS]
     if not result.ok:
         return ExtractResponse(ok=False, error=result.error)
@@ -210,7 +214,10 @@ async def extract(body: ExtractRequest) -> ExtractResponse:
     response_model=ExtractResponse,
     dependencies=[Depends(require_role("pack_owner"))],
 )
-async def extract_from_document(file: UploadFile = File(...)) -> ExtractResponse:  # noqa: B008
+async def extract_from_document(
+    file: UploadFile = File(...),  # noqa: B008
+    session: AsyncSession = Depends(get_session),
+) -> ExtractResponse:
     """Upload a PDF/DOCX/TXT/MD → extract text → propose a candidate. Saves NOTHING.
 
     Two honest-failure gates before any LLM call: an unreadable/empty/oversized/scanned file returns
@@ -220,7 +227,7 @@ async def extract_from_document(file: UploadFile = File(...)) -> ExtractResponse
     doc = extract_document_text(file.filename or "upload", data)
     if not doc.ok:
         return ExtractResponse(ok=False, error=doc.error)
-    result = await extract_scenario(doc.text)
+    result = await extract_scenario(doc.text, tuple(await venture_slugs(session)))
     excerpt = doc.text.strip()[:_EXCERPT_CHARS]
     if not result.ok:
         return ExtractResponse(ok=False, error=result.error, source_excerpt=excerpt)

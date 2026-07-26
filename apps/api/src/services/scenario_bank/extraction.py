@@ -21,19 +21,22 @@ from dataclasses import dataclass
 
 from src.services.agent_runtime.llm_client import get_agent_llm
 
-# The existing vocabularies the model MUST map into (no parallel taxonomy).
-PACKS = ("greenstone", "medlink", "caregrid")
+# Family/tier are fixed taxonomies. The pack (venture) vocabulary is NOT hardcoded here — it is the
+# Venture Registry, passed in by the caller. DEFAULT_PACKS is only a fallback for direct/test calls.
 FAMILIES = ("crisis", "audit", "src", "buy", "place", "cred")
 TIERS = ("foundational", "intermediate", "advanced_crisis")
+DEFAULT_PACKS = ("greenstone", "medlink-pro", "caregrid")
 
 _MAX_SOURCE_CHARS = 12_000  # one-pass budget; callers chunk larger inputs
 
-_SYSTEM = f"""You extract a single certification-test SCENARIO from the SOURCE TEXT below.
+
+def _build_system(packs: tuple[str, ...]) -> str:
+    return f"""You extract a single certification-test SCENARIO from the SOURCE TEXT below.
 
 Rules:
 - Do NOT invent facts that are not present in the source. Paraphrase; do not copy long passages.
 - Map to these EXACT vocabularies — copy one value verbatim, never combine or invent one:
-    pack   — EXACTLY one of {list(PACKS)}
+    pack   — EXACTLY one of {list(packs)}
     family — EXACTLY one of {list(FAMILIES)}
     tier   — EXACTLY one of {list(TIERS)} (do NOT write "intermediate_crisis" or any blend)
   If you are unsure which category fits, use null for that field rather than guessing.
@@ -74,8 +77,23 @@ def _coerce(value: str | None, allowed: tuple[str, ...]) -> str | None:
     return v if v in allowed else None
 
 
-async def extract_scenario(source_text: str) -> ExtractionResult:
-    """Run the extraction. Returns a candidate dict (never saved here) or a plain error."""
+def _coerce_pack(value: str | None, allowed: tuple[str, ...]) -> str | None:
+    """Match a venture slug case-insensitively. Preserves hyphens (e.g. 'medlink-pro')."""
+    if not value:
+        return None
+    v = value.strip().lower()
+    return v if v in allowed else None
+
+
+async def extract_scenario(
+    source_text: str, allowed_packs: tuple[str, ...] | None = None
+) -> ExtractionResult:
+    """Run the extraction. Returns a candidate dict (never saved here) or a plain error.
+
+    `allowed_packs` is the venture vocabulary from the registry; the caller passes the current
+    venture slugs. Falls back to DEFAULT_PACKS for direct/test calls.
+    """
+    packs = tuple(allowed_packs) if allowed_packs else DEFAULT_PACKS
     text = (source_text or "").strip()
     if not text:
         return ExtractionResult(ok=False, error="Source text is empty — nothing to extract.")
@@ -90,7 +108,7 @@ async def extract_scenario(source_text: str) -> ExtractionResult:
 
     provider = get_agent_llm()
     resp = await provider.complete(
-        system=_SYSTEM,
+        system=_build_system(packs),
         messages=[{"role": "world", "content": f"SOURCE TEXT:\n{text}"}],
         temperature=0.0,
         max_tokens=1200,
@@ -103,10 +121,12 @@ async def extract_scenario(source_text: str) -> ExtractionResult:
             error="The model did not return valid JSON — no scenario extracted. (In dev the stub "
             "provider cannot extract; configure a real LLM provider.)",
         )
-    return validate_extraction(parsed)
+    return validate_extraction(parsed, packs)
 
 
-def validate_extraction(parsed: dict) -> ExtractionResult:
+def validate_extraction(
+    parsed: dict, allowed_packs: tuple[str, ...] | None = None
+) -> ExtractionResult:
     """Validate a parsed model response into a candidate (or an honest error). No LLM, no I/O.
 
     Title + situation are the SUBSTANTIVE content and must be grounded in the source — if either
@@ -128,7 +148,8 @@ def validate_extraction(parsed: dict) -> ExtractionResult:
             "discarded rather than guessed.",
         )
 
-    pack = _coerce(parsed.get("pack"), PACKS)
+    packs = tuple(allowed_packs) if allowed_packs else DEFAULT_PACKS
+    pack = _coerce_pack(parsed.get("pack"), packs)
     family = _coerce(parsed.get("family"), FAMILIES)
     tier = _coerce(parsed.get("tier"), TIERS)
     unmapped = [n for n, v in (("pack", pack), ("family", family), ("tier", tier)) if v is None]

@@ -59,6 +59,7 @@ export function NewPackWizard({ base }: { base?: PackDetail }) {
   // scenarios
   const [picked, setPicked] = useState<Picked[]>([]);
   const [scenarioQ, setScenarioQ] = useState("");
+  const [includeOtherVentures, setIncludeOtherVentures] = useState(false);
   // submit
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,8 +94,12 @@ export function NewPackWizard({ base }: { base?: PackDetail }) {
     setFlags((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
   }
 
+  const ventureSlug = slug(venture);
+  // Committed scenarios tagged to the selected venture (the pack-create scope).
+  const ventureCommitted = committed.filter((c) => c.scenarioId && c.pack === ventureSlug);
   const pickedIds = new Set(picked.map((p) => p.s.scenarioId));
-  const available = committed.filter(
+  const pool = includeOtherVentures ? committed : ventureCommitted;
+  const available = pool.filter(
     (c) =>
       c.scenarioId &&
       !pickedIds.has(c.scenarioId) &&
@@ -276,9 +281,21 @@ export function NewPackWizard({ base }: { base?: PackDetail }) {
       {step === 3 && (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-ink-300">
-            Add scenarios from the Scenario Bank. Only <strong>committed</strong> scenarios can enter
-            a Pack (reviewed material only).
+            Add committed scenarios tagged to <strong>{ventureSlug}</strong>. Only{" "}
+            <strong>committed</strong> scenarios can enter a Pack (reviewed material only).
           </p>
+
+          {ventureCommitted.length === 0 && (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+              <strong>{ventureSlug} has no committed scenarios yet.</strong> A pack can&apos;t be
+              empty. Upload a spec to this venture or author scenarios in the{" "}
+              <a href="/dashboard/scenario-bank/new" className="underline">
+                Scenario Bank
+              </a>{" "}
+              and commit them first
+              {committed.length > 0 && ", or include committed scenarios from other ventures below"}.
+            </div>
+          )}
 
           {picked.length > 0 && (
             <div className="rounded-lg border border-ink-500 bg-ink-800 p-3">
@@ -349,16 +366,28 @@ export function NewPackWizard({ base }: { base?: PackDetail }) {
             </div>
           )}
 
-          <input
-            className={input}
-            placeholder="Search committed scenarios…"
-            value={scenarioQ}
-            onChange={(e) => setScenarioQ(e.target.value)}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              className={input}
+              placeholder="Search committed scenarios…"
+              value={scenarioQ}
+              onChange={(e) => setScenarioQ(e.target.value)}
+            />
+            <label className="flex shrink-0 items-center gap-1 text-xs text-ink-400">
+              <input
+                type="checkbox"
+                checked={includeOtherVentures}
+                onChange={(e) => setIncludeOtherVentures(e.target.checked)}
+              />
+              include other ventures
+            </label>
+          </div>
           <div className="max-h-64 overflow-auto rounded-lg border border-ink-500">
             {available.length === 0 ? (
               <div className="p-3 text-xs text-ink-500">
-                No more committed scenarios to add. Commit scenarios in the Scenario Bank first.
+                {includeOtherVentures
+                  ? "No more committed scenarios to add."
+                  : "No committed scenarios for this venture — tick “include other ventures”, or commit scenarios in the Scenario Bank first."}
               </div>
             ) : (
               available.map((c) => (

@@ -43,6 +43,7 @@ from src.routers import (
     scenario_bank,
     scenarios,
     training,
+    ventures,
 )
 from src.telemetry.logging import configure_logging
 from src.telemetry.metrics import configure_metrics
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
     app.include_router(departments.router, prefix="/api/departments", tags=["departments"])
     app.include_router(packs.router, prefix="/api/packs", tags=["packs"])
+    app.include_router(ventures.router, prefix="/api/ventures", tags=["ventures"])
     app.include_router(scenarios.router, prefix="/api/scenarios", tags=["scenarios"])
     app.include_router(runs.router, prefix="/api/runs", tags=["runs"])
     app.include_router(gaps.router, prefix="/api/gaps", tags=["gaps"])

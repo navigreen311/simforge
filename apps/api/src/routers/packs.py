@@ -32,30 +32,11 @@ from src.services.jurisdiction.registry import JURISDICTIONS
 from src.services.packs.authoring import AuthoringError, create_pack, new_version
 from src.services.packs.flag_catalog import LEGEND, describe_flag
 from src.services.packs.ingestion import IngestionError, ingest_pack
+from src.services.venture.registry import list_ventures
 
 router = APIRouter()
 
 _TIERS = ("foundational", "intermediate", "advanced_crisis")
-
-# Per-venture pre-suggestions for the New-Pack wizard. Each set is coverage-satisfying (passes the
-# jurisdiction validator) so the operator starts from a valid baseline and adjusts from there.
-_VENTURE_SUGGESTIONS: dict[str, dict] = {
-    "medlink-pro": {
-        "phiRequired": True,
-        "complianceFlags": ["hipaa", "hcqc_nv", "oig_sam", "i9"],
-        "rubricProfile": "medlink.default",
-    },
-    "caregrid": {
-        "phiRequired": True,
-        "complianceFlags": ["hipaa", "cdph_ca", "ccpa", "oig_sam", "i9"],
-        "rubricProfile": "caregrid.default",
-    },
-    "greenstone": {
-        "phiRequired": False,
-        "complianceFlags": ["tcpa", "state_wholesaling"],
-        "rubricProfile": "greenstone.default",
-    },
-}
 
 
 async def _get_pack_or_404(session: AsyncSession, pack_id: str) -> Pack:
@@ -124,23 +105,40 @@ async def flag_catalog(session: AsyncSession = Depends(get_session)) -> FlagCata
     dependencies=[Depends(require_role("viewer"))],
 )
 async def authoring_options(session: AsyncSession = Depends(get_session)) -> AuthoringOptions:
-    """Vocabularies the New-Pack wizard needs: ventures, rubrics, flags, venture suggestions."""
+    """Vocabularies the New-Pack wizard needs — all derived from the Venture Registry.
+
+    Venture suggestions come from each Venture's defaultComplianceFlags (source of truth); PHI is
+    derived from the flag catalog; the rubric hint reuses the venture's existing pack rubric or
+    `{slug}.default`. No hardcoded venture list.
+    """
+    ventures = await list_ventures(session)
     packs = (await session.execute(select(Pack))).scalars().all()
-    ventures = sorted({p.ownerVenture for p in packs} | set(_VENTURE_SUGGESTIONS))
-    suggested_rubrics = {s["rubricProfile"] for s in _VENTURE_SUGGESTIONS.values()}
-    rubrics = sorted({p.rubricProfile for p in packs} | suggested_rubrics)
-    # Flag vocabulary pulled from the Jurisdiction engine (+ the extra flags catalogued for packs).
+    pack_rubric = {p.ownerVenture: p.rubricProfile for p in packs}
+
+    suggestions: dict[str, dict] = {}
+    for v in ventures:
+        phi = any(describe_flag(f)["phi"] for f in v.defaultComplianceFlags)
+        suggestions[v.slug] = {
+            "phiRequired": phi,
+            "complianceFlags": list(v.defaultComplianceFlags),
+            "rubricProfile": pack_rubric.get(v.slug, f"{v.slug}.default"),
+        }
+
+    # Flag vocabulary pulled from the Jurisdiction engine (+ each venture's declared default flags).
     flags: set[str] = set()
     for j in JURISDICTIONS.values():
         flags.update(j.required_flags)
         flags.update(j.phi_flags)
-    for s in _VENTURE_SUGGESTIONS.values():
-        flags.update(s["complianceFlags"])
+    for v in ventures:
+        flags.update(v.defaultComplianceFlags)
+
+    suggested_rubrics = {s["rubricProfile"] for s in suggestions.values()}
+    rubrics = sorted({p.rubricProfile for p in packs} | suggested_rubrics)
     return AuthoringOptions(
-        ventures=ventures,
+        ventures=[v.slug for v in ventures],
         rubrics=rubrics,
         jurisdiction_flags=sorted(flags),
-        venture_suggestions=_VENTURE_SUGGESTIONS,
+        venture_suggestions=suggestions,
     )
 
 
