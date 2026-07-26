@@ -32,9 +32,10 @@ function candidateToValues(r: ExtractResponse): Partial<ScenarioFormValues> | un
   if (!r.scenario) return undefined;
   return {
     title: r.scenario.title,
-    pack: r.scenario.pack,
-    family: r.scenario.family,
-    tier: r.scenario.tier,
+    // null (unmapped) → undefined so the form falls back to its default; the human then confirms.
+    pack: r.scenario.pack ?? undefined,
+    family: r.scenario.family ?? undefined,
+    tier: r.scenario.tier ?? undefined,
     situation: r.scenario.situation,
     expectedBehaviors: r.scenario.expected_behaviors,
     adversarialTactics: r.scenario.adversarial_tactics,
@@ -167,6 +168,7 @@ function PasteTab({ vocab }: { vocab: BankVocabulary }) {
       {result?.ok && values && (
         <ReviewBlock
           confidence={result.confidence}
+          unmapped={result.scenario?.unmapped_fields}
           form={
             <ScenarioForm
               vocab={vocab}
@@ -239,6 +241,7 @@ function DocumentTab({ vocab }: { vocab: BankVocabulary }) {
       {result?.ok && values && (
         <ReviewBlock
           confidence={result.confidence}
+          unmapped={result.scenario?.unmapped_fields}
           form={
             <ScenarioForm
               vocab={vocab}
@@ -417,6 +420,7 @@ function WebSearchTab({ vocab }: { vocab: BankVocabulary }) {
           {extract?.ok && values && (
             <ReviewBlock
               confidence={extract.confidence}
+              unmapped={extract.scenario?.unmapped_fields}
               form={
                 <ScenarioForm
                   vocab={vocab}
@@ -450,7 +454,15 @@ function ExtractError({ error }: { error: string | null }) {
   );
 }
 
-function ReviewBlock({ confidence, form }: { confidence: number | null; form: React.ReactNode }) {
+function ReviewBlock({
+  confidence,
+  unmapped,
+  form,
+}: {
+  confidence: number | null;
+  unmapped?: string[];
+  form: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-ink-500 bg-ink-800 p-4">
       <div className="mb-3 flex items-center gap-2 text-xs">
@@ -466,6 +478,12 @@ function ReviewBlock({ confidence, form }: { confidence: number | null; form: Re
           </span>
         )}
       </div>
+      {unmapped && unmapped.length > 0 && (
+        <div className="mb-3 rounded border border-warning/40 bg-warning/10 p-2 text-xs text-warning">
+          The model couldn&apos;t confidently map: <strong>{unmapped.join(", ")}</strong>. Please
+          pick {unmapped.length > 1 ? "these" : "this"} below before saving.
+        </div>
+      )}
       {form}
     </div>
   );

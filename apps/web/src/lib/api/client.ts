@@ -451,16 +451,19 @@ export interface BankQuery {
 }
 
 // The editable candidate an extraction proposes (pre-fills the review form). Never saved as-is.
+// pack/family/tier are null when the model couldn't map them to the vocab — the human then picks
+// them (listed in unmapped_fields). Title/situation are always grounded in the source.
 export interface ExtractedScenario {
   title: string;
-  pack: string;
-  family: string;
-  tier: string;
+  pack: string | null;
+  family: string | null;
+  tier: string | null;
   situation: string;
   expected_behaviors: string[];
   adversarial_tactics: string[];
   jurisdiction_flags: string[];
   confidence: number | null;
+  unmapped_fields: string[];
 }
 
 export interface ExtractResponse {

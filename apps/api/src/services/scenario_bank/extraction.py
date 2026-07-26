@@ -32,10 +32,11 @@ _SYSTEM = f"""You extract a single certification-test SCENARIO from the SOURCE T
 
 Rules:
 - Do NOT invent facts that are not present in the source. Paraphrase; do not copy long passages.
-- Map to these EXACT vocabularies (choose the closest):
-    pack   ∈ {list(PACKS)}
-    family ∈ {list(FAMILIES)}
-    tier   ∈ {list(TIERS)}
+- Map to these EXACT vocabularies — copy one value verbatim, never combine or invent one:
+    pack   — EXACTLY one of {list(PACKS)}
+    family — EXACTLY one of {list(FAMILIES)}
+    tier   — EXACTLY one of {list(TIERS)} (do NOT write "intermediate_crisis" or any blend)
+  If you are unsure which category fits, use null for that field rather than guessing.
 - If the source contains no usable scenario, return {{"found": false, "reason": "<why>"}}.
 - Otherwise return ONLY this JSON (no prose, no code fences):
   {{"found": true, "confidence": <0..1>, "title": "<short plain title>",
@@ -102,22 +103,35 @@ async def extract_scenario(source_text: str) -> ExtractionResult:
             error="The model did not return valid JSON — no scenario extracted. (In dev the stub "
             "provider cannot extract; configure a real LLM provider.)",
         )
+    return validate_extraction(parsed)
+
+
+def validate_extraction(parsed: dict) -> ExtractionResult:
+    """Validate a parsed model response into a candidate (or an honest error). No LLM, no I/O.
+
+    Title + situation are the SUBSTANTIVE content and must be grounded in the source — if either
+    is missing we discard rather than guess. Pack/family/tier are categories the human confirms in
+    the review form, so an unmappable one is left null (flagged in `unmapped_fields`) rather than
+    sinking the whole extraction. Leaving a field for the human to pick is not fabrication.
+    """
     if not parsed.get("found"):
         return ExtractionResult(
             ok=False, error=f"No scenario found in the source: {parsed.get('reason', 'no reason')}"
         )
 
+    title = (parsed.get("title") or "").strip()
+    situation = (parsed.get("situation") or "").strip()
+    if not (title and situation):
+        return ExtractionResult(
+            ok=False,
+            error="The extraction had no usable title or situation (the substantive content) — "
+            "discarded rather than guessed.",
+        )
+
     pack = _coerce(parsed.get("pack"), PACKS)
     family = _coerce(parsed.get("family"), FAMILIES)
     tier = _coerce(parsed.get("tier"), TIERS)
-    title = (parsed.get("title") or "").strip()
-    situation = (parsed.get("situation") or "").strip()
-    if not (title and situation and pack and family and tier):
-        return ExtractionResult(
-            ok=False,
-            error="The extraction was missing required fields (title/situation/pack/family/tier) "
-            "or used an unknown pack/family/tier — discarded rather than guessed.",
-        )
+    unmapped = [n for n, v in (("pack", pack), ("family", family), ("tier", tier)) if v is None]
 
     def _list(key: str) -> list[str]:
         v = parsed.get(key)
@@ -138,5 +152,7 @@ async def extract_scenario(source_text: str) -> ExtractionResult:
             "adversarial_tactics": _list("adversarial_tactics"),
             "jurisdiction_flags": _list("jurisdiction_flags"),
             "confidence": confidence,
+            # Category fields the model couldn't map to the vocab — the human must pick these.
+            "unmapped_fields": unmapped,
         },
     )
