@@ -215,12 +215,21 @@ export const api = {
 };
 
 /** Client-side mutation: execute a scenario run. Returns the completed run summary. */
+export interface SummaryPlain {
+  code: string | null;
+  what: string;
+  why: string;
+  action: string;
+}
+
 export interface SoftwareGap {
   ticketId: string;
   forge: string;
   module: string;
   severity: string;
   summary: string;
+  summary_technical: string;
+  summary_plain: SummaryPlain | null;
   detail: string;
   proposedFix: string | null;
   status: string;

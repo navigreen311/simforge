@@ -12,14 +12,24 @@ from src.models.gap import SoftwareGap, VillageOSGap
 from src.schemas.gap import (
     SoftwareGapList,
     SoftwareGapOut,
+    SummaryPlain,
     UpdateGapStatusRequest,
     VillageOSGapList,
     VillageOSGapOut,
 )
+from src.services.reporter.fault_catalog import describe_gap
 
 router = APIRouter()
 
 # Severity strings sort P0 < P1 < P2 lexicographically, so ORDER BY severity ranks worst-first.
+
+
+def _software_gap_out(gap: SoftwareGap) -> SoftwareGapOut:
+    """Serialize a gap, deriving the plain-language summary from the fault catalog (not stored)."""
+    out = SoftwareGapOut.model_validate(gap)
+    out.summary_technical = gap.summary
+    out.summary_plain = SummaryPlain(**describe_gap(gap.forge, gap.module, gap.summary))
+    return out
 
 
 @router.get(
@@ -51,7 +61,7 @@ async def list_software_gaps(
         .scalars()
         .all()
     )
-    return SoftwareGapList(items=[SoftwareGapOut.model_validate(r) for r in rows], total=total)
+    return SoftwareGapList(items=[_software_gap_out(r) for r in rows], total=total)
 
 
 @router.get(
@@ -94,7 +104,7 @@ async def get_software_gap(
     ).scalar_one_or_none()
     if gap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gap not found")
-    return SoftwareGapOut.model_validate(gap)
+    return _software_gap_out(gap)
 
 
 @router.post(
@@ -112,7 +122,7 @@ async def update_software_gap_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gap not found")
     gap.status = body.status
     await session.commit()
-    return SoftwareGapOut.model_validate(gap)
+    return _software_gap_out(gap)
 
 
 @router.get(
@@ -135,7 +145,7 @@ async def top_10_forge_gaps(
         .scalars()
         .all()
     )
-    return SoftwareGapList(items=[SoftwareGapOut.model_validate(r) for r in rows], total=len(rows))
+    return SoftwareGapList(items=[_software_gap_out(r) for r in rows], total=len(rows))
 
 
 @router.get(
