@@ -21,6 +21,9 @@ def _hermetic_providers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "llm_provider", "stub")
     monkeypatch.setattr(settings, "web_search_provider", "stub")
     monkeypatch.setattr(settings, "tavily_api_key", "")
+    monkeypatch.setattr(settings, "transcript_youtube_enabled", False)
+    monkeypatch.setattr(settings, "transcript_provider", "stub")
+    monkeypatch.setattr(settings, "openai_api_key", "")
 
 
 async def _seed(session: AsyncSession) -> None:
@@ -364,4 +367,47 @@ async def test_web_search_endpoint_honest_when_unconfigured(client: AsyncClient)
     body = r.json()
     assert body["available"] is False
     assert body["results"] == []
+    assert "not configured" in body["error"].lower()
+
+
+# ── Batch 6: video / youtube transcript ingestion ───────────────────────────
+
+
+def test_youtube_video_id_parsing() -> None:
+    from src.services.scenario_bank.transcript import youtube_video_id
+
+    assert youtube_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert youtube_video_id("https://youtu.be/dQw4w9WgXcQ?t=42") == "dQw4w9WgXcQ"
+    assert youtube_video_id("https://www.youtube.com/shorts/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert youtube_video_id("dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert youtube_video_id("https://example.com/not-youtube") is None
+
+
+async def test_transcript_status_reports_not_configured(client: AsyncClient) -> None:
+    s = (await client.get("/api/scenario-bank/transcript/status")).json()
+    assert s["youtube_available"] is False
+    assert s["file_available"] is False
+
+
+async def test_youtube_transcript_honest_when_disabled(client: AsyncClient) -> None:
+    # Disabled → available=false, honest message, no fabricated transcript, no network hit.
+    r = await client.post(
+        "/api/scenario-bank/transcript/youtube",
+        json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert body["text"] == ""
+    assert "not enabled" in body["error"].lower()
+
+
+async def test_audio_transcription_honest_when_unconfigured(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/scenario-bank/transcript/file",
+        files={"file": ("clip.mp3", b"fake audio bytes", "audio/mpeg")},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
     assert "not configured" in body["error"].lower()

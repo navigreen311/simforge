@@ -29,6 +29,9 @@ dependencies = [
     "pypdf>=4.2",
     "python-docx>=1.1",
     "python-multipart>=0.0.9",  # FastAPI UploadFile form parsing
+    # YouTube caption ingestion (Scenario Bank Batch 6). Pure-Python; audio transcription uses
+    # raw HTTPS (httpx) with no vendor SDK, so no openai dependency is added.
+    "youtube-transcript-api>=1.2,<2",
 ]
 
 [project.optional-dependencies]
