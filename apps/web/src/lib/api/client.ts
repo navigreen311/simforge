@@ -184,12 +184,37 @@ export interface VentureCreateRequest {
   capabilities?: string[];
 }
 
+export interface EnrichmentProposal {
+  description: string;
+  complianceFlags: string[];
+  internalForges: string[];
+  capabilities: string[];
+  confidence: number | null;
+}
+
+export interface ProducedScenario {
+  publicId: string;
+  title: string;
+  tier: string;
+}
+
+export interface SpecUploadResponse {
+  ok: boolean;
+  error: string | null;
+  specDocumentId: string | null;
+  filename: string | null;
+  enrichment: EnrichmentProposal | null;
+  produced_scenarios: ProducedScenario[];
+}
+
 export const ventures = {
   list: () => apiGet<{ items: Venture[]; total: number }>("/api/ventures/"),
   detail: (slug: string) => apiGet<VentureDetail>(`/api/ventures/${slug}`),
   create: (body: VentureCreateRequest) => apiPost<Venture>("/api/ventures/", body),
   update: (slug: string, body: Partial<VentureCreateRequest>) =>
     apiPatch<Venture>(`/api/ventures/${slug}`, body),
+  uploadSpec: (slug: string, file: File) =>
+    apiPostFile<SpecUploadResponse>(`/api/ventures/${slug}/specs`, file),
 };
 
 export interface RunSummary {
