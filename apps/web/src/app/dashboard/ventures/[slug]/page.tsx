@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { SpecUpload } from "@/components/ventures/SpecUpload";
 import { PageMeta } from "@/components/ui/PageMeta";
 import { api, ventures as venturesApi, type FlagCatalog, type VentureDetail } from "@/lib/api/client";
 
@@ -124,6 +125,10 @@ export default async function VentureDetailPage({ params }: { params: { slug: st
       </section>
 
       <section className="mt-8">
+        <SpecUpload venture={v} />
+      </section>
+
+      <section className="mt-8">
         <h2 className="mb-2 text-sm font-semibold text-ink-200">Spec documents</h2>
         {v.specDocuments.length ? (
           <ul className="flex flex-col gap-1 text-sm text-ink-200">
@@ -136,7 +141,7 @@ export default async function VentureDetailPage({ params }: { params: { slug: st
         ) : (
           <p className="text-xs text-ink-500">
             No spec documents uploaded yet. Uploading a spec proposes venture metadata and draft
-            scenarios for human review (coming in the spec-upload step).
+            scenarios for human review.
           </p>
         )}
       </section>

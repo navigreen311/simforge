@@ -73,3 +73,33 @@ class VentureUpdateRequest(BaseModel):
     defaultComplianceFlags: list[str] | None = None
     internalForges: list[str] | None = None
     capabilities: list[str] | None = None
+
+
+# ── Part B: spec upload ──────────────────────────────────────────────────────
+
+
+class EnrichmentProposalOut(BaseModel):
+    """Pass-1 proposed venture metadata (a diff for human review — never auto-applied)."""
+
+    description: str
+    complianceFlags: list[str]
+    internalForges: list[str]
+    capabilities: list[str]
+    confidence: float | None = None
+
+
+class ProducedScenarioOut(BaseModel):
+    publicId: str
+    title: str
+    tier: str
+
+
+class SpecUploadResponse(BaseModel):
+    """What a spec upload produced. Both passes are proposals/drafts; nothing is applied."""
+
+    ok: bool
+    error: str | None = None
+    specDocumentId: str | None = None
+    filename: str | None = None
+    enrichment: EnrichmentProposalOut | None = None  # review as a diff, then apply via PATCH
+    produced_scenarios: list[ProducedScenarioOut] = []  # AI-drafts routed to the bank (unreviewed)

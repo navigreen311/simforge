@@ -73,8 +73,14 @@ async def create_draft(
     source_type: str,
     source_ref: str | None = None,
     source_excerpt: str | None = None,
+    reviewed: bool = True,
 ) -> BankScenario:
-    """Save a human-approved DRAFT (never committed). reviewedBy = the human who saved it."""
+    """Save a DRAFT (never committed).
+
+    reviewed=True (default): a human saved/approved it → reviewedBy is set. reviewed=False: an
+    unreviewed AI draft awaiting a human (e.g. produced by a spec upload) → reviewedBy stays null,
+    so it shows in the review queue until a human approves and commits it.
+    """
     now = utcnow()
     draft = BankScenario(
         publicId=f"draft_{ULID()}",
@@ -93,8 +99,8 @@ async def create_draft(
         sourceRef=source_ref,
         sourceExcerpt=source_excerpt,
         createdBy=created_by,
-        reviewedBy=created_by,  # a human saved/approved this draft
-        reviewedAt=now,
+        reviewedBy=created_by if reviewed else None,
+        reviewedAt=now if reviewed else None,
         version=1,
     )
     session.add(draft)

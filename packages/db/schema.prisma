@@ -77,8 +77,24 @@ model Venture {
   updatedAt              DateTime @updatedAt
 
   packs Pack[]
+  specDocuments SpecDocument[]
 
   @@index([status])
+}
+
+model SpecDocument {
+  id                  String   @id @default(cuid())
+  ventureSlug         String
+  venture             Venture  @relation(fields: [ventureSlug], references: [slug])
+  filename            String
+  extractedText       String   @default("")
+  enrichmentProposal  Json?
+  producedScenarioIds String[]
+  uploadedBy          String   @default("unknown")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([ventureSlug])
 }
 
 model Pack {

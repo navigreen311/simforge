@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
+
+
+@pytest.fixture(autouse=True)
+def _stub_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.config import settings
+
+    monkeypatch.setattr(settings, "llm_provider", "stub")
 
 
 async def test_registry_is_seeded(client: AsyncClient) -> None:
@@ -60,3 +69,67 @@ async def test_update_venture_status(client: AsyncClient) -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "active"
     assert r.json()["description"] == "Now live."
+
+
+# ── Part B: spec upload ──────────────────────────────────────────────────────
+
+
+async def test_upload_spec_creates_document(client: AsyncClient) -> None:
+    body = b"Argus is a physical-security venture handling access control and incident triage " * 3
+    r = await client.post(
+        "/api/ventures/argus/specs",
+        files={"file": ("argus-spec.txt", body, "text/plain")},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["ok"] is True
+    assert data["specDocumentId"]
+    # On the dev stub LLM the two passes fail honestly (no fabricated proposal/scenario), but the
+    # spec document itself is stored for provenance.
+    detail = (await client.get("/api/ventures/argus")).json()
+    assert len(detail["specDocuments"]) == 1
+    assert detail["specDocuments"][0]["filename"] == "argus-spec.txt"
+
+
+async def test_upload_spec_unreadable_creates_nothing(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/ventures/argus/specs",
+        files={"file": ("scan.png", b"\x89PNG binary", "image/png")},
+    )
+    assert r.json()["ok"] is False
+    assert "Unsupported" in r.json()["error"]
+    detail = (await client.get("/api/ventures/argus")).json()
+    assert detail["specDocuments"] == []  # nothing stored
+
+
+async def test_upload_spec_venture_404(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/ventures/nope/specs", files={"file": ("x.txt", b"hello world " * 10, "text/plain")}
+    )
+    assert r.status_code == 404
+
+
+async def test_spec_scenarios_land_as_unreviewed_ai_drafts(db_session: AsyncSession) -> None:
+    # A spec-produced scenario is an UNREVIEWED AI draft (reviewedBy null) in the review queue —
+    # it does not auto-commit and does not enter a pack.
+    from src.services.scenario_bank.promotion import create_draft
+
+    draft = await create_draft(
+        db_session,
+        title="Access granted without an NDA",
+        pack="argus",
+        family="crisis",
+        tier="foundational",
+        situation="A vendor is granted access before the NDA is signed.",
+        expected_behaviors=["require the NDA first"],
+        adversarial_tactics=[],
+        jurisdiction_flags=[],
+        created_by="dev-ivan",
+        ai_drafted=True,
+        source_type="document",
+        reviewed=False,
+    )
+    assert draft.status == "draft"
+    assert draft.aiDrafted is True
+    assert draft.reviewedBy is None  # unreviewed — awaits a human
+    assert draft.scenarioId is None  # not committed, no scn.* id, not in any pack

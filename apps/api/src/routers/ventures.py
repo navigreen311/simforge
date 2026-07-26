@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +13,13 @@ from src.db import get_session
 from src.deps import require_role
 from src.models.bank_scenario import BankScenario
 from src.models.pack import Pack
+from src.models.spec_document import SpecDocument
 from src.models.venture import VENTURE_STATUSES, Venture
 from src.schemas.venture import (
+    EnrichmentProposalOut,
+    ProducedScenarioOut,
+    SpecDocumentRef,
+    SpecUploadResponse,
     VentureCreateRequest,
     VentureDetail,
     VentureList,
@@ -22,10 +27,27 @@ from src.schemas.venture import (
     VenturePackRef,
     VentureUpdateRequest,
 )
+from src.services.jurisdiction.registry import JURISDICTIONS
+from src.services.packs.flag_catalog import FLAG_CATALOG
+from src.services.scenario_bank.documents import extract_document_text
+from src.services.scenario_bank.extraction import extract_scenario
+from src.services.scenario_bank.promotion import create_draft
+from src.services.venture.enrichment import extract_venture_enrichment
+from src.services.venture.registry import venture_slugs
 
 router = APIRouter()
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_EXCERPT_CHARS = 2000
+
+
+def _flag_vocabulary(venture: Venture) -> list[str]:
+    """Flags Pass-1 may propose — Jurisdiction engine vocab + catalog + the venture's current."""
+    flags: set[str] = set(FLAG_CATALOG) | set(venture.defaultComplianceFlags)
+    for j in JURISDICTIONS.values():
+        flags.update(j.required_flags)
+        flags.update(j.phi_flags)
+    return sorted(flags)
 
 
 async def _pack_counts(session: AsyncSession) -> dict[str, int]:
@@ -98,6 +120,18 @@ async def get_venture_endpoint(
     )
     per_pack = {pid: n for pid, n in pack_scen}
 
+    specs = (
+        (
+            await session.execute(
+                select(SpecDocument)
+                .where(SpecDocument.ventureSlug == slug)
+                .order_by(SpecDocument.createdAt.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     base = _to_out(venture, len(packs), scen_counts.get(slug, 0))
     return VentureDetail(
         **base.model_dump(),
@@ -110,6 +144,99 @@ async def get_venture_endpoint(
             )
             for p in packs
         ],
+        specDocuments=[
+            SpecDocumentRef(
+                id=d.id,
+                filename=d.filename,
+                uploadedAt=d.createdAt,
+                proposalsCount=1 if d.enrichmentProposal else 0,
+                scenariosCount=len(d.producedScenarioIds),
+            )
+            for d in specs
+        ],
+    )
+
+
+@router.post(
+    "/{slug}/specs",
+    response_model=SpecUploadResponse,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def upload_spec(
+    slug: str,
+    file: UploadFile = File(...),  # noqa: B008
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> SpecUploadResponse:
+    """Upload a venture spec → propose metadata (Pass 1) + AI-draft scenarios (Pass 2).
+
+    Nothing is applied or committed. The enrichment is a diff for the operator to accept via PATCH;
+    the scenarios land as unreviewed AI drafts in the Scenario Bank (two-stage promotion). An
+    unreadable/empty spec produces nothing, honestly.
+    """
+    venture = (
+        await session.execute(select(Venture).where(Venture.slug == slug))
+    ).scalar_one_or_none()
+    if venture is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Venture not found")
+
+    data = await file.read()
+    doc = extract_document_text(file.filename or "spec", data)
+    if not doc.ok:
+        return SpecUploadResponse(ok=False, error=doc.error, filename=file.filename)
+
+    # Pass 1 — venture enrichment proposal (reviewed before applied).
+    enrich = await extract_venture_enrichment(doc.text, _flag_vocabulary(venture))
+
+    # Pass 2 — a candidate scenario routed to the bank as an UNREVIEWED AI draft, tagged to this
+    # venture with document provenance. (One per spec today; multi-scenario splitting is deferred.)
+    packs = tuple(await venture_slugs(session))
+    scen = await extract_scenario(doc.text, packs)
+    produced: list[ProducedScenarioOut] = []
+    excerpt = doc.text.strip()[:_EXCERPT_CHARS]
+    if scen.ok and scen.scenario:
+        c = scen.scenario
+        draft = await create_draft(
+            session,
+            title=c["title"],
+            pack=venture.slug,
+            family=c["family"] or "crisis",
+            tier=c["tier"] or "foundational",
+            situation=c["situation"],
+            expected_behaviors=c["expected_behaviors"],
+            adversarial_tactics=c["adversarial_tactics"],
+            jurisdiction_flags=c["jurisdiction_flags"],
+            created_by=principal.subject,
+            ai_drafted=True,
+            source_type="document",
+            source_ref=file.filename,
+            source_excerpt=excerpt,
+            reviewed=False,
+        )
+        produced.append(
+            ProducedScenarioOut(publicId=draft.publicId, title=draft.title, tier=draft.tier)
+        )
+
+    spec_doc = SpecDocument(
+        ventureSlug=slug,
+        filename=file.filename or "spec",
+        extractedText=doc.text[:20000],
+        enrichmentProposal=enrich.proposal if enrich.ok else None,
+        producedScenarioIds=[p.publicId for p in produced],
+        uploadedBy=principal.subject,
+    )
+    session.add(spec_doc)
+    await session.commit()
+    await session.refresh(spec_doc)
+
+    return SpecUploadResponse(
+        ok=True,
+        specDocumentId=spec_doc.id,
+        filename=spec_doc.filename,
+        enrichment=(
+            EnrichmentProposalOut(**enrich.proposal) if enrich.ok and enrich.proposal else None
+        ),
+        produced_scenarios=produced,
     )
 
 
