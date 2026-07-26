@@ -122,6 +122,17 @@ class Settings(BaseSettings):
     linear_team_id: str = Field(default="", alias="LINEAR_TEAM_ID")
     linear_api_url: str = Field(default="https://api.linear.app/graphql", alias="LINEAR_API_URL")
 
+    # Web-search ingestion for the Scenario Bank (ADR-0042). Empty key → the "stub" provider, so the
+    # Web ingestion tab honestly reports "not configured" — no fake results and no network in CI.
+    # WEB_SEARCH_PROVIDER=tavily + TAVILY_API_KEY=tvly-... activates a live search-and-extract pass.
+    # `auto` (default) = tavily-if-TAVILY_API_KEY-set-else-stub, mirroring the LLM `auto` pattern.
+    # auto | tavily | stub
+    web_search_provider: str = Field(default="auto", alias="WEB_SEARCH_PROVIDER")
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    tavily_api_url: str = Field(default="https://api.tavily.com/search", alias="TAVILY_API_URL")
+    web_search_max_results: int = Field(default=6, alias="WEB_SEARCH_MAX_RESULTS")
+    web_search_timeout_seconds: float = Field(default=20.0, alias="WEB_SEARCH_TIMEOUT_SECONDS")
+
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 

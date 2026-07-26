@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dev import Principal, get_current_principal
+from src.config import settings
 from src.db import get_session
 from src.deps import require_role
 from src.models.bank_scenario import BankScenario
@@ -19,6 +20,10 @@ from src.schemas.bank_scenario import (
     ExtractRequest,
     ExtractResponse,
     VocabularyOut,
+    WebSearchRequest,
+    WebSearchResponse,
+    WebSearchResultOut,
+    WebSearchStatus,
 )
 from src.services.scenario_bank import (
     PromotionError,
@@ -30,6 +35,12 @@ from src.services.scenario_bank import (
 from src.services.scenario_bank.documents import extract_document_text
 from src.services.scenario_bank.extraction import FAMILIES, PACKS, TIERS
 from src.services.scenario_bank.promotion import edit_draft
+from src.services.scenario_bank.web_search import (
+    WebSearchUnavailable,
+    resolve_web_search_provider,
+    search_web,
+    web_search_available,
+)
 
 _EXCERPT_CHARS = 2000  # how much source text to retain as provenance on the draft
 
@@ -115,6 +126,19 @@ async def get_vocabulary() -> VocabularyOut:
 
 
 @router.get(
+    "/web-search/status",
+    response_model=WebSearchStatus,
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def web_search_status() -> WebSearchStatus:
+    """Whether live web-search ingestion is configured (drives the UI's honest empty state)."""
+    return WebSearchStatus(
+        available=web_search_available(),
+        provider=resolve_web_search_provider(settings.web_search_provider),
+    )
+
+
+@router.get(
     "/{public_id}",
     response_model=BankScenarioDetail,
     dependencies=[Depends(require_role("viewer"))],
@@ -183,6 +207,55 @@ async def extract_from_document(file: UploadFile = File(...)) -> ExtractResponse
         scenario=result.scenario,
         source_excerpt=excerpt,
         source_ref=file.filename,
+    )
+
+
+@router.post(
+    "/web-search",
+    response_model=WebSearchResponse,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def web_search(body: WebSearchRequest) -> WebSearchResponse:
+    """Find real-world sources for a query. Returns extraction-ready text — creates NOTHING.
+
+    Each result's `content` feeds the existing /extract path, so a chosen result becomes an
+    AI-drafted candidate the user reviews and (separately) commits. If no provider is configured,
+    returns `available=false` with an honest message — never fabricated results.
+    """
+    provider = resolve_web_search_provider(settings.web_search_provider)
+    if not body.query.strip():
+        return WebSearchResponse(
+            available=web_search_available(), provider=provider, query="", error="Query is empty."
+        )
+    try:
+        results = await search_web(body.query, body.max_results)
+    except WebSearchUnavailable as exc:
+        return WebSearchResponse(
+            available=False, provider=provider, query=body.query, error=str(exc)
+        )
+    except Exception as exc:  # noqa: BLE001 — surface a provider/network error honestly
+        return WebSearchResponse(
+            available=True,
+            provider=provider,
+            query=body.query,
+            error=f"Web search failed: {exc}",
+        )
+    return WebSearchResponse(
+        available=True,
+        provider=provider,
+        query=body.query,
+        results=[
+            WebSearchResultOut(
+                title=r.title,
+                url=r.url,
+                snippet=r.snippet,
+                content=r.content,
+                content_chars=len(r.content),
+                score=r.score,
+                published_date=r.published_date,
+            )
+            for r in results
+        ],
     )
 
 
