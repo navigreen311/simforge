@@ -16,9 +16,13 @@ import {
 
 const PAGE_SIZE = 25;
 const TIER_LABEL: Record<string, string> = {
-  foundational: "F",
-  intermediate: "I",
-  advanced_crisis: "A-C",
+  foundational: "Foundational",
+  intermediate: "Intermediate",
+  advanced_crisis: "Advanced-Crisis",
+};
+const MODE_TIP: Record<string, string> = {
+  sandbox: "ran against mock Forge APIs — no real systems touched",
+  integrated: "ran against real Forge endpoints",
 };
 
 function relTime(iso: string): string {
@@ -27,6 +31,12 @@ function relTime(iso: string): string {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
+}
+
+function fmtLatency(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms.toLocaleString()} ms`;
+  return `${(ms / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })} s`;
 }
 
 function fromDate(range: string): string | undefined {
@@ -40,11 +50,13 @@ export function RunsExplorer({
   agents,
   packs,
   tierByScenario,
+  titleByScenario,
   initialAgent,
 }: {
   agents: AgentSummary[];
   packs: PackSummary[];
   tierByScenario: Record<string, string>;
+  titleByScenario: Record<string, string>;
   initialAgent?: string;
 }) {
   const router = useRouter();
@@ -104,13 +116,14 @@ export function RunsExplorer({
     setOffset(0);
   }, [status, tier, execMode, blind, agent, pack, range]);
 
-  // Client-side text search within the loaded page (run id / scenario / agent).
+  // Client-side text search within the loaded page (run id / scenario title + id / agent).
   const shown = search.trim()
     ? rows.filter((r) => {
         const q = search.toLowerCase();
         return (
           r.run_id.toLowerCase().includes(q) ||
           r.scenario_id.toLowerCase().includes(q) ||
+          (titleByScenario[r.scenario_id] ?? "").toLowerCase().includes(q) ||
           r.agent_village_id.toLowerCase().includes(q)
         );
       })
@@ -139,7 +152,7 @@ export function RunsExplorer({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search run / scenario / agent…"
+          placeholder="Search run / scenario title or id / agent…"
           className="min-w-[14rem] flex-1 rounded border border-ink-500 bg-ink-800 px-3 py-1.5 text-sm text-ink-50 placeholder:text-ink-400"
         />
         <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
@@ -207,9 +220,9 @@ export function RunsExplorer({
           icon="🗂"
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-ink-500">
+        <div className="max-h-[70vh] overflow-auto rounded-xl border border-ink-500">
           <table className="min-w-full text-left text-sm">
-            <thead className="sticky top-0 bg-ink-800 text-ink-200">
+            <thead className="sticky top-0 z-10 bg-ink-800 text-ink-200">
               <tr>
                 <th className="px-4 py-3 font-medium">Run</th>
                 <th className="px-4 py-3 font-medium">Scenario</th>
@@ -232,20 +245,38 @@ export function RunsExplorer({
                   <td className="px-4 py-3 font-mono text-[10px] text-ink-400" title={r.run_id}>
                     {r.run_id.slice(0, 8)}…
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gold-400">{r.scenario_id}</td>
+                  <td className="px-4 py-3">
+                    <div className="text-ink-50">
+                      {titleByScenario[r.scenario_id] ?? "(untitled scenario)"}
+                    </div>
+                    <div className="font-mono text-[10px] text-ink-400">{r.scenario_id}</div>
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-ink-100">{r.agent_village_id}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded bg-ink-600 px-2 py-0.5 text-xs text-ink-200">
+                    <span
+                      className="rounded bg-ink-600 px-2 py-0.5 text-xs text-ink-200"
+                      title={tierByScenario[r.scenario_id] ?? "unknown tier"}
+                    >
                       {TIER_LABEL[tierByScenario[r.scenario_id]] ?? "—"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-ink-300">{r.execution_mode}</td>
+                  <td
+                    className="px-4 py-3 text-xs text-ink-300"
+                    title={MODE_TIP[r.execution_mode] ?? r.execution_mode}
+                  >
+                    {r.execution_mode}
+                  </td>
                   <td className="px-4 py-3">
                     <RunStatusBadge status={r.status} />
                   </td>
-                  <td className="px-4 py-3 text-ink-100">{r.outcome ?? "—"}</td>
-                  <td className="px-4 py-3 text-right text-ink-200">
-                    {r.latency_ms != null ? `${r.latency_ms}ms` : "—"}
+                  <td
+                    className="px-4 py-3 text-ink-100"
+                    title="The scenario reached a terminal 'resolved' state."
+                  >
+                    {r.outcome ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-200">
+                    {fmtLatency(r.latency_ms)}
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-300" title={r.started_at}>
                     {relTime(r.started_at)}
