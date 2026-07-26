@@ -539,6 +539,15 @@ export interface WebSearchResponse {
   error: string | null;
 }
 
+export interface TranscriptResponse {
+  available: boolean;
+  source_kind: string; // youtube | file
+  text: string;
+  chars: number;
+  error: string | null;
+  meta: Record<string, unknown>;
+}
+
 export const scenarioBank = {
   list: (params?: BankQuery) =>
     apiGet<{ items: BankScenario[]; total: number }>(`/api/scenario-bank/${qs(params)}`),
@@ -568,6 +577,15 @@ export const scenarioBank = {
     apiGet<{ available: boolean; provider: string }>("/api/scenario-bank/web-search/status"),
   webSearch: (query: string) =>
     apiPost<WebSearchResponse>("/api/scenario-bank/web-search", { query }),
+  // Video / YouTube ingestion — a transcript feeds the same extract→review→commit path.
+  transcriptStatus: () =>
+    apiGet<{ youtube_available: boolean; file_available: boolean }>(
+      "/api/scenario-bank/transcript/status",
+    ),
+  youtubeTranscript: (url: string) =>
+    apiPost<TranscriptResponse>("/api/scenario-bank/transcript/youtube", { url }),
+  transcribeFile: (file: File) =>
+    apiPostFile<TranscriptResponse>("/api/scenario-bank/transcript/file", file),
 };
 
 export async function runScenario(scenarioId: string): Promise<RunSummary> {

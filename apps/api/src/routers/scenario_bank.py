@@ -19,11 +19,14 @@ from src.schemas.bank_scenario import (
     DraftRequest,
     ExtractRequest,
     ExtractResponse,
+    TranscriptResponse,
+    TranscriptStatus,
     VocabularyOut,
     WebSearchRequest,
     WebSearchResponse,
     WebSearchResultOut,
     WebSearchStatus,
+    YouTubeTranscriptRequest,
 )
 from src.services.scenario_bank import (
     PromotionError,
@@ -35,6 +38,13 @@ from src.services.scenario_bank import (
 from src.services.scenario_bank.documents import extract_document_text
 from src.services.scenario_bank.extraction import FAMILIES, PACKS, TIERS
 from src.services.scenario_bank.promotion import edit_draft
+from src.services.scenario_bank.transcript import (
+    TranscriptUnavailable,
+    fetch_youtube_transcript,
+    file_transcription_available,
+    transcribe_audio_file,
+    youtube_available,
+)
 from src.services.scenario_bank.web_search import (
     WebSearchUnavailable,
     resolve_web_search_provider,
@@ -135,6 +145,19 @@ async def web_search_status() -> WebSearchStatus:
     return WebSearchStatus(
         available=web_search_available(),
         provider=resolve_web_search_provider(settings.web_search_provider),
+    )
+
+
+@router.get(
+    "/transcript/status",
+    response_model=TranscriptStatus,
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def transcript_status() -> TranscriptStatus:
+    """Which transcript capabilities are configured (YouTube captions / audio transcription)."""
+    return TranscriptStatus(
+        youtube_available=youtube_available(),
+        file_available=file_transcription_available(),
     )
 
 
@@ -256,6 +279,53 @@ async def web_search(body: WebSearchRequest) -> WebSearchResponse:
             )
             for r in results
         ],
+    )
+
+
+@router.post(
+    "/transcript/youtube",
+    response_model=TranscriptResponse,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def transcript_youtube(body: YouTubeTranscriptRequest) -> TranscriptResponse:
+    """Fetch a YouTube caption track. Returns a transcript to feed /extract — creates NOTHING.
+
+    Honest failure if not enabled, the URL is unrecognizable, or the video has no captions. Never
+    transcribes audio and never fabricates a transcript.
+    """
+    try:
+        result = fetch_youtube_transcript(body.url)
+    except TranscriptUnavailable as exc:
+        return TranscriptResponse(available=False, source_kind="youtube", error=str(exc))
+    return TranscriptResponse(
+        available=True,
+        source_kind="youtube",
+        text=result.text,
+        chars=len(result.text),
+        error=result.error,
+        meta=result.meta,
+    )
+
+
+@router.post(
+    "/transcript/file",
+    response_model=TranscriptResponse,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def transcript_file(file: UploadFile = File(...)) -> TranscriptResponse:  # noqa: B008
+    """Transcribe an uploaded audio file. Returns a transcript for /extract; creates nothing."""
+    try:
+        data = await file.read()
+        result = await transcribe_audio_file(file.filename or "audio", data)
+    except TranscriptUnavailable as exc:
+        return TranscriptResponse(available=False, source_kind="file", error=str(exc))
+    return TranscriptResponse(
+        available=True,
+        source_kind="file",
+        text=result.text,
+        chars=len(result.text),
+        error=result.error,
+        meta=result.meta,
     )
 
 

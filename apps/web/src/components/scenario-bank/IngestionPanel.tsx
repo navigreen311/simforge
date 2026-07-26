@@ -6,6 +6,7 @@ import {
   scenarioBank,
   type BankVocabulary,
   type ExtractResponse,
+  type TranscriptResponse,
   type WebSearchResponse,
   type WebSearchResult,
 } from "@/lib/api/client";
@@ -25,7 +26,7 @@ const METHODS: { id: Method; label: string; enabled: boolean; note?: string }[] 
   { id: "paste", label: "Paste text", enabled: true },
   { id: "document", label: "Document upload", enabled: true },
   { id: "web", label: "Web search", enabled: true },
-  { id: "video", label: "Video / YouTube", enabled: false, note: "transcription" },
+  { id: "video", label: "Video / YouTube", enabled: true },
 ];
 
 function candidateToValues(r: ExtractResponse): Partial<ScenarioFormValues> | undefined {
@@ -80,7 +81,7 @@ export function IngestionPanel() {
         {vocab && method === "paste" && <PasteTab vocab={vocab} />}
         {vocab && method === "document" && <DocumentTab vocab={vocab} />}
         {vocab && method === "web" && <WebSearchTab vocab={vocab} />}
-        {method === "video" && <PendingStub dependency="audio transcription / a YouTube fetcher" />}
+        {vocab && method === "video" && <VideoTab vocab={vocab} />}
       </div>
     </div>
   );
@@ -436,6 +437,205 @@ function WebSearchTab({ vocab }: { vocab: BankVocabulary }) {
             />
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function VideoTab({ vocab }: { vocab: BankVocabulary }) {
+  const [status, setStatus] = useState<"checking" | "ready" | "none">("checking");
+  const [caps, setCaps] = useState({ youtube: false, file: false });
+  const [url, setUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState<null | "youtube" | "file" | "extract">(null);
+  const [transcript, setTranscript] = useState<TranscriptResponse | null>(null);
+  const [ref, setRef] = useState("");
+  const [extract, setExtract] = useState<ExtractResponse | null>(null);
+
+  useEffect(() => {
+    scenarioBank
+      .transcriptStatus()
+      .then((s) => {
+        setCaps({ youtube: s.youtube_available, file: s.file_available });
+        setStatus(s.youtube_available || s.file_available ? "ready" : "none");
+      })
+      .catch(() => setStatus("none"));
+  }, []);
+
+  function reset(t: TranscriptResponse | null, sourceRef: string) {
+    setTranscript(t);
+    setRef(sourceRef);
+    setExtract(null);
+  }
+
+  async function fetchYouTube() {
+    if (!url.trim() || busy) return;
+    setBusy("youtube");
+    reset(null, "");
+    try {
+      reset(await scenarioBank.youtubeTranscript(url), url.trim());
+    } catch (e) {
+      reset(
+        {
+          available: true,
+          source_kind: "youtube",
+          text: "",
+          chars: 0,
+          error: e instanceof Error ? e.message : "Fetch failed",
+          meta: {},
+        },
+        url.trim(),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function fetchFile() {
+    if (!file || busy) return;
+    setBusy("file");
+    reset(null, "");
+    try {
+      reset(await scenarioBank.transcribeFile(file), file.name);
+    } catch (e) {
+      reset(
+        {
+          available: true,
+          source_kind: "file",
+          text: "",
+          chars: 0,
+          error: e instanceof Error ? e.message : "Transcription failed",
+          meta: {},
+        },
+        file.name,
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runExtract() {
+    if (!transcript?.text || busy) return;
+    setBusy("extract");
+    setExtract(null);
+    try {
+      const kind = transcript.source_kind === "youtube" ? "youtube" : "video";
+      setExtract(
+        await scenarioBank.extract({ source_text: transcript.text, source_type: kind, source_ref: ref }),
+      );
+    } catch (e) {
+      setExtract({
+        ok: false,
+        error: e instanceof Error ? e.message : "Extraction failed",
+        confidence: null,
+        scenario: null,
+        source_excerpt: null,
+        source_ref: null,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (status === "checking") return <p className="text-sm text-ink-400">Checking availability…</p>;
+  if (status === "none")
+    return (
+      <PendingStub
+        dependency="a transcript source"
+        detail="No transcript capability is configured. Enable YouTube captions with TRANSCRIPT_YOUTUBE_ENABLED=true, or audio transcription with TRANSCRIPT_PROVIDER=openai + OPENAI_API_KEY. Until then this is not configured — no transcript is fabricated."
+      />
+    );
+
+  const values = extract?.ok ? candidateToValues(extract) : undefined;
+  const inputCls =
+    "w-full rounded border border-ink-500 bg-ink-900 px-3 py-2 text-sm text-ink-50 focus:border-gold-500 focus:outline-none";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-ink-300">
+        Turn a talk, interview, or training video into a scenario. The transcript is extracted first;
+        you review the proposed candidate before saving. Nothing is saved until you do.
+      </p>
+
+      {caps.youtube && (
+        <div className="flex gap-2">
+          <input
+            className={inputCls}
+            placeholder="YouTube URL (video must have captions)"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && fetchYouTube()}
+          />
+          <button
+            onClick={fetchYouTube}
+            disabled={!url.trim() || busy !== null}
+            className="shrink-0 rounded bg-gold-500 px-4 py-2 text-sm font-semibold text-ink-900 hover:bg-gold-400 disabled:opacity-40"
+          >
+            {busy === "youtube" ? "Fetching…" : "Fetch transcript"}
+          </button>
+        </div>
+      )}
+
+      {caps.file && (
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            accept=".mp3,.m4a,.wav,.webm,.mp4,.mpeg,.mpga,.oga,.ogg,.flac"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="flex-1 text-sm text-ink-200 file:mr-3 file:rounded file:border-0 file:bg-ink-600 file:px-3 file:py-1.5 file:text-ink-100"
+          />
+          <button
+            onClick={fetchFile}
+            disabled={!file || busy !== null}
+            className="shrink-0 rounded bg-gold-500 px-4 py-2 text-sm font-semibold text-ink-900 hover:bg-gold-400 disabled:opacity-40"
+          >
+            {busy === "file" ? "Transcribing…" : "Transcribe audio"}
+          </button>
+        </div>
+      )}
+
+      {transcript?.error && <ExtractError error={transcript.error} />}
+
+      {transcript?.text && !extract && (
+        <div className="rounded-lg border border-ink-500 bg-ink-800 p-4">
+          <div className="mb-2 text-xs text-ink-400">
+            Transcript ready · {transcript.chars.toLocaleString()} chars
+            {typeof transcript.meta.segments === "number"
+              ? ` · ${transcript.meta.segments} segments`
+              : ""}
+          </div>
+          <pre className="mb-3 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-ink-600 bg-ink-900 p-3 text-[11px] text-ink-300">
+            {transcript.text.slice(0, 600)}
+            {transcript.text.length > 600 ? "…" : ""}
+          </pre>
+          <button
+            onClick={runExtract}
+            disabled={busy !== null}
+            className="rounded bg-gold-500 px-4 py-2 text-sm font-semibold text-ink-900 hover:bg-gold-400 disabled:opacity-40"
+          >
+            {busy === "extract" ? "Extracting…" : "Extract scenario"}
+          </button>
+        </div>
+      )}
+
+      {extract && !extract.ok && <ExtractError error={extract.error} />}
+      {extract?.ok && values && (
+        <ReviewBlock
+          confidence={extract.confidence}
+          unmapped={extract.scenario?.unmapped_fields}
+          form={
+            <ScenarioForm
+              vocab={vocab}
+              initial={values}
+              aiDrafted
+              sourceType={transcript?.source_kind === "youtube" ? "youtube" : "video"}
+              sourceRef={ref}
+              sourceExcerpt={extract.source_excerpt}
+              submitLabel="Approve & save draft"
+              onSaved={async (body) => (await scenarioBank.createDraft(body)).publicId}
+            />
+          }
+        />
       )}
     </div>
   );

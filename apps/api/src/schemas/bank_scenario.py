@@ -136,3 +136,26 @@ class WebSearchResponse(BaseModel):
 class WebSearchStatus(BaseModel):
     available: bool
     provider: str
+
+
+# ── Batch 6: video / youtube transcript ingestion ───────────────────────────
+
+
+class YouTubeTranscriptRequest(BaseModel):
+    url: str
+
+
+class TranscriptResponse(BaseModel):
+    """A transcript ready to feed /extract, or an honest not-configured / error state."""
+
+    available: bool  # is this capability configured?
+    source_kind: str  # youtube | file
+    text: str = ""
+    chars: int = 0
+    error: str | None = None
+    meta: dict = {}
+
+
+class TranscriptStatus(BaseModel):
+    youtube_available: bool
+    file_available: bool

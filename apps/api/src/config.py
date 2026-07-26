@@ -133,6 +133,16 @@ class Settings(BaseSettings):
     web_search_max_results: int = Field(default=6, alias="WEB_SEARCH_MAX_RESULTS")
     web_search_timeout_seconds: float = Field(default=20.0, alias="WEB_SEARCH_TIMEOUT_SECONDS")
 
+    # Video / YouTube transcript ingestion (ADR-0043, Batch 6). Two independently-gated seams,
+    # both default OFF so the Video tab honestly reports "not configured" and CI never hits a net.
+    #  - YouTube captions: no API key, but a network fetch → gated on TRANSCRIPT_YOUTUBE_ENABLED.
+    #  - Audio-file transcription: TRANSCRIPT_PROVIDER=openai + OPENAI_API_KEY (raw HTTPS, no SDK).
+    transcript_youtube_enabled: bool = Field(default=False, alias="TRANSCRIPT_YOUTUBE_ENABLED")
+    transcript_provider: str = Field(default="stub", alias="TRANSCRIPT_PROVIDER")  # stub | openai
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_transcribe_model: str = Field(default="whisper-1", alias="OPENAI_TRANSCRIBE_MODEL")
+    transcript_timeout_seconds: float = Field(default=120.0, alias="TRANSCRIPT_TIMEOUT_SECONDS")
+
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 
