@@ -518,6 +518,24 @@ async function apiPostFile<T>(path: string, file: File): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  content: string;
+  content_chars: number;
+  score: number | null;
+  published_date: string | null;
+}
+
+export interface WebSearchResponse {
+  available: boolean;
+  provider: string;
+  query: string;
+  results: WebSearchResult[];
+  error: string | null;
+}
+
 export const scenarioBank = {
   list: (params?: BankQuery) =>
     apiGet<{ items: BankScenario[]; total: number }>(`/api/scenario-bank/${qs(params)}`),
@@ -542,6 +560,11 @@ export const scenarioBank = {
     apiPost<BankScenarioDetail>(`/api/scenario-bank/${publicId}/commit`, {}),
   reject: (publicId: string) =>
     apiPost<BankScenarioDetail>(`/api/scenario-bank/${publicId}/reject`, {}),
+  // Web-search ingestion — finds real sources; each result feeds the same extract→review→commit path.
+  webSearchStatus: () =>
+    apiGet<{ available: boolean; provider: string }>("/api/scenario-bank/web-search/status"),
+  webSearch: (query: string) =>
+    apiPost<WebSearchResponse>("/api/scenario-bank/web-search", { query }),
 };
 
 export async function runScenario(scenarioId: string): Promise<RunSummary> {

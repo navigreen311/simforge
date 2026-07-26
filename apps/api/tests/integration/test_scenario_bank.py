@@ -242,3 +242,60 @@ async def test_extract_document_endpoint_rejects_unsupported(client: AsyncClient
     )
     assert r.json()["ok"] is False
     assert "Unsupported" in r.json()["error"]
+
+
+# ── Batch 5: web-search ingestion ───────────────────────────────────────────
+
+
+def test_web_search_provider_resolution_defaults_to_stub() -> None:
+    # No TAVILY_API_KEY in dev/test → auto resolves to stub → not available (honest).
+    from src.services.scenario_bank.web_search import (
+        get_web_search_provider,
+        resolve_web_search_provider,
+        web_search_available,
+    )
+
+    assert resolve_web_search_provider("auto") == "stub"
+    assert web_search_available() is False
+    assert get_web_search_provider().name == "stub"
+
+
+def test_tavily_response_parsing_is_hermetic() -> None:
+    # Validate parsing logic without any network: prefer raw_content, truncate, skip url-less rows.
+    from src.services.scenario_bank.web_search import _parse_tavily
+
+    data = {
+        "results": [
+            {
+                "title": "CFPB enforcement action",
+                "url": "https://example.gov/action",
+                "content": "short snippet",
+                "raw_content": "full cleaned page text " * 50,
+                "score": 0.91,
+                "published_date": "2025-01-02",
+            },
+            {"title": "no url", "content": "ignored"},  # dropped: no url
+        ]
+    }
+    results = _parse_tavily(data)
+    assert len(results) == 1
+    assert results[0].url == "https://example.gov/action"
+    assert results[0].snippet == "short snippet"
+    assert results[0].content.startswith("full cleaned page text")
+    assert results[0].score == 0.91
+
+
+async def test_web_search_status_reports_not_configured(client: AsyncClient) -> None:
+    s = (await client.get("/api/scenario-bank/web-search/status")).json()
+    assert s["available"] is False
+    assert s["provider"] == "stub"
+
+
+async def test_web_search_endpoint_honest_when_unconfigured(client: AsyncClient) -> None:
+    # No provider configured → available=false, an honest message, and ZERO fabricated results.
+    r = await client.post("/api/scenario-bank/web-search", json={"query": "HIPAA audit failure"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert body["results"] == []
+    assert "not configured" in body["error"].lower()

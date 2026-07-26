@@ -103,3 +103,36 @@ class VocabularyOut(BaseModel):
     packs: list[str]
     families: list[str]
     tiers: list[str]
+
+
+# ── Batch 5: web-search ingestion ───────────────────────────────────────────
+
+
+class WebSearchRequest(BaseModel):
+    query: str
+    max_results: int | None = None
+
+
+class WebSearchResultOut(BaseModel):
+    title: str
+    url: str
+    snippet: str
+    content: str  # extraction-ready text (fed to /extract as source_text)
+    content_chars: int
+    score: float | None = None
+    published_date: str | None = None
+
+
+class WebSearchResponse(BaseModel):
+    """Search results, or an honest not-configured / error state (never fabricated results)."""
+
+    available: bool  # is a real provider configured?
+    provider: str
+    query: str
+    results: list[WebSearchResultOut] = []
+    error: str | None = None
+
+
+class WebSearchStatus(BaseModel):
+    available: bool
+    provider: str
