@@ -64,3 +64,39 @@ async def test_sign_pack(client: AsyncClient) -> None:
     resp = await client.post("/api/packs/pack.greenstone.v1/sign", json={"signed_by": "ivan"})
     assert resp.status_code == 200
     assert resp.json()["signedBy"] == "ivan"
+
+
+async def test_list_is_enriched_with_scenario_summary(client: AsyncClient) -> None:
+    # Part A: the list row carries scenario count, tier spread, golden count, and flags.
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    item = (await client.get("/api/packs/")).json()["items"][0]
+    assert item["scenarioCount"] == 3
+    assert sum(item["tierCounts"].values()) == 3
+    assert set(item["tierCounts"]) == {"foundational", "intermediate", "advanced_crisis"}
+    assert item["goldenCount"] >= 0
+    assert "tcpa" in item["complianceFlags"]
+
+
+async def test_flag_catalog_labels_every_used_flag(client: AsyncClient) -> None:
+    # Every flag actually used by a pack must be labeled (no unexplained chip).
+    await client.post("/api/packs/", json={"pack_dir": MEDLINK})
+    cat = (await client.get("/api/packs/flag-catalog")).json()
+    for flag in ["hipaa", "hcqc_nv", "oig_sam", "i9"]:
+        assert flag in cat["flags"], flag
+        assert cat["flags"][flag]["label"]
+        assert cat["flags"][flag]["tooltip"]
+    # HIPAA is a PHI flag and maps to the federal jurisdiction.
+    assert cat["flags"]["hipaa"]["phi"] is True
+    assert cat["flags"]["hipaa"]["jurisdiction"] == "US-FED"
+    # Legend copy is present for the non-flag chips.
+    assert "venture" in cat["legend"] and "phi" in cat["legend"] and "sandbox" in cat["legend"]
+
+
+async def test_unknown_flag_gets_readable_fallback() -> None:
+    # A flag with no catalog entry still gets a humanized label, never blank.
+    from src.services.packs.flag_catalog import describe_flag
+
+    d = describe_flag("some_new_flag")
+    assert d["label"] == "Some New Flag"
+    assert d["tooltip"]
+    assert d["phi"] is False

@@ -62,6 +62,13 @@ export interface PackSummary {
   signedAt: string | null;
 }
 
+export interface PackCard extends PackSummary {
+  complianceFlags: string[];
+  scenarioCount: number;
+  tierCounts: Record<string, number>; // { foundational, intermediate, advanced_crisis }
+  goldenCount: number;
+}
+
 export interface PackDetail extends PackSummary {
   complianceFlags: string[];
   rubricProfile: string;
@@ -69,8 +76,20 @@ export interface PackDetail extends PackSummary {
 }
 
 export interface PackList {
-  items: PackSummary[];
+  items: PackCard[];
   total: number;
+}
+
+export interface FlagInfo {
+  label: string;
+  tooltip: string;
+  phi: boolean;
+  jurisdiction: string | null;
+}
+
+export interface FlagCatalog {
+  flags: Record<string, FlagInfo>;
+  legend: Record<string, string>;
 }
 
 export interface RunSummary {
@@ -204,6 +223,7 @@ export const api = {
   scenarios: () => apiGet<{ items: ScenarioSummary[]; total: number }>("/api/scenarios/"),
   packs: () => apiGet<PackList>("/api/packs/"),
   pack: (packId: string) => apiGet<PackDetail>(`/api/packs/${packId}`),
+  flagCatalog: () => apiGet<FlagCatalog>("/api/packs/flag-catalog"),
   runs: (params?: RunQuery) => apiGet<RunList>(`/api/runs/${qs(params)}`),
   runCounts: (params?: RunQuery) => apiGet<RunCounts>(`/api/runs/counts${qs(params)}`),
   run: (runId: string) => apiGet<RunSummary>(`/api/runs/${runId}`),

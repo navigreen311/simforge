@@ -34,6 +34,15 @@ class PackSummary(BaseModel):
     signedAt: datetime | None = None
 
 
+class PackCard(PackSummary):
+    """List-row view enriched for the readable Packs page (Part A). Superset of PackSummary."""
+
+    complianceFlags: list[str]
+    scenarioCount: int
+    tierCounts: dict[str, int]  # {foundational, intermediate, advanced_crisis}
+    goldenCount: int
+
+
 class PackDetail(PackSummary):
     complianceFlags: list[str]
     rubricProfile: str
@@ -41,8 +50,22 @@ class PackDetail(PackSummary):
 
 
 class PackList(BaseModel):
-    items: list[PackSummary]
+    items: list[PackCard]
     total: int
+
+
+class FlagInfoOut(BaseModel):
+    label: str
+    tooltip: str
+    phi: bool
+    jurisdiction: str | None = None
+
+
+class FlagCatalogOut(BaseModel):
+    """Plain-language labels for every flag that can appear on a pack chip, + legend copy."""
+
+    flags: dict[str, FlagInfoOut]
+    legend: dict[str, str]
 
 
 class IngestPackRequest(BaseModel):
