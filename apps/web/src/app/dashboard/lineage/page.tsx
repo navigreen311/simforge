@@ -4,7 +4,11 @@ import { api, certs, governance } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
 
-export default async function LineagePage() {
+export default async function LineagePage({
+  searchParams,
+}: {
+  searchParams: { root?: string };
+}) {
   const entities: LineageEntity[] = [];
   let error: string | null = null;
   try {
@@ -54,7 +58,7 @@ export default async function LineagePage() {
           No lineage entities yet — edges are emitted when a certificate is issued.
         </div>
       ) : (
-        <LineageExplorer entities={entities} />
+        <LineageExplorer entities={entities} initialRoot={searchParams.root} />
       )}
     </div>
   );

@@ -19,8 +19,18 @@ function shortUrn(urn: string): string {
   return parts.length >= 5 ? `${parts[3]}:${parts.slice(4).join(":")}` : urn;
 }
 
-export function LineageExplorer({ entities }: { entities: LineageEntity[] }) {
-  const [root, setRoot] = useState(entities[0]?.urn ?? "");
+export function LineageExplorer({
+  entities,
+  initialRoot,
+}: {
+  entities: LineageEntity[];
+  initialRoot?: string;
+}) {
+  const [root, setRoot] = useState(
+    initialRoot && entities.some((e) => e.urn === initialRoot)
+      ? initialRoot
+      : (entities[0]?.urn ?? ""),
+  );
   const [depth, setDepth] = useState(1);
   const [direction, setDirection] = useState<"all" | "out" | "in">("all");
   const [query, setQuery] = useState("");
