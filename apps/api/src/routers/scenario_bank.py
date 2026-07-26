@@ -2,14 +2,36 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.dev import Principal, get_current_principal
 from src.db import get_session
 from src.deps import require_role
 from src.models.bank_scenario import BankScenario
-from src.schemas.bank_scenario import BankScenarioDetail, BankScenarioList, BankScenarioOut
+from src.schemas.bank_scenario import (
+    BankScenarioDetail,
+    BankScenarioList,
+    BankScenarioOut,
+    DraftEditRequest,
+    DraftRequest,
+    ExtractRequest,
+    ExtractResponse,
+    VocabularyOut,
+)
+from src.services.scenario_bank import (
+    PromotionError,
+    commit_draft,
+    create_draft,
+    extract_scenario,
+    reject_draft,
+)
+from src.services.scenario_bank.documents import extract_document_text
+from src.services.scenario_bank.extraction import FAMILIES, PACKS, TIERS
+from src.services.scenario_bank.promotion import edit_draft
+
+_EXCERPT_CHARS = 2000  # how much source text to retain as provenance on the draft
 
 router = APIRouter()
 
@@ -83,6 +105,16 @@ async def bank_counts(session: AsyncSession = Depends(get_session)) -> dict:
 
 
 @router.get(
+    "/vocabulary",
+    response_model=VocabularyOut,
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def get_vocabulary() -> VocabularyOut:
+    """The fixed pack/family/tier vocabularies the authoring & extraction UI must use."""
+    return VocabularyOut(packs=list(PACKS), families=list(FAMILIES), tiers=list(TIERS))
+
+
+@router.get(
     "/{public_id}",
     response_model=BankScenarioDetail,
     dependencies=[Depends(require_role("viewer"))],
@@ -96,3 +128,143 @@ async def get_bank_scenario(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
     return BankScenarioDetail.model_validate(row)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ingestion + two-stage human promotion (Batch 2).
+#
+# CARDINAL RULE: nothing here auto-commits. `extract` only proposes a candidate; `drafts` saves a
+# human-approved DRAFT; only `commit` (a separate, explicit human action) assigns a scn.* id and
+# lets a scenario into the active bank. Extraction never fabricates — a stub/blank result is an
+# honest error, not an invented scenario.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/extract", response_model=ExtractResponse, dependencies=[Depends(require_role("pack_owner"))]
+)
+async def extract(body: ExtractRequest) -> ExtractResponse:
+    """Propose a candidate scenario from raw text. Saves NOTHING — the caller reviews it first."""
+    result = await extract_scenario(body.source_text)
+    excerpt = body.source_text.strip()[:_EXCERPT_CHARS]
+    if not result.ok:
+        return ExtractResponse(ok=False, error=result.error)
+    return ExtractResponse(
+        ok=True,
+        confidence=result.confidence,
+        scenario=result.scenario,
+        source_excerpt=excerpt,
+        source_ref=body.source_ref,
+    )
+
+
+@router.post(
+    "/extract-document",
+    response_model=ExtractResponse,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def extract_from_document(file: UploadFile = File(...)) -> ExtractResponse:  # noqa: B008
+    """Upload a PDF/DOCX/TXT/MD → extract text → propose a candidate. Saves NOTHING.
+
+    Two honest-failure gates before any LLM call: an unreadable/empty/oversized/scanned file returns
+    a plain error and no scenario (no OCR, no fabrication).
+    """
+    data = await file.read()
+    doc = extract_document_text(file.filename or "upload", data)
+    if not doc.ok:
+        return ExtractResponse(ok=False, error=doc.error)
+    result = await extract_scenario(doc.text)
+    excerpt = doc.text.strip()[:_EXCERPT_CHARS]
+    if not result.ok:
+        return ExtractResponse(ok=False, error=result.error, source_excerpt=excerpt)
+    return ExtractResponse(
+        ok=True,
+        confidence=result.confidence,
+        scenario=result.scenario,
+        source_excerpt=excerpt,
+        source_ref=file.filename,
+    )
+
+
+@router.post(
+    "/drafts",
+    response_model=BankScenarioDetail,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def create_bank_draft(
+    body: DraftRequest,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> BankScenarioDetail:
+    """Save a human-approved DRAFT (manual authoring or an approved extraction). Never committed."""
+    draft = await create_draft(
+        session,
+        title=body.title,
+        pack=body.pack,
+        family=body.family,
+        tier=body.tier,
+        situation=body.situation,
+        expected_behaviors=body.expectedBehaviors,
+        adversarial_tactics=body.adversarialTactics,
+        jurisdiction_flags=body.jurisdictionFlags,
+        created_by=principal.subject,
+        ai_drafted=body.aiDrafted,
+        source_type=body.sourceType,
+        source_ref=body.sourceRef,
+        source_excerpt=body.sourceExcerpt,
+    )
+    return BankScenarioDetail.model_validate(draft)
+
+
+@router.patch(
+    "/{public_id}",
+    response_model=BankScenarioDetail,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def edit_bank_draft(
+    public_id: str,
+    body: DraftEditRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BankScenarioDetail:
+    """Edit a non-committed draft's content (the review edit)."""
+    try:
+        draft = await edit_draft(session, public_id, body.model_dump(exclude_unset=True))
+    except PromotionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return BankScenarioDetail.model_validate(draft)
+
+
+@router.post(
+    "/{public_id}/commit",
+    response_model=BankScenarioDetail,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def commit_bank_draft(
+    public_id: str,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> BankScenarioDetail:
+    """The explicit human commit: draft → committed, assigns a scn.* id, records provenance."""
+    try:
+        committed = await commit_draft(session, public_id, principal.subject)
+    except PromotionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return BankScenarioDetail.model_validate(committed)
+
+
+@router.post(
+    "/{public_id}/reject",
+    response_model=BankScenarioDetail,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def reject_bank_draft(
+    public_id: str,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> BankScenarioDetail:
+    try:
+        rejected = await reject_draft(session, public_id, principal.subject)
+    except PromotionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return BankScenarioDetail.model_validate(rejected)

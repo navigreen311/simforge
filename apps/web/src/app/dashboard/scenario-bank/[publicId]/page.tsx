@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DraftActions } from "@/components/scenario-bank/DraftActions";
 import { PageMeta } from "@/components/ui/PageMeta";
 import { scenarioBank, type BankScenarioDetail } from "@/lib/api/client";
 
@@ -131,10 +132,13 @@ export default async function BankScenarioDetailPage({
         )}
       </section>
 
-      {s.status !== "committed" && (
-        <p className="mt-6 rounded-lg border border-ink-600 bg-ink-800 p-3 text-xs text-ink-400">
-          Draft review actions (Edit / Approve / Reject / Commit) are wired in the ingestion +
-          promotion flow. Committing is an explicit, logged human action — nothing here auto-commits.
+      {(s.status === "draft" || s.status === "in_review") && <DraftActions scenario={s} />}
+
+      {s.status === "committed" && (
+        <p className="mt-6 rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
+          Committed to the active bank as{" "}
+          <span className="font-mono">{s.scenarioId}</span> by {s.reviewedBy ?? "a human"}. Committed
+          scenarios are immutable — create a new version to change one.
         </p>
       )}
     </div>

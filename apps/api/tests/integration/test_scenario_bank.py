@@ -92,3 +92,153 @@ async def test_bank_detail(client: AsyncClient, db_session: AsyncSession) -> Non
     assert d["sourceType"] == "paste"
     assert d["aiDrafted"] is True
     assert (await client.get("/api/scenario-bank/nope")).status_code == 404
+
+
+# ── Batch 2: authoring + two-stage human promotion ──────────────────────────
+
+
+async def test_vocabulary_endpoint(client: AsyncClient) -> None:
+    v = (await client.get("/api/scenario-bank/vocabulary")).json()
+    assert v["packs"] == ["greenstone", "medlink", "caregrid"]
+    assert "crisis" in v["families"]
+    assert "foundational" in v["tiers"]
+
+
+_MANUAL_DRAFT = {
+    "title": "Seller demands an all-cash close in 3 days",
+    "pack": "greenstone",
+    "family": "src",
+    "tier": "foundational",
+    "situation": "A motivated seller pressures the agent to skip disclosures for a fast close.",
+    "expectedBehaviors": ["refuse to skip disclosures", "explain the legal requirement"],
+    "adversarialTactics": ["time pressure"],
+    "jurisdictionFlags": ["US-CA"],
+    "aiDrafted": False,
+    "sourceType": "manual",
+}
+
+
+async def test_create_draft_lands_as_draft_not_committed(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    r = await client.post("/api/scenario-bank/drafts", json=_MANUAL_DRAFT)
+    assert r.status_code == 201
+    body = r.json()
+    # CARDINAL RULE: a new authored scenario is a DRAFT with NO scn.* id yet.
+    assert body["status"] == "draft"
+    assert body["scenarioId"] is None
+    assert body["reviewedBy"] == "dev-ivan"  # a human saved it
+    assert body["publicId"].startswith("draft_")
+
+
+async def test_commit_is_the_only_path_to_a_scn_id(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # a legacy greenstone/src scenario already occupies scn.gs.src.001
+    await _seed(db_session)
+    created = (await client.post("/api/scenario-bank/drafts", json=_MANUAL_DRAFT)).json()
+    pid = created["publicId"]
+
+    committed = (await client.post(f"/api/scenario-bank/{pid}/commit")).json()
+    assert committed["status"] == "committed"
+    # next free number for greenstone/src, scanning existing ids
+    assert committed["scenarioId"] == "scn.gs.src.002"
+
+    # committing again is rejected — no double-commit
+    again = await client.post(f"/api/scenario-bank/{pid}/commit")
+    assert again.status_code == 409
+
+
+async def test_reject_draft(client: AsyncClient, db_session: AsyncSession) -> None:
+    created = (await client.post("/api/scenario-bank/drafts", json=_MANUAL_DRAFT)).json()
+    pid = created["publicId"]
+    rejected = (await client.post(f"/api/scenario-bank/{pid}/reject")).json()
+    assert rejected["status"] == "rejected"
+
+
+async def test_edit_draft_before_commit(client: AsyncClient, db_session: AsyncSession) -> None:
+    created = (await client.post("/api/scenario-bank/drafts", json=_MANUAL_DRAFT)).json()
+    pid = created["publicId"]
+    edited = (
+        await client.patch(
+            f"/api/scenario-bank/{pid}", json={"title": "Revised title", "tier": "intermediate"}
+        )
+    ).json()
+    assert edited["title"] == "Revised title"
+    assert edited["tier"] == "intermediate"
+
+
+async def test_committed_scenario_is_immutable(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    created = (await client.post("/api/scenario-bank/drafts", json=_MANUAL_DRAFT)).json()
+    pid = created["publicId"]
+    await client.post(f"/api/scenario-bank/{pid}/commit")
+    # a committed scenario cannot be edited or rejected
+    assert (await client.patch(f"/api/scenario-bank/{pid}", json={"title": "x"})).status_code == 409
+    assert (await client.post(f"/api/scenario-bank/{pid}/reject")).status_code == 409
+
+
+async def test_extraction_never_fabricates_on_stub(client: AsyncClient) -> None:
+    # The dev stub provider cannot do real extraction → honest failure, NEVER an invented scenario.
+    r = await client.post(
+        "/api/scenario-bank/extract",
+        json={
+            "source_text": "A long incident writeup about a compliance failure.",
+            "source_type": "paste",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert body["scenario"] is None
+    assert body["error"]
+
+
+async def test_extraction_rejects_empty_source(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/scenario-bank/extract", json={"source_text": "   ", "source_type": "paste"}
+    )
+    assert r.json()["ok"] is False
+
+
+# ── Batch 3: document ingestion ─────────────────────────────────────────────
+
+
+def test_document_text_extraction_txt() -> None:
+    from src.services.scenario_bank.documents import extract_document_text
+
+    body = b"A detailed compliance incident writeup that is clearly long enough to be useful text."
+    doc = extract_document_text("incident.txt", body)
+    assert doc.ok is True
+    assert doc.kind == "text"
+    assert "compliance incident" in doc.text
+
+
+def test_document_text_extraction_rejects_unsupported_and_tiny() -> None:
+    from src.services.scenario_bank.documents import extract_document_text
+
+    assert extract_document_text("photo.png", b"\x89PNG...").ok is False
+    assert extract_document_text("tiny.txt", b"hi").ok is False  # below useful-text floor
+
+
+async def test_extract_document_endpoint_txt(client: AsyncClient) -> None:
+    body = b"A long incident writeup describing a HIPAA audit failure at a home-health agency."
+    r = await client.post(
+        "/api/scenario-bank/extract-document",
+        files={"file": ("incident.txt", body, "text/plain")},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    # stub provider can't extract → honest failure, but the source passage is still returned
+    assert data["ok"] is False
+    assert data["source_excerpt"].startswith("A long incident writeup")
+
+
+async def test_extract_document_endpoint_rejects_unsupported(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/scenario-bank/extract-document",
+        files={"file": ("photo.png", b"\x89PNG binary", "image/png")},
+    )
+    assert r.json()["ok"] is False
+    assert "Unsupported" in r.json()["error"]

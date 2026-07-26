@@ -450,6 +450,74 @@ export interface BankQuery {
   search?: string;
 }
 
+// The editable candidate an extraction proposes (pre-fills the review form). Never saved as-is.
+export interface ExtractedScenario {
+  title: string;
+  pack: string;
+  family: string;
+  tier: string;
+  situation: string;
+  expected_behaviors: string[];
+  adversarial_tactics: string[];
+  jurisdiction_flags: string[];
+  confidence: number | null;
+}
+
+export interface ExtractResponse {
+  ok: boolean;
+  error: string | null;
+  confidence: number | null;
+  scenario: ExtractedScenario | null;
+  source_excerpt: string | null;
+  source_ref: string | null;
+}
+
+export interface BankVocabulary {
+  packs: string[];
+  families: string[];
+  tiers: string[];
+}
+
+// Body for saving a human-approved draft (manual authoring OR an approved extraction).
+export interface DraftBody {
+  title: string;
+  pack: string;
+  family: string;
+  tier: string;
+  situation: string;
+  expectedBehaviors: string[];
+  adversarialTactics: string[];
+  jurisdictionFlags: string[];
+  aiDrafted: boolean;
+  sourceType: string;
+  sourceRef?: string | null;
+  sourceExcerpt?: string | null;
+}
+
+async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API ${path} failed: ${res.status} ${detail}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function apiPostFile<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", body: form });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API ${path} failed: ${res.status} ${detail}`);
+  }
+  return (await res.json()) as T;
+}
+
 export const scenarioBank = {
   list: (params?: BankQuery) =>
     apiGet<{ items: BankScenario[]; total: number }>(`/api/scenario-bank/${qs(params)}`),
@@ -459,6 +527,21 @@ export const scenarioBank = {
     ),
   detail: (publicId: string) =>
     apiGet<BankScenarioDetail>(`/api/scenario-bank/${publicId}`),
+  vocabulary: () => apiGet<BankVocabulary>("/api/scenario-bank/vocabulary"),
+  // Extraction proposes a candidate — saves NOTHING. The caller reviews before saving a draft.
+  extract: (body: { source_text: string; source_type: string; source_ref?: string | null }) =>
+    apiPost<ExtractResponse>("/api/scenario-bank/extract", body),
+  extractDocument: (file: File) =>
+    apiPostFile<ExtractResponse>("/api/scenario-bank/extract-document", file),
+  // The two-stage human promotion. createDraft = stage 1 (draft). commit = stage 2 (scn.* id).
+  createDraft: (body: DraftBody) =>
+    apiPost<BankScenarioDetail>("/api/scenario-bank/drafts", body),
+  editDraft: (publicId: string, body: Partial<DraftBody>) =>
+    apiPatch<BankScenarioDetail>(`/api/scenario-bank/${publicId}`, body),
+  commit: (publicId: string) =>
+    apiPost<BankScenarioDetail>(`/api/scenario-bank/${publicId}/commit`, {}),
+  reject: (publicId: string) =>
+    apiPost<BankScenarioDetail>(`/api/scenario-bank/${publicId}/reject`, {}),
 };
 
 export async function runScenario(scenarioId: string): Promise<RunSummary> {
