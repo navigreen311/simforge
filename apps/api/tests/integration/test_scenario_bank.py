@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.models.bank_scenario import BankScenario
 from src.utils.time import utcnow
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force offline stub providers so these tests never depend on a dev's local .env keys.
+
+    (A developer with WEB_SEARCH_PROVIDER=tavily / LLM_PROVIDER=auto in .env would otherwise flip
+    the 'not configured' / stub-extraction assertions. CI has no .env, but this keeps it robust.)
+    """
+    monkeypatch.setattr(settings, "llm_provider", "stub")
+    monkeypatch.setattr(settings, "web_search_provider", "stub")
+    monkeypatch.setattr(settings, "tavily_api_key", "")
 
 
 async def _seed(session: AsyncSession) -> None:
@@ -200,6 +214,58 @@ async def test_extraction_rejects_empty_source(client: AsyncClient) -> None:
         "/api/scenario-bank/extract", json={"source_text": "   ", "source_type": "paste"}
     )
     assert r.json()["ok"] is False
+
+
+def test_validate_extraction_keeps_good_content_flags_unmapped_category() -> None:
+    # The real-world case: model nails title/situation/pack/family but invents a bad tier.
+    # We keep the candidate (title+situation are grounded) and flag tier for the human — no discard.
+    from src.services.scenario_bank.extraction import validate_extraction
+
+    result = validate_extraction(
+        {
+            "found": True,
+            "confidence": 0.8,
+            "title": "PIH Health settles with OCR for HIPAA violations",
+            "pack": "medlink",
+            "family": "audit",
+            "tier": "intermediate_crisis",  # NOT in the vocab
+            "situation": "A healthcare network settles a $600k OCR case after a phishing breach.",
+            "expected_behaviors": ["run a risk analysis"],
+        }
+    )
+    assert result.ok is True
+    assert result.scenario is not None
+    assert result.scenario["pack"] == "medlink"
+    assert result.scenario["family"] == "audit"
+    assert result.scenario["tier"] is None  # unmappable → left for the human
+    assert result.scenario["unmapped_fields"] == ["tier"]
+
+
+def test_validate_extraction_all_categories_valid() -> None:
+    from src.services.scenario_bank.extraction import validate_extraction
+
+    result = validate_extraction(
+        {
+            "found": True,
+            "title": "t",
+            "situation": "s",
+            "pack": "greenstone",
+            "family": "src",
+            "tier": "foundational",
+        }
+    )
+    assert result.ok is True
+    assert result.scenario is not None
+    assert result.scenario["unmapped_fields"] == []
+
+
+def test_validate_extraction_discards_when_no_substance() -> None:
+    from src.services.scenario_bank.extraction import validate_extraction
+
+    # found but no title/situation → discard (never guess the substantive content)
+    assert validate_extraction({"found": True, "title": "", "situation": ""}).ok is False
+    # explicitly not found → honest error
+    assert validate_extraction({"found": False, "reason": "just a news list"}).ok is False
 
 
 # ── Batch 3: document ingestion ─────────────────────────────────────────────
