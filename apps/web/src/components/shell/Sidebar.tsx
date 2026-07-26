@@ -12,6 +12,7 @@ const SECTIONS: NavSection[] = [
       { href: "/dashboard/readiness", label: "Readiness Matrix" },
       { href: "/dashboard/runs", label: "Runs" },
       { href: "/dashboard/packs", label: "Packs" },
+      { href: "/dashboard/scenario-bank", label: "Scenario Bank" },
       { href: "/dashboard/certs", label: "Certifications" },
     ],
   },

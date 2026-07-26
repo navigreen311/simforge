@@ -571,3 +571,42 @@ model VillageFingerprint {
 
   @@index([isCurrent])
 }
+
+// ═══════════════════════════════════════════════════════════════
+// SCENARIO BANK — reviewable scenario library + ingestion lifecycle
+// ═══════════════════════════════════════════════════════════════
+// Separate from the runtime `Scenario` table. Nothing here reaches certification automatically:
+// aiDrafted → human-approved draft → committed (an explicit human action). Legacy scenarios are
+// backfilled as status=committed / sourceType=legacy with their ids preserved.
+model BankScenario {
+  id                 String    @id @default(cuid())
+  publicId           String    @unique // "draft_{ulid}" | "legacy_{scenarioId}"
+  scenarioId         String?   @unique // "scn.gs.src.001" once committed; null while draft
+  title              String
+  pack               String
+  family             String
+  tier               String
+  situation          String    @default("")
+  expectedBehaviors  String[]
+  adversarialTactics String[]
+  jurisdictionFlags  String[]
+  status             String    @default("draft") // draft|in_review|committed|rejected|archived
+  aiDrafted          Boolean   @default(false)
+  sourceType         String    @default("manual") // legacy|manual|paste|document|web|youtube|video
+  sourceRef          String? // filename / url
+  sourceExcerpt      String?
+  createdBy          String    @default("unknown")
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  version            Int       @default(1)
+  supersedesId       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([pack])
+  @@index([family])
+  @@index([tier])
+  @@index([sourceType])
+}
