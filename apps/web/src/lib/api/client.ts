@@ -410,6 +410,57 @@ export const capabilities = {
     apiGet<{ capabilities: Record<string, CapabilityLabel> }>("/api/capabilities/"),
 };
 
+// ---- Scenario Bank (reviewable scenario library; nothing auto-commits) ----
+export interface BankScenario {
+  id: string;
+  publicId: string;
+  scenarioId: string | null;
+  title: string;
+  pack: string;
+  family: string;
+  tier: string;
+  situation: string;
+  status: string; // draft | in_review | committed | rejected | archived
+  aiDrafted: boolean;
+  sourceType: string; // legacy | manual | paste | document | web | youtube | video
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface BankScenarioDetail extends BankScenario {
+  expectedBehaviors: string[];
+  adversarialTactics: string[];
+  jurisdictionFlags: string[];
+  sourceRef: string | null;
+  sourceExcerpt: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  version: number;
+  supersedesId: string | null;
+  updatedAt: string;
+}
+
+export interface BankQuery {
+  status?: string;
+  pack?: string;
+  family?: string;
+  tier?: string;
+  source_type?: string;
+  ai_drafted?: boolean;
+  search?: string;
+}
+
+export const scenarioBank = {
+  list: (params?: BankQuery) =>
+    apiGet<{ items: BankScenario[]; total: number }>(`/api/scenario-bank/${qs(params)}`),
+  counts: () =>
+    apiGet<{ by_status: Record<string, number>; total: number; awaiting_review: number }>(
+      "/api/scenario-bank/counts",
+    ),
+  detail: (publicId: string) =>
+    apiGet<BankScenarioDetail>(`/api/scenario-bank/${publicId}`),
+};
+
 export async function runScenario(scenarioId: string): Promise<RunSummary> {
   const res = await fetch(`${API_BASE}/api/scenarios/${scenarioId}/run`, {
     method: "POST",

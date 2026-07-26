@@ -1,6 +1,7 @@
 """SQLAlchemy models (mapped to Prisma tables). Import all so metadata is complete."""
 
 from src.models.agent import Agent
+from src.models.bank_scenario import BankScenario
 from src.models.base import Base
 from src.models.ccb import CCB
 from src.models.cert import (
@@ -24,6 +25,7 @@ from src.models.village_fingerprint import VillageFingerprint
 __all__ = [
     "Base",
     "Agent",
+    "BankScenario",
     "Department",
     "CCB",
     "CognitiveSnapshot",

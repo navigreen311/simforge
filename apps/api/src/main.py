@@ -40,6 +40,7 @@ from src.routers import (
     pdp,
     registry,
     runs,
+    scenario_bank,
     scenarios,
     training,
 )
@@ -100,6 +101,7 @@ def create_app() -> FastAPI:
     app.include_router(budget.router, prefix="/api/budget", tags=["budget"])
     app.include_router(incident.router, prefix="/api/incident", tags=["incident"])
     app.include_router(capabilities.router, prefix="/api/capabilities", tags=["capabilities"])
+    app.include_router(scenario_bank.router, prefix="/api/scenario-bank", tags=["scenario-bank"])
     app.include_router(locales.router, prefix="/api/locales", tags=["locales"])
 
     @app.get("/metrics", include_in_schema=False)
