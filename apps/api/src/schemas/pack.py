@@ -32,6 +32,7 @@ class PackSummary(BaseModel):
     locale: str = "en"
     signedBy: str | None = None
     signedAt: datetime | None = None
+    supersedesPackId: str | None = None
 
 
 class PackCard(PackSummary):
@@ -88,3 +89,46 @@ class IngestPackResponse(BaseModel):
 
 class SignPackRequest(BaseModel):
     signed_by: str
+
+
+# ── Part B: create / edit a Pack from committed Scenario-Bank scenarios ──────
+
+
+class PackScenarioInput(BaseModel):
+    """A committed bank scenario plus the certification-binding fields set at pack-build time."""
+
+    scenarioId: str  # must be status=committed in the Scenario Bank
+    testedAgentVillageId: str
+    sloSeconds: int = 300
+    testedForgeCaps: list[str] = []
+    trainingDomains: list[str] = []
+    isGolden: bool = False
+    seed: int = 0
+
+
+class PackCreateRequest(BaseModel):
+    title: str
+    ownerVenture: str
+    version: str = "1.0.0"
+    phiRequired: bool = False
+    complianceFlags: list[str] = []
+    executionModeDefault: str = "sandbox"
+    rubricProfile: str
+    scenarios: list[PackScenarioInput]
+
+
+class PackCreateResponse(BaseModel):
+    ok: bool
+    packId: str
+    scenarios: int
+    issues: list[ValidationIssueOut] = []
+    error: str | None = None
+
+
+class AuthoringOptions(BaseModel):
+    """Vocabularies the New-Pack wizard needs (ventures, rubrics, flags, venture suggestions)."""
+
+    ventures: list[str]
+    rubrics: list[str]
+    jurisdiction_flags: list[str]
+    venture_suggestions: dict[str, dict]  # venture → {phiRequired, complianceFlags, rubricProfile}

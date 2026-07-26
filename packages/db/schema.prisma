@@ -80,6 +80,7 @@ model Pack {
   yamlHash              String
   signedBy              String? // owner_human who ratified
   signedAt              DateTime?
+  supersedesPackId      String? // the pack version this one replaces (edit → new version)
 
   scenarios     Scenario[]
   runs          Run[]

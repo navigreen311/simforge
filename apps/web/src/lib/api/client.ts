@@ -60,6 +60,7 @@ export interface PackSummary {
   locale: string;
   signedBy: string | null;
   signedAt: string | null;
+  supersedesPackId: string | null;
 }
 
 export interface PackCard extends PackSummary {
@@ -90,6 +91,48 @@ export interface FlagInfo {
 export interface FlagCatalog {
   flags: Record<string, FlagInfo>;
   legend: Record<string, string>;
+}
+
+export interface VentureSuggestion {
+  phiRequired: boolean;
+  complianceFlags: string[];
+  rubricProfile: string;
+}
+
+export interface AuthoringOptions {
+  ventures: string[];
+  rubrics: string[];
+  jurisdiction_flags: string[];
+  venture_suggestions: Record<string, VentureSuggestion>;
+}
+
+export interface PackScenarioInput {
+  scenarioId: string;
+  testedAgentVillageId: string;
+  sloSeconds: number;
+  testedForgeCaps: string[];
+  trainingDomains: string[];
+  isGolden: boolean;
+  seed: number;
+}
+
+export interface PackCreateRequest {
+  title: string;
+  ownerVenture: string;
+  version: string;
+  phiRequired: boolean;
+  complianceFlags: string[];
+  executionModeDefault: string;
+  rubricProfile: string;
+  scenarios: PackScenarioInput[];
+}
+
+export interface PackCreateResponse {
+  ok: boolean;
+  packId: string;
+  scenarios: number;
+  issues: { severity: string; code: string; message: string; location: string }[];
+  error: string | null;
 }
 
 export interface RunSummary {
@@ -224,6 +267,11 @@ export const api = {
   packs: () => apiGet<PackList>("/api/packs/"),
   pack: (packId: string) => apiGet<PackDetail>(`/api/packs/${packId}`),
   flagCatalog: () => apiGet<FlagCatalog>("/api/packs/flag-catalog"),
+  authoringOptions: () => apiGet<AuthoringOptions>("/api/packs/authoring-options"),
+  createPack: (body: PackCreateRequest) =>
+    apiPost<PackCreateResponse>("/api/packs/create", body),
+  newPackVersion: (packId: string, body: PackCreateRequest) =>
+    apiPost<PackCreateResponse>(`/api/packs/${packId}/new-version`, body),
   runs: (params?: RunQuery) => apiGet<RunList>(`/api/runs/${qs(params)}`),
   runCounts: (params?: RunQuery) => apiGet<RunCounts>(`/api/runs/counts${qs(params)}`),
   run: (runId: string) => apiGet<RunSummary>(`/api/runs/${runId}`),

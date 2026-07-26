@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PacksExplorer } from "@/components/packs/PacksExplorer";
 import { PageMeta } from "@/components/ui/PageMeta";
 import { api, type FlagCatalog, type PackCard } from "@/lib/api/client";
@@ -23,7 +25,15 @@ export default async function PacksPage() {
     <div className="mx-auto max-w-5xl">
       <div className="flex items-start justify-between">
         <h1 className="text-3xl">Certification Packs</h1>
-        <PageMeta />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/packs/new"
+            className="rounded bg-gold-500 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-gold-400"
+          >
+            + New Pack
+          </Link>
+          <PageMeta />
+        </div>
       </div>
       <p className="mt-2 mb-6 max-w-prose text-ink-200">
         A Pack is the set of scenarios an agent must pass to be certified for one venture&apos;s

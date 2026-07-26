@@ -30,6 +30,8 @@ class Pack(IdTimestampMixin, Base):
     yamlHash: Mapped[str] = mapped_column(String)
     signedBy: Mapped[str | None] = mapped_column(String, nullable=True)
     signedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The pack version this one replaces (set when an edit creates pack.{venture}.v{n+1}).
+    supersedesPackId: Mapped[str | None] = mapped_column(String, nullable=True)
 
     scenarios: Mapped[list[Scenario]] = relationship(
         back_populates="pack", cascade="all, delete-orphan"
