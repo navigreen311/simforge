@@ -25,7 +25,8 @@ export function GapsExplorer({ gaps }: { gaps: SoftwareGap[] }) {
   const clusters = useMemo(() => {
     const map = new Map<string, SoftwareGap[]>();
     for (const g of gaps) {
-      const k = clusterKey(g.summary);
+      // Cluster on the machine string (so "degrades under crisis load" groups across forges)…
+      const k = clusterKey(g.summary_technical ?? g.summary);
       (map.get(k) ?? map.set(k, []).get(k)!).push(g);
     }
     return Array.from(map.entries())
@@ -66,7 +67,39 @@ export function GapsExplorer({ gaps }: { gaps: SoftwareGap[] }) {
       },
       cell: (g) => <SeverityPill severity={g.severity} />,
     },
-    { key: "summary", header: "Summary", cell: (g) => <span className="text-ink-50">{g.summary}</span> },
+    {
+      key: "summary",
+      header: "Summary",
+      searchText: (g) =>
+        `${g.summary_plain?.what ?? ""} ${g.summary_plain?.why ?? ""} ${g.summary_technical ?? g.summary}`,
+      cell: (g) => {
+        const p = g.summary_plain;
+        return (
+          <div className="max-w-xl">
+            <div className="flex items-start gap-2">
+              <span className="text-ink-50">{p?.what ?? g.summary}</span>
+              <code
+                className="mt-0.5 shrink-0 rounded bg-ink-700 px-1.5 py-0.5 font-mono text-[10px] text-ink-300"
+                title={g.summary_technical || g.summary}
+              >
+                {p?.code ?? "raw"}
+              </code>
+            </div>
+            {p?.why && <div className="mt-1 text-xs text-ink-400">{p.why}</div>}
+            {p?.action && (
+              <details className="mt-1">
+                <summary className="cursor-pointer text-xs text-gold-400 hover:underline">
+                  What to do
+                </summary>
+                <div className="mt-1 rounded border border-ink-600 bg-ink-900/50 p-2 text-xs text-ink-200">
+                  {p.action}
+                </div>
+              </details>
+            )}
+          </div>
+        );
+      },
+    },
     {
       key: "seen",
       header: "Seen",
@@ -114,7 +147,10 @@ export function GapsExplorer({ gaps }: { gaps: SoftwareGap[] }) {
             <div key={c.key} className="rounded-lg border border-ink-500 bg-ink-800 p-3">
               <div className="flex items-center gap-2 text-sm">
                 {c.items.length > 1 && <span className="rounded bg-warning/20 px-2 py-0.5 text-xs text-warning">×{c.items.length} duplicates</span>}
-                <span className="text-ink-50">{c.items[0].summary.replace(/^\[[^\]]+\]\s*/, "")}</span>
+                {/* …but display the plain-language 'what' for the (shared) fault code. */}
+                <span className="text-ink-50">
+                  {c.items[0].summary_plain?.what ?? c.items[0].summary}
+                </span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-ink-400">
                 {c.items.map((g) => (
