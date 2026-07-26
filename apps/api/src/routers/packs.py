@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,17 +13,23 @@ from src.db import get_session
 from src.deps import require_role
 from src.models.pack import Pack
 from src.schemas.pack import (
+    FlagCatalogOut,
+    FlagInfoOut,
     IngestPackRequest,
     IngestPackResponse,
+    PackCard,
     PackDetail,
     PackList,
     PackSummary,
     ScenarioSummary,
     SignPackRequest,
 )
+from src.services.packs.flag_catalog import LEGEND, describe_flag
 from src.services.packs.ingestion import IngestionError, ingest_pack
 
 router = APIRouter()
+
+_TIERS = ("foundational", "intermediate", "advanced_crisis")
 
 
 async def _get_pack_or_404(session: AsyncSession, pack_id: str) -> Pack:
@@ -39,9 +45,51 @@ async def _get_pack_or_404(session: AsyncSession, pack_id: str) -> Pack:
 
 @router.get("/", response_model=PackList, dependencies=[Depends(require_role("viewer"))])
 async def list_packs(session: AsyncSession = Depends(get_session)) -> PackList:
-    rows = (await session.execute(select(Pack).order_by(Pack.name))).scalars().all()
-    total = (await session.execute(select(func.count()).select_from(Pack))).scalar_one()
-    return PackList(items=[PackSummary.model_validate(p) for p in rows], total=total)
+    rows = (
+        (
+            await session.execute(
+                select(Pack).order_by(Pack.name).options(selectinload(Pack.scenarios))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = []
+    for p in rows:
+        tier_counts = {t: 0 for t in _TIERS}
+        golden = 0
+        for s in p.scenarios:
+            tier_counts[s.tier] = tier_counts.get(s.tier, 0) + 1
+            if s.isGolden:
+                golden += 1
+        items.append(
+            PackCard(
+                **PackSummary.model_validate(p).model_dump(),
+                complianceFlags=p.complianceFlags,
+                scenarioCount=len(p.scenarios),
+                tierCounts=tier_counts,
+                goldenCount=golden,
+            )
+        )
+    return PackList(items=items, total=len(items))
+
+
+@router.get(
+    "/flag-catalog", response_model=FlagCatalogOut, dependencies=[Depends(require_role("viewer"))]
+)
+async def flag_catalog(session: AsyncSession = Depends(get_session)) -> FlagCatalogOut:
+    """Plain-language label + tooltip for every flag that appears on any pack (Part A).
+
+    Queries the distinct flags actually used across all packs (so no chip is ever unexplained) and
+    labels each via the deterministic catalog, which maps to the Jurisdiction engine where known.
+    """
+    used: set[str] = set()
+    for (flags,) in await session.execute(select(Pack.complianceFlags)):
+        used.update(flags or [])
+    return FlagCatalogOut(
+        flags={f: FlagInfoOut(**describe_flag(f)) for f in sorted(used)},
+        legend=LEGEND,
+    )
 
 
 @router.get("/{pack_id}", response_model=PackDetail, dependencies=[Depends(require_role("viewer"))])
