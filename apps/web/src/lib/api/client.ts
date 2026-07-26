@@ -398,6 +398,18 @@ export const lineage = {
     apiGet<LineageSubgraph>(`/api/lineage/subgraph/${urn}?hops=${hops}`),
 };
 
+export interface CapabilityLabel {
+  cap_id: string;
+  forge: string;
+  label: string;
+  description: string;
+}
+
+export const capabilities = {
+  labels: () =>
+    apiGet<{ capabilities: Record<string, CapabilityLabel> }>("/api/capabilities/"),
+};
+
 export async function runScenario(scenarioId: string): Promise<RunSummary> {
   const res = await fetch(`${API_BASE}/api/scenarios/${scenarioId}/run`, {
     method: "POST",
