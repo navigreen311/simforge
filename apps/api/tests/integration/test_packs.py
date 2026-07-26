@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.bank_scenario import BankScenario
+from src.utils.time import utcnow
 
 # apps/api/tests/integration/test_packs.py → repo root is parents[4]
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -100,3 +105,122 @@ async def test_unknown_flag_gets_readable_fallback() -> None:
     assert d["label"] == "Some New Flag"
     assert d["tooltip"]
     assert d["phi"] is False
+
+
+# ── Part B: create / edit a Pack from committed scenarios ───────────────────
+
+
+@pytest.fixture
+def _packs_root(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Write generated packs to a temp dir, not the repo's packs/."""
+    from src.config import settings
+
+    root = tmp_path / "packs"
+    root.mkdir()
+    monkeypatch.setattr(settings, "packs_root", str(root))
+    return root
+
+
+async def _seed_bank(
+    session: AsyncSession, scenario_id: str, status: str = "committed", tier: str = "foundational"
+) -> None:
+    now = utcnow()
+    session.add(
+        BankScenario(
+            publicId=f"pub_{scenario_id}",
+            scenarioId=scenario_id,
+            title=f"Test scenario {scenario_id}",
+            pack="greenstone",
+            family="src",
+            tier=tier,
+            situation="A synthetic situation the agent must handle correctly and honestly.",
+            expectedBehaviors=["confirm consent", "stay compliant"],
+            status=status,
+            aiDrafted=False,
+            sourceType="manual",
+            createdBy="ivan",
+            createdAt=now,
+            updatedAt=now,
+        )
+    )
+    await session.commit()
+
+
+def _create_body(scenario_id: str) -> dict:
+    return {
+        "title": "Argus Security Triage",
+        "ownerVenture": "argus",
+        "rubricProfile": "argus.default",
+        "phiRequired": False,
+        "complianceFlags": [],
+        "scenarios": [
+            {"scenarioId": scenario_id, "testedAgentVillageId": "nina_okafor", "sloSeconds": 300}
+        ],
+    }
+
+
+async def test_create_pack_from_committed_scenario(
+    client: AsyncClient, db_session: AsyncSession, _packs_root: Path
+) -> None:
+    await _seed_bank(db_session, "scn.argus.triage.001")
+    resp = await client.post("/api/packs/create", json=_create_body("scn.argus.triage.001"))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["packId"] == "pack.argus.v1"
+    assert body["scenarios"] == 1
+
+    # It now flows into the normal pack list + detail like any other pack.
+    detail = (await client.get("/api/packs/pack.argus.v1")).json()
+    assert detail["scenarios"][0]["scenarioId"] == "scn.argus.triage.001"
+    assert detail["scenarios"][0]["testedAgentVillageId"] == "nina_okafor"
+
+
+async def test_only_committed_scenarios_can_enter_a_pack(
+    client: AsyncClient, db_session: AsyncSession, _packs_root: Path
+) -> None:
+    # A scenario that is NOT committed (archived here) is rejected by the guardrail.
+    await _seed_bank(db_session, "scn.argus.triage.002", status="archived")
+    resp = await client.post("/api/packs/create", json=_create_body("scn.argus.triage.002"))
+    assert resp.status_code == 400
+    assert "committed" in resp.json()["detail"].lower()
+
+
+async def test_create_rejects_duplicate_pack(
+    client: AsyncClient, db_session: AsyncSession, _packs_root: Path
+) -> None:
+    await _seed_bank(db_session, "scn.argus.triage.003")
+    b = _create_body("scn.argus.triage.003")
+    assert (await client.post("/api/packs/create", json=b)).json()["ok"] is True
+    # Same venture+version again → refuse (don't overwrite an existing pack).
+    dup = await client.post("/api/packs/create", json=_create_body("scn.argus.triage.003"))
+    assert dup.status_code == 400
+    assert "already exists" in dup.json()["detail"].lower()
+
+
+async def test_edit_creates_new_version_and_supersedes(
+    client: AsyncClient, db_session: AsyncSession, _packs_root: Path
+) -> None:
+    await _seed_bank(db_session, "scn.argus.triage.010")
+    await _seed_bank(db_session, "scn.argus.triage.011", tier="intermediate")
+    await client.post("/api/packs/create", json=_create_body("scn.argus.triage.010"))
+
+    # Edit into v2 with a different scenario set.
+    v2_body = _create_body("scn.argus.triage.011")
+    resp = await client.post("/api/packs/pack.argus.v1/new-version", json=v2_body)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["packId"] == "pack.argus.v2"
+
+    # The old version is preserved; the new one records what it supersedes.
+    v1 = (await client.get("/api/packs/pack.argus.v1")).json()
+    v2 = (await client.get("/api/packs/pack.argus.v2")).json()
+    assert v1["scenarios"][0]["scenarioId"] == "scn.argus.triage.010"  # untouched
+    assert v2["scenarios"][0]["scenarioId"] == "scn.argus.triage.011"
+    assert v2["supersedesPackId"] == "pack.argus.v1"
+
+
+async def test_authoring_options_exposes_flags_and_suggestions(client: AsyncClient) -> None:
+    opts = (await client.get("/api/packs/authoring-options")).json()
+    assert "hipaa" in opts["jurisdiction_flags"]
+    assert "medlink-pro" in opts["venture_suggestions"]
+    assert opts["venture_suggestions"]["medlink-pro"]["phiRequired"] is True

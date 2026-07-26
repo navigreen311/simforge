@@ -22,10 +22,30 @@ export default async function PackDetailPage({ params }: { params: { packId: str
       </Link>
       <div className="mt-2 flex items-center justify-between">
         <h1 className="text-3xl">{pack.name}</h1>
-        <span className="font-mono text-sm text-ink-300">
-          {pack.packId} · v{pack.version}
-        </span>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/dashboard/packs/${pack.packId}/edit`}
+            className="rounded border border-ink-500 px-3 py-1.5 text-sm text-ink-100 hover:bg-ink-700"
+          >
+            Edit → new version
+          </Link>
+          <span className="font-mono text-sm text-ink-300">
+            {pack.packId} · v{pack.version}
+          </span>
+        </div>
       </div>
+      {pack.supersedesPackId && (
+        <div className="mt-2 text-xs text-ink-400">
+          Supersedes{" "}
+          <Link
+            href={`/dashboard/packs/${pack.supersedesPackId}`}
+            className="font-mono text-gold-400 hover:underline"
+          >
+            {pack.supersedesPackId}
+          </Link>{" "}
+          — the previous version is preserved; certs pinned to it are unaffected.
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-2 text-xs">
         <span className="rounded bg-ink-600 px-2 py-1 text-ink-100">venture: {pack.ownerVenture}</span>
