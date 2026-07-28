@@ -267,7 +267,19 @@ export function RunsExplorer({
                     {r.execution_mode}
                   </td>
                   <td className="px-4 py-3">
-                    <RunStatusBadge status={r.status} />
+                    <span className="inline-flex items-center gap-2">
+                      <RunStatusBadge status={r.status} />
+                      {["queued", "running", "scoring"].includes(r.status) && (
+                        <a
+                          href={`/dashboard/runs/${r.run_id}/watch`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded bg-info/15 px-1.5 py-0.5 text-[10px] text-info hover:bg-info/25"
+                          title="Watch this in-progress run live"
+                        >
+                          ● watch
+                        </a>
+                      )}
+                    </span>
                   </td>
                   <td
                     className="px-4 py-3 text-ink-100"

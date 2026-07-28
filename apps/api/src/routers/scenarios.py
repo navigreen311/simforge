@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.dev import Principal, get_current_principal
 from src.db import get_session
 from src.deps import get_village_reader, require_role
 from src.models.pack import Pack, Scenario
 from src.schemas.pack import ScenarioSummary
-from src.schemas.run import RunSummary
+from src.schemas.run import LaunchLiveResponse, RunSummary
 from src.services.runner import RunnerError, run_scenario
 from src.services.village.reader import VillageReader
 
@@ -104,3 +105,32 @@ async def run_scenario_endpoint(
         # Integrated-narrative runs also accrete a story-level beat (ADR-0035); protected → no-op.
         await apply_narrative_effects(session, run, card)
     return await _summarize(session, run)
+
+
+@router.post(
+    "/{scenario_id}/run-live",
+    response_model=LaunchLiveResponse,
+    dependencies=[Depends(require_role("prompt_engineer"))],
+)
+async def launch_live_run_endpoint(
+    scenario_id: str,
+    integrated: bool = False,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> LaunchLiveResponse:
+    """Launch a run ASYNC for the live monitor: returns a run id immediately, then executes in the
+    background with incremental progress. Does not certify anyone; running is separate from
+    certification. If the scenario tier exceeds the tested agent's autonomy, it warns but proceeds.
+    """
+    from src.services.budget import BudgetExceededError
+    from src.services.runner.live import launch_live_run
+
+    try:
+        result = await launch_live_run(
+            session, scenario_id, integrated=integrated, actor=principal.subject
+        )
+    except RunnerError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BudgetExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc)) from exc
+    return LaunchLiveResponse(**result)

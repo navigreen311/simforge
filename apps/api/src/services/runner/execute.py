@@ -158,22 +158,15 @@ async def _maybe_capture_ccb(
         return None  # agent not present in the (dev) Village tree — run proceeds without CCB
 
 
-async def run_scenario(
-    session: AsyncSession,
-    scenario_id: str,
-    reader: VillageReader,
-    provider: LLMProvider | None = None,
-    *,
-    blind_mode: bool = False,
-    integrated: bool = False,
-    narrative_mode: str | None = None,
-) -> Run:
+async def resolve_run_context(
+    session: AsyncSession, scenario_id: str, integrated: bool
+) -> tuple[Scenario, Pack, Agent, bool]:
+    """Resolve + gate a run (scenario/pack/tested-agent, integrated decision + budget)."""
     scenario = (
         await session.execute(select(Scenario).where(Scenario.scenarioId == scenario_id))
     ).scalar_one_or_none()
     if scenario is None:
         raise RunnerError(f"Scenario not found: {scenario_id}")
-
     pack = (await session.execute(select(Pack).where(Pack.id == scenario.packId))).scalar_one()
     agent = (
         await session.execute(
@@ -183,30 +176,49 @@ async def run_scenario(
     if agent is None:
         raise RunnerError(f"Tested agent not registered: {scenario.testedAgentVillageId}")
 
-    # Integrated (write-enabled) mode is triple-gated (ADR-0025); otherwise the run is sandboxed.
     from src.services.execution import is_integrated_enabled
 
     use_integrated = is_integrated_enabled(pack.integratedRunsAllowed, integrated)
 
-    # Enforce the monthly cost cap for this mode before doing any (billable) work (ADR-0039).
     from src.services.budget import enforce_budget
 
     await enforce_budget(session, "integrated" if use_integrated else "sandbox")
+    return scenario, pack, agent, use_integrated
 
-    run = Run(
-        runId=str(ULID()),
-        scenarioId=scenario.id,
-        packId=pack.id,
-        agentId=agent.id,
-        executionMode="integrated" if use_integrated else "sandbox",
-        narrativeMode=narrative_mode or pack.narrativeModeDefault,
-        blindMode=blind_mode,
-        status="running",
-        startedAt=datetime.now(UTC),
-    )
-    session.add(run)
-    await session.flush()
 
+def _persist_new_trace(session: AsyncSession, run: Run, state, cursor: list[int]) -> None:
+    """Persist trace entries emitted since the cursor; advance it. Shared by sync + live paths."""
+    for entry in state.trace[cursor[0] :]:
+        session.add(
+            TraceEvent(
+                runId=run.id,
+                timestamp=entry.timestamp,
+                eventType=entry.event_type,
+                phase=entry.phase,
+                turnNumber=entry.turn_number,
+                payload=entry.payload,
+            )
+        )
+    cursor[0] = len(state.trace)
+
+
+async def _execute_into_run(
+    session: AsyncSession,
+    run: Run,
+    scenario: Scenario,
+    pack: Pack,
+    agent: Agent,
+    reader: VillageReader,
+    provider: LLMProvider | None,
+    use_integrated: bool,
+    live: bool = False,
+) -> Run:
+    """Execute an already-created Run row end-to-end and persist it.
+
+    When `live` is True (the live monitor path) transcript + new trace are persisted incrementally
+    as the run proceeds so a watcher can read progress; the sync path (live=False) persists once at
+    the end. Both share one trace cursor, so trace events are never double-written.
+    """
     run.ccbPreId = await _maybe_capture_ccb(session, reader, agent.villageAgentId, "pre")
 
     provider = provider or get_llm_provider()
@@ -222,6 +234,17 @@ async def run_scenario(
         "slo_seconds": scenario.sloSeconds,
         "cold_open": _load_cold_open(scenario),
     }
+    cursor = [0]
+
+    live_progress = None
+    if live:
+
+        async def live_progress(state) -> None:  # noqa: ANN001
+            run.transcript = list(state.transcript)
+            run.tokensUsed = state.tokens_used
+            _persist_new_trace(session, run, state, cursor)
+            await session.commit()
+
     runner = ScenarioRunner(
         scenario=scenario_dict,
         agent_runtime=runtime,
@@ -230,6 +253,7 @@ async def run_scenario(
         seed=scenario.seed,
         fallback_name=agent.name,
         fallback_role=agent.role,
+        on_progress=live_progress,
     )
 
     try:
@@ -251,18 +275,13 @@ async def run_scenario(
         await session.refresh(run)
         return run
 
-    # Forge side-effects (CapitalForge Mock Bank + VAF Doc Vault) → trace events
-    # (faults become Software Gaps).
     await _run_forge_side_effects(state, scenario, run.runId)
 
-    # Integrated (write-enabled) execution: PDP-gate each tested capability and commit the allowed
-    # ones as an auditable ledger (ADR-0025). Only runs when triple-gated; sandbox runs skip this.
     if use_integrated:
         from src.services.execution import apply_integrated_actions
 
         await apply_integrated_actions(session, run, scenario, agent)
 
-    # Persist results
     run.transcript = state.transcript
     run.tokensUsed = state.tokens_used
     run.costUsd = 0.0  # StubProvider is free; real providers set a metered cost.
@@ -271,20 +290,40 @@ async def run_scenario(
     run.status = _OUTCOME_STATUS.get(state.outcome or "", "errored")
     run.endedAt = datetime.now(UTC)
 
-    for entry in state.trace:
-        session.add(
-            TraceEvent(
-                runId=run.id,
-                timestamp=entry.timestamp,
-                eventType=entry.event_type,
-                phase=entry.phase,
-                turnNumber=entry.turn_number,
-                payload=entry.payload,
-            )
-        )
-
+    _persist_new_trace(session, run, state, cursor)  # persists only entries not yet written
     run.ccbPostId = await _maybe_capture_ccb(session, reader, agent.villageAgentId, "post")
 
     await session.commit()
     await session.refresh(run)
     return run
+
+
+async def run_scenario(
+    session: AsyncSession,
+    scenario_id: str,
+    reader: VillageReader,
+    provider: LLMProvider | None = None,
+    *,
+    blind_mode: bool = False,
+    integrated: bool = False,
+    narrative_mode: str | None = None,
+) -> Run:
+    scenario, pack, agent, use_integrated = await resolve_run_context(
+        session, scenario_id, integrated
+    )
+    run = Run(
+        runId=str(ULID()),
+        scenarioId=scenario.id,
+        packId=pack.id,
+        agentId=agent.id,
+        executionMode="integrated" if use_integrated else "sandbox",
+        narrativeMode=narrative_mode or pack.narrativeModeDefault,
+        blindMode=blind_mode,
+        status="running",
+        startedAt=datetime.now(UTC),
+    )
+    session.add(run)
+    await session.flush()
+    return await _execute_into_run(
+        session, run, scenario, pack, agent, reader, provider, use_integrated
+    )

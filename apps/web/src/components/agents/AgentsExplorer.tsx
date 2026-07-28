@@ -1,8 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { AutonomyLadderIndicator } from "@/components/agents/AutonomyLadderIndicator";
+import { ScenarioPickerModal } from "@/components/agents/ScenarioPickerModal";
 import { Column, DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type {
@@ -35,6 +37,7 @@ export function AgentsExplorer({
   legend: AgentsLegend;
 }) {
   const router = useRouter();
+  const [pickerAgent, setPickerAgent] = useState<AgentSummary | null>(null);
   const deptName = new Map(departments.map((d) => [d.id, d.name]));
   const certByAgent = new Map(rollup.map((r) => [r.agent_village_id, r]));
   const levelMeaning = new Map(legend.levels.map((l) => [l.level, l.meaning]));
@@ -208,6 +211,23 @@ export function AgentsExplorer({
         );
       },
     },
+    {
+      key: "run",
+      header: "",
+      align: "right",
+      cell: (a) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setPickerAgent(a);
+          }}
+          className="rounded border border-ink-500 px-2 py-1 text-xs text-ink-100 hover:bg-ink-700"
+          title="Run a scenario for this agent and watch it execute live"
+        >
+          ▶ Run
+        </button>
+      ),
+    },
   ];
 
   return (
@@ -233,6 +253,13 @@ export function AgentsExplorer({
           />
         }
       />
+      {pickerAgent && (
+        <ScenarioPickerModal
+          agentVillageId={pickerAgent.villageAgentId}
+          agentAutonomy={pickerAgent.currentAutonomyLevel}
+          onClose={() => setPickerAgent(null)}
+        />
+      )}
     </div>
   );
 }
