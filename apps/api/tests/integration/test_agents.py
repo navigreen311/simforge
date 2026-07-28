@@ -64,3 +64,67 @@ async def test_agents_legend(client: AsyncClient) -> None:
     # neither flag has a formal in-app definition — reported, not fabricated
     assert flags["gardner"]["defined"] is False
     assert flags["l10"]["defined"] is False
+
+
+# ── Add agents (single + bulk) ──────────────────────────────────────────────
+
+
+async def _eng_dept_id(client: AsyncClient) -> str:
+    depts = (await client.get("/api/departments/")).json()["items"]
+    return next(d["id"] for d in depts if d["villageKey"] == "Engineering")
+
+
+async def test_add_single_agent_starts_at_floor(client: AsyncClient) -> None:
+    dept = await _eng_dept_id(client)
+    r = await client.post(
+        "/api/agents/", json={"name": "Ada Byron", "role": "Analyst", "departmentId": dept}
+    )
+    assert r.status_code == 201, r.text
+    a = r.json()
+    assert a["villageAgentId"] == "ada_byron"  # auto-slugged
+    assert a["currentAutonomyLevel"] == "L1"  # floor — never a backdoor around certification
+    assert a["gardnerFlag"] is False
+
+
+async def test_add_single_rejects_bad_input(client: AsyncClient) -> None:
+    bad = await client.post("/api/agents/", json={"name": "", "departmentId": "x"})
+    assert bad.status_code == 400
+    dept = await _eng_dept_id(client)
+    # duplicate id
+    await client.post("/api/agents/", json={"name": "Dup One", "departmentId": dept})
+    r = await client.post(
+        "/api/agents/", json={"name": "Dup Two", "villageAgentId": "dup_one", "departmentId": dept}
+    )
+    assert r.status_code == 400 and "already exists" in r.json()["detail"]
+    # unknown department
+    r2 = await client.post("/api/agents/", json={"name": "No Dept", "departmentId": "nope"})
+    assert r2.status_code == 400
+
+
+async def test_bulk_import_validates_per_row(client: AsyncClient) -> None:
+    # existing id to trigger a duplicate-skip
+    eng = await _eng_dept_id(client)
+    await client.post(
+        "/api/agents/",
+        json={"name": "Grace Hopper", "villageAgentId": "grace_hopper", "departmentId": eng},
+    )
+    rows = [
+        {"name": "Alan Turing", "role": "Engineer", "department": "Engineering", "flags": "l10"},
+        {"name": "", "department": "Engineering"},  # missing name → error
+        {"name": "Bad Dept", "department": "Nonexistent"},  # unknown dept → error
+        {"name": "Grace Hopper", "id": "grace_hopper", "department": "Engineering"},  # dup → skip
+        {"name": "Dupe In Batch", "id": "dib", "department": "Recruitment"},
+        {"name": "Dupe In Batch 2", "id": "dib", "department": "Recruitment"},  # dup within batch
+    ]
+    r = await client.post("/api/agents/bulk", json={"rows": rows})
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert b["imported"] == 2  # Alan Turing + first "dib"
+    assert b["errored"] == 2  # missing name + unknown dept
+    assert b["skipped"] == 2  # existing grace_hopper + dup-in-batch dib
+    # imported agents start at floor with the parsed flag
+    turing = (await client.get("/api/agents/alan_turing")).json()
+    assert turing["currentAutonomyLevel"] == "L1"
+    assert turing["level10Enabled"] is True  # parsed from flags "l10" — but NOT autonomy
+    # invalid rows were NOT invented
+    assert (await client.get("/api/agents/bad_dept")).status_code == 404

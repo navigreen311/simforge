@@ -45,3 +45,44 @@ class AgentsLegendOut(BaseModel):
     floor: str
     levels: list[LadderLevelOut]
     flags: list[FlagInfoOut]
+
+
+# ── Add agents (single + bulk) ──────────────────────────────────────────────
+# New agents ALWAYS start at floor autonomy with zero certs — there is no autonomy field here, so
+# "add agent" can never be a backdoor around the certification gate.
+
+
+class AgentCreateRequest(BaseModel):
+    name: str
+    villageAgentId: str | None = None  # auto-generated from name if blank
+    role: str = ""
+    departmentId: str
+    gardnerFlag: bool = False
+    level10Enabled: bool = False
+
+
+class BulkAgentRow(BaseModel):
+    name: str = ""
+    id: str = ""
+    role: str = ""
+    department: str = ""  # matched by department id, villageKey, or name
+    flags: str = ""  # free text, e.g. "gardner;l10"
+
+
+class BulkImportRequest(BaseModel):
+    rows: list[BulkAgentRow]
+
+
+class BulkRowResult(BaseModel):
+    index: int
+    name: str
+    villageAgentId: str | None = None
+    status: str  # imported | skipped | error
+    reason: str | None = None
+
+
+class BulkImportResponse(BaseModel):
+    imported: int
+    skipped: int
+    errored: int
+    results: list[BulkRowResult]

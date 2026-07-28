@@ -345,6 +345,9 @@ export const api = {
     has_active_certs?: boolean;
   }) => apiGet<AgentList>(`/api/agents/${qs(params)}`),
   agentsLegend: () => apiGet<AgentsLegend>("/api/agents/legend"),
+  createAgent: (body: AgentCreateRequest) => apiPost<AgentSummary>("/api/agents/", body),
+  bulkImportAgents: (rows: BulkAgentRow[]) =>
+    apiPost<BulkImportResponse>("/api/agents/bulk", { rows }),
   departments: () => apiGet<DepartmentList>("/api/departments/"),
   scenarios: () => apiGet<{ items: ScenarioSummary[]; total: number }>("/api/scenarios/"),
   packs: () => apiGet<PackList>("/api/packs/"),
@@ -487,6 +490,38 @@ export interface AgentsLegend {
   floor: string;
   levels: LadderLevel[];
   flags: AgentFlagInfo[];
+}
+
+export interface AgentCreateRequest {
+  name: string;
+  villageAgentId?: string | null;
+  role?: string;
+  departmentId: string;
+  gardnerFlag?: boolean;
+  level10Enabled?: boolean;
+}
+
+export interface BulkAgentRow {
+  name: string;
+  id?: string;
+  role?: string;
+  department?: string;
+  flags?: string;
+}
+
+export interface BulkRowResult {
+  index: number;
+  name: string;
+  villageAgentId: string | null;
+  status: string; // imported | skipped | error
+  reason: string | null;
+}
+
+export interface BulkImportResponse {
+  imported: number;
+  skipped: number;
+  errored: number;
+  results: BulkRowResult[];
 }
 
 export const health = {
