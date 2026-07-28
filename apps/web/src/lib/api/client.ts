@@ -414,6 +414,9 @@ export interface AgentCert {
   revokedAt: string | null;
   revocationReason: string | null;
   certSnapshotId: string;
+  capabilityLabel: string;
+  capabilityForge: string;
+  capabilityDescription: string;
 }
 
 export interface CertQuery {
