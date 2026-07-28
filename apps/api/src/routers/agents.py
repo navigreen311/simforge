@@ -9,18 +9,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.dev import Principal, get_current_principal
 from src.db import get_session
 from src.deps import get_village_reader, require_role
 from src.models.agent import Agent
 from src.models.cert import AutonomyEvent
 from src.schemas.agent import (
+    AgentCreateRequest,
     AgentList,
     AgentsLegendOut,
     AgentSummary,
+    BulkImportRequest,
+    BulkImportResponse,
     FlagInfoOut,
     LadderLevelOut,
 )
 from src.schemas.ccb import CCBCaptureRequest, CCBResponse
+from src.services.agents.admin import AgentAdminError, bulk_import, create_agent
 from src.services.cert.autonomy_ladder import (
     FLOOR,
     LEVELS,
@@ -119,6 +124,52 @@ async def list_agents(
         total=total,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.post(
+    "/",
+    response_model=AgentSummary,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("pack_owner"))],
+)
+async def create_agent_endpoint(
+    body: AgentCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> AgentSummary:
+    """Add one agent at floor autonomy with zero certs. Does not certify or authorize anything."""
+    try:
+        agent = await create_agent(
+            session,
+            name=body.name,
+            department_id=body.departmentId,
+            village_agent_id=body.villageAgentId,
+            role=body.role,
+            gardner_flag=body.gardnerFlag,
+            level10_enabled=body.level10Enabled,
+            actor=principal.subject,
+        )
+    except AgentAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return AgentSummary.model_validate(agent)
+
+
+@router.post(
+    "/bulk", response_model=BulkImportResponse, dependencies=[Depends(require_role("pack_owner"))]
+)
+async def bulk_import_endpoint(
+    body: BulkImportRequest,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(get_current_principal),
+) -> BulkImportResponse:
+    """Import agents from validated rows. Valid rows import at floor; invalid/dup are skipped."""
+    results = await bulk_import(session, body.rows, actor=principal.subject)
+    return BulkImportResponse(
+        imported=sum(1 for r in results if r.status == "imported"),
+        skipped=sum(1 for r in results if r.status == "skipped"),
+        errored=sum(1 for r in results if r.status == "error"),
+        results=results,
     )
 
 

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { AgentsExplorer } from "@/components/agents/AgentsExplorer";
 import { PageMeta } from "@/components/ui/PageMeta";
 import {
@@ -41,7 +43,15 @@ export default async function AgentsPage() {
     <div className="mx-auto max-w-7xl">
       <div className="flex items-start justify-between">
         <h1 className="text-3xl">Agents</h1>
-        <PageMeta />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/agents/new"
+            className="rounded bg-gold-500 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-gold-400"
+          >
+            + Add agents
+          </Link>
+          <PageMeta />
+        </div>
       </div>
       <p className="mt-2 mb-6 max-w-prose text-ink-200">
         The Village agent roster under certification — autonomy, active certs, and flags. Search,
