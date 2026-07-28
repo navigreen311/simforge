@@ -14,10 +14,38 @@ from src.models.cert import AutonomyEvent
 from src.utils.time import utcnow
 
 LEVELS = ("L1", "L2", "L3", "L4", "L5")
+FLOOR = "L1"  # new agents start here and earn higher levels through certification
+
+# Human-readable meaning of each ladder level — the single structured source of truth (previously
+# this lived only in this module's docstring + a duplicated frontend map).
+LEVEL_MEANINGS: dict[str, str] = {
+    "L1": "Observe only — the agent watches and learns; it cannot act.",
+    "L2": "Draft only — the agent proposes actions for a human to send; nothing goes out alone.",
+    "L3": "Execute with approval — the agent acts, but each action needs human approval first.",
+    "L4": "Spot-check — the agent acts autonomously; a sample is reviewed after the fact.",
+    "L5": "Full autonomy — the agent acts without per-action review.",
+}
 
 
 def _index(level: str) -> int:
     return LEVELS.index(level) if level in LEVELS else 0
+
+
+def is_above_floor(level: str) -> bool:
+    return _index(level) > _index(FLOOR)
+
+
+def ladder_levels() -> list[dict]:
+    """The ladder as structured data: [{level, index (1-based), meaning, is_floor}]."""
+    return [
+        {
+            "level": lvl,
+            "index": i + 1,
+            "meaning": LEVEL_MEANINGS.get(lvl, f"Autonomy level {i + 1} of {len(LEVELS)}"),
+            "is_floor": lvl == FLOOR,
+        }
+        for i, lvl in enumerate(LEVELS)
+    ]
 
 
 async def record_transition(

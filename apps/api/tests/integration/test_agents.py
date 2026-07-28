@@ -49,3 +49,18 @@ async def test_get_department_detail(client: AsyncClient) -> None:
     resp = await client.get("/api/departments/Engineering")
     assert resp.status_code == 200
     assert resp.json()["name"] == "Engineering"
+
+
+async def test_agents_legend(client: AsyncClient) -> None:
+    body = (await client.get("/api/agents/legend")).json()
+    assert body["floor"] == "L1"
+    levels = {lv["level"]: lv for lv in body["levels"]}
+    assert set(levels) == {"L1", "L2", "L3", "L4", "L5"}
+    assert levels["L1"]["is_floor"] is True
+    assert "Observe" in levels["L1"]["meaning"]
+    assert levels["L5"]["is_floor"] is False
+    flags = {f["key"]: f for f in body["flags"]}
+    assert set(flags) == {"gardner", "l10"}
+    # neither flag has a formal in-app definition — reported, not fabricated
+    assert flags["gardner"]["defined"] is False
+    assert flags["l10"]["defined"] is False

@@ -344,6 +344,7 @@ export const api = {
     level10?: boolean;
     has_active_certs?: boolean;
   }) => apiGet<AgentList>(`/api/agents/${qs(params)}`),
+  agentsLegend: () => apiGet<AgentsLegend>("/api/agents/legend"),
   departments: () => apiGet<DepartmentList>("/api/departments/"),
   scenarios: () => apiGet<{ items: ScenarioSummary[]; total: number }>("/api/scenarios/"),
   packs: () => apiGet<PackList>("/api/packs/"),
@@ -466,6 +467,26 @@ export interface AgentCertRollup {
   active_certs: number;
   total_certs: number;
   last_certified_at: string | null;
+}
+
+export interface LadderLevel {
+  level: string;
+  index: number;
+  meaning: string;
+  is_floor: boolean;
+}
+
+export interface AgentFlagInfo {
+  key: string;
+  label: string;
+  meaning: string;
+  defined: boolean;
+}
+
+export interface AgentsLegend {
+  floor: string;
+  levels: LadderLevel[];
+  flags: AgentFlagInfo[];
 }
 
 export const health = {

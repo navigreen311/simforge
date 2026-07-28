@@ -13,9 +13,21 @@ from src.db import get_session
 from src.deps import get_village_reader, require_role
 from src.models.agent import Agent
 from src.models.cert import AutonomyEvent
-from src.schemas.agent import AgentList, AgentSummary
+from src.schemas.agent import (
+    AgentList,
+    AgentsLegendOut,
+    AgentSummary,
+    FlagInfoOut,
+    LadderLevelOut,
+)
 from src.schemas.ccb import CCBCaptureRequest, CCBResponse
-from src.services.cert.autonomy_ladder import LEVELS, demote, record_transition
+from src.services.cert.autonomy_ladder import (
+    FLOOR,
+    LEVELS,
+    demote,
+    ladder_levels,
+    record_transition,
+)
 from src.services.village.ccb_store import (
     capture_ccb,
     get_latest_ccb,
@@ -24,6 +36,37 @@ from src.services.village.ccb_store import (
 from src.services.village.reader import VillageReader
 
 router = APIRouter()
+
+# Plain-language flag vocabulary. Neither flag has a FORMAL in-app policy definition (only blueprint
+# mentions), so `defined=False` and the descriptions cite the blueprint rather than assert a policy.
+_FLAG_CATALOG: list[dict] = [
+    {
+        "key": "gardner",
+        "label": "Gardner",
+        "meaning": "Marks the executive 'Gardner' agent — per the blueprint, the only Village "
+        "agent with phone capability. No formal in-app policy definition.",
+        "defined": False,
+    },
+    {
+        "key": "l10",
+        "label": "L10",
+        "meaning": "'Level 10' cognitive layer enabled — per the blueprint, Gardner-only and "
+        "skipped in v1. Distinct from the L1–L5 autonomy ladder. No formal in-app definition.",
+        "defined": False,
+    },
+]
+
+
+@router.get(
+    "/legend", response_model=AgentsLegendOut, dependencies=[Depends(require_role("viewer"))]
+)
+async def agents_legend() -> AgentsLegendOut:
+    """The autonomy ladder + flag vocabulary in plain language (drives the page legends)."""
+    return AgentsLegendOut(
+        floor=FLOOR,
+        levels=[LadderLevelOut(**lvl) for lvl in ladder_levels()],
+        flags=[FlagInfoOut(**f) for f in _FLAG_CATALOG],
+    )
 
 
 @router.get("/", response_model=AgentList, dependencies=[Depends(require_role("viewer"))])
