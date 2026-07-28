@@ -87,3 +87,85 @@ async def test_run_unregistered_agent_404(client: AsyncClient) -> None:
 async def test_run_missing_scenario_404(client: AsyncClient) -> None:
     resp = await client.post("/api/scenarios/scn.nope.999/run")
     assert resp.status_code == 404
+
+
+# ── Live run monitor (Part E) ───────────────────────────────────────────────
+
+
+async def test_live_executor_persists_incrementally(client, db_session, village_reader) -> None:
+    # The live path persists transcript + trace as it goes; the shared cursor prevents any
+    # trace event being written twice (incremental + final).
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+    from ulid import ULID
+
+    from src.models.agent import Agent
+    from src.models.pack import Pack, Scenario
+    from src.models.run import Run, TraceEvent
+    from src.services.runner.execute import _execute_into_run
+
+    await _ingest_medlink(client)
+    scenario = (
+        await db_session.execute(select(Scenario).where(Scenario.scenarioId == "scn.ml.place.002"))
+    ).scalar_one()
+    pack = (await db_session.execute(select(Pack).where(Pack.id == scenario.packId))).scalar_one()
+    agent = (
+        await db_session.execute(
+            select(Agent).where(Agent.villageAgentId == scenario.testedAgentVillageId)
+        )
+    ).scalar_one()
+    run = Run(
+        runId=str(ULID()),
+        scenarioId=scenario.id,
+        packId=pack.id,
+        agentId=agent.id,
+        executionMode="sandbox",
+        narrativeMode="protected",
+        blindMode=False,
+        status="running",
+        startedAt=datetime.now(UTC),
+    )
+    db_session.add(run)
+    await db_session.flush()
+
+    await _execute_into_run(
+        db_session, run, scenario, pack, agent, village_reader, None, False, live=True
+    )
+    assert run.transcript  # transcript persisted
+    assert run.status in {"passed", "failed"}
+    events = (
+        (await db_session.execute(select(TraceEvent).where(TraceEvent.runId == run.id)))
+        .scalars()
+        .all()
+    )
+    types = {e.eventType for e in events}
+    assert {"cold_open", "agent_response", "wrap"} <= types
+    assert len([e for e in events if e.eventType == "wrap"]) == 1  # no double-write
+
+
+async def test_live_view_of_completed_run(client: AsyncClient) -> None:
+    await _ingest_medlink(client)
+    run = (await client.post("/api/scenarios/scn.ml.place.002/run")).json()
+    live = (await client.get(f"/api/runs/{run['run_id']}/live")).json()
+    assert live["done"] is True
+    assert live["status"] in {"passed", "failed"}
+    assert live["agent_village_id"] == "jennifer_adams"
+    assert live["scenario_id"] == "scn.ml.place.002"
+    assert any(t["role"] == "agent" for t in live["transcript"])
+    assert {"cold_open", "agent_response", "wrap"} <= {e["event_type"] for e in live["trace"]}
+    assert live["scorecard"] is not None  # scorecard fills in once scoring completes
+    assert live["elapsed_ms"] >= 0
+
+
+async def test_launch_live_returns_queued_run(client: AsyncClient) -> None:
+    await _ingest_medlink(client)
+    r = await client.post("/api/scenarios/scn.ml.place.002/run-live")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["run_id"]
+    assert body["agent_village_id"] == "jennifer_adams"
+    # the run row is created (and thus watchable) before the background task starts
+    got = await client.get(f"/api/runs/{body['run_id']}")
+    assert got.status_code == 200
+    assert got.json()["status"] in {"queued", "running", "scoring", "passed", "failed"}

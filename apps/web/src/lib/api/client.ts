@@ -892,6 +892,55 @@ export const narrative = {
 export const runNarrativeScenario = (scenarioId: string) =>
   apiPost<RunSummary>(`/api/scenarios/${scenarioId}/run?narrative_mode=integrated`);
 
+// ---- Live run monitor (Part E) ----
+export interface LaunchLiveResponse {
+  run_id: string;
+  warnings: string[];
+  agent_village_id: string;
+  integrated: boolean;
+}
+
+export interface LiveTraceEvent {
+  timestamp: string;
+  event_type: string;
+  phase: string;
+  turn_number: number | null;
+  payload: Record<string, unknown>;
+}
+
+export interface LiveRunView {
+  run_id: string;
+  status: string; // queued | running | scoring | passed | failed | errored
+  done: boolean;
+  execution_mode: string;
+  integrated: boolean;
+  scenario_id: string;
+  scenario_title: string;
+  tier: string;
+  agent_village_id: string;
+  agent_name: string;
+  started_at: string;
+  ended_at: string | null;
+  elapsed_ms: number;
+  current_phase: string | null;
+  current_turn: number;
+  outcome: string | null;
+  transcript: { role: string; content: string }[];
+  trace: LiveTraceEvent[];
+  forges_called: string[];
+  tokens_used: number | null;
+  latency_ms: number | null;
+  cost_usd: number | null;
+  scorecard: Scorecard | null;
+}
+
+export const launchLiveRun = (scenarioId: string, integrated = false) =>
+  apiPost<LaunchLiveResponse>(
+    `/api/scenarios/${scenarioId}/run-live${integrated ? "?integrated=true" : ""}`,
+  );
+
+export const runLive = (runId: string) => apiGet<LiveRunView>(`/api/runs/${runId}/live`);
+
 // ---- Cohort analytics + cognitive canary (ADR-0034) ----
 export interface CohortAgentRow {
   agent: string;

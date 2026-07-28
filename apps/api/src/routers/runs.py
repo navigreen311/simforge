@@ -13,6 +13,7 @@ from src.models.pack import Pack, Scenario
 from src.models.run import Run, TraceEvent
 from src.models.scorecard import Scorecard
 from src.schemas.run import (
+    LiveRunView,
     RunList,
     RunSummary,
     TraceEventOut,
@@ -24,6 +25,33 @@ from src.schemas.scorecard import ScorecardResponse
 from src.services.village.reader import VillageReader
 
 router = APIRouter()
+
+
+def _scorecard_payload(run: Run, card: Scorecard) -> dict:
+    """Serialize a Scorecard to the ScorecardResponse shape (shared by scorecard + live views)."""
+    return ScorecardResponse(
+        run_id=run.runId,
+        p1_correctness=card.p1Correctness,
+        p2_compliance=card.p2Compliance,
+        p3_process_fidelity=card.p3ProcessFidelity,
+        p4_time_to_resolution=card.p4TimeToResolution,
+        p5_escalation=card.p5Escalation,
+        p6_doc_quality=card.p6DocQuality,
+        p7_customer_experience=card.p7CustomerExperience,
+        p8_cost_discipline=card.p8CostDiscipline,
+        c1_breath_coherence=card.c1BreathCoherence,
+        c2_soul_stability=card.c2SoulStability,
+        c3_fot_pressure_management=card.c3FotPressureManagement,
+        c4_arc_narrative_coherence=card.c4ArcNarrativeCoherence,
+        c5_echo_regret_load=card.c5EchoRegretLoad,
+        c6_hfm_drive_balance=card.c6HfmDriveBalance,
+        c7_ame_reputation_trajectory=card.c7AmeReputationTrajectory,
+        cognitive_aggregate=card.cognitiveAggregate,
+        readiness_gate_passed=card.readinessGatePassed,
+        auto_fail_reason=card.autoFailReason,
+        turn_annotations=card.turnAnnotations or [],
+        remediation_recs=card.remediationRecs,
+    ).model_dump()
 
 
 async def _summarize(session: AsyncSession, run: Run) -> RunSummary:
@@ -220,6 +248,87 @@ async def get_scorecard(
         auto_fail_reason=card.autoFailReason,
         turn_annotations=card.turnAnnotations or [],
         remediation_recs=card.remediationRecs,
+    )
+
+
+@router.get(
+    "/{run_id}/live", response_model=LiveRunView, dependencies=[Depends(require_role("viewer"))]
+)
+async def get_run_live(run_id: str, session: AsyncSession = Depends(get_session)) -> LiveRunView:
+    """A run's CURRENT status + activity-so-far, for the live monitor. Reflects incremental state.
+
+    Under the stub provider a run finishes near-instantly, so this may return a completed run on the
+    first poll — the monitor handles that honestly (no faked progress).
+    """
+    run = await _get_run_or_404(session, run_id)
+    scenario = (
+        await session.execute(select(Scenario).where(Scenario.id == run.scenarioId))
+    ).scalar_one()
+    agent = (await session.execute(select(Agent).where(Agent.id == run.agentId))).scalar_one()
+    events = (
+        (
+            await session.execute(
+                select(TraceEvent)
+                .where(TraceEvent.runId == run.id)
+                .order_by(TraceEvent.timestamp)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    card = (
+        await session.execute(select(Scorecard).where(Scorecard.runId == run.id))
+    ).scalar_one_or_none()
+
+    # Elapsed from DB-consistent timestamps only (avoids naive-vs-aware skew vs wall-clock now):
+    # the executor's authoritative latency when finished, else last-trace-minus-start (same frame).
+    if run.latencyMs is not None:
+        elapsed_ms = run.latencyMs
+    elif events:
+        elapsed_ms = int((events[-1].timestamp - run.startedAt).total_seconds() * 1000)
+    else:
+        elapsed_ms = 0
+
+    forges = sorted(
+        {
+            e.payload["forge"]
+            for e in events
+            if isinstance(e.payload, dict) and e.payload.get("forge")
+        }
+    )
+    return LiveRunView(
+        run_id=run.runId,
+        status=run.status,
+        done=run.status in ("passed", "failed", "errored"),
+        execution_mode=run.executionMode,
+        integrated=run.executionMode == "integrated",
+        scenario_id=scenario.scenarioId,
+        scenario_title=scenario.title,
+        tier=scenario.tier,
+        agent_village_id=agent.villageAgentId,
+        agent_name=agent.name,
+        started_at=run.startedAt,
+        ended_at=run.endedAt,
+        elapsed_ms=max(0, elapsed_ms),
+        current_phase=events[-1].phase if events else None,
+        current_turn=max((e.turnNumber or 0) for e in events) if events else 0,
+        outcome=run.outcome,
+        transcript=[TranscriptTurn(**t) for t in (run.transcript or [])],
+        trace=[
+            TraceEventOut(
+                timestamp=e.timestamp,
+                event_type=e.eventType,
+                phase=e.phase,
+                turn_number=e.turnNumber,
+                payload=e.payload if isinstance(e.payload, dict) else {},
+            )
+            for e in events
+        ],
+        forges_called=forges,
+        tokens_used=run.tokensUsed,
+        latency_ms=run.latencyMs,
+        cost_usd=run.costUsd,
+        scorecard=_scorecard_payload(run, card) if card else None,
     )
 
 

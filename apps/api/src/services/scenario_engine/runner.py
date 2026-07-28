@@ -6,6 +6,8 @@ Deterministic given a seed (stub LLM + seeded world), so runs are reproducible.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.mock_world.world import MockWorld
 from src.services.scenario_engine.complications import ComplicationInjector
@@ -25,6 +27,7 @@ class ScenarioRunner:
         max_turns: int = 6,
         fallback_name: str = "",
         fallback_role: str = "",
+        on_progress: Callable[[RunState], Awaitable[None]] | None = None,
     ) -> None:
         self.scenario = scenario
         self.agent_runtime = agent_runtime
@@ -34,6 +37,13 @@ class ScenarioRunner:
         self.max_turns = max_turns
         self.fallback_name = fallback_name
         self.fallback_role = fallback_role
+        # Optional async callback fired after each step so a live monitor can persist progress
+        # incrementally. Default None → no calls → behavior identical to a plain synchronous run.
+        self.on_progress = on_progress
+
+    async def _progress(self, state: RunState) -> None:
+        if self.on_progress is not None:
+            await self.on_progress(state)
 
     def _is_terminal(self, state: RunState) -> bool:
         if state.turn_count >= self.max_turns:
@@ -56,6 +66,7 @@ class ScenarioRunner:
         cold_open = self.scenario.get("cold_open", "")
         state.transcript.append({"role": "scenario", "content": cold_open})
         state.emit("cold_open", {"content": cold_open})
+        await self._progress(state)
 
         # TURN loop
         while not self._is_terminal(state):
@@ -73,6 +84,7 @@ class ScenarioRunner:
             state.tokens_used += response.tokens
             state.turn_count += 1
             state.emit("agent_response", {"content": response.content, "tokens": response.tokens})
+            await self._progress(state)
 
             if self._is_terminal(state):
                 break
@@ -83,6 +95,7 @@ class ScenarioRunner:
             if self.complication_injector.should_inject(state):
                 state.phase = Phase.COMPLICATION
                 self.complication_injector.inject(state)
+            await self._progress(state)
 
         # RESOLUTION
         state.phase = Phase.RESOLUTION
