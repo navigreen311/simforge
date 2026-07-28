@@ -23,3 +23,25 @@ class AgentList(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class LadderLevelOut(BaseModel):
+    level: str
+    index: int
+    meaning: str
+    is_floor: bool
+
+
+class FlagInfoOut(BaseModel):
+    key: str
+    label: str
+    meaning: str
+    defined: bool  # is there a formal in-app policy definition for this flag?
+
+
+class AgentsLegendOut(BaseModel):
+    """Plain-language reference for the Agents page: the autonomy ladder + the flag vocabulary."""
+
+    floor: str
+    levels: list[LadderLevelOut]
+    flags: list[FlagInfoOut]
