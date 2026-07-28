@@ -1,4 +1,5 @@
 import { CertsExplorer } from "@/components/certs/CertsExplorer";
+import { PageMeta } from "@/components/ui/PageMeta";
 import { api, certs, type AgentCert, type AgentSummary } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +18,15 @@ export default async function CertsPage() {
   const nameById = Object.fromEntries(agents.map((a) => [a.id, a.villageAgentId]));
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <h1 className="mb-1 text-3xl">Certification Registry</h1>
-      <p className="mb-6 text-ink-200">
-        Signed, version-pinned agent capability certificates — append-only lifecycle. Filter by
-        status, tier, or forge; sort by agent to group.
+    <div className="mx-auto max-w-7xl">
+      <div className="flex items-start justify-between">
+        <h1 className="text-3xl">Certification Registry</h1>
+        <PageMeta />
+      </div>
+      <p className="mt-2 mb-6 max-w-prose text-ink-200">
+        The signed, append-only record of which agent is certified for which Forge capability, at
+        what tier and status — the authoritative &ldquo;who can do what&rdquo; for the Village.
+        Filter by status, tier, or forge; click the Agent column to sort/group by agent.
       </p>
 
       {error ? (

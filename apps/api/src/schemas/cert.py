@@ -55,6 +55,11 @@ class AgentCertOut(BaseModel):
     revokedAt: datetime | None = None
     revocationReason: str | None = None
     certSnapshotId: str
+    # Derived (presentation only) from the capability catalog — the same source of truth the
+    # Readiness Matrix uses. Not stored; computed per response.
+    capabilityLabel: str = ""
+    capabilityForge: str = ""
+    capabilityDescription: str = ""
 
 
 class IssueCertResponse(BaseModel):

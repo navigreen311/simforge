@@ -19,6 +19,7 @@ from src.schemas.cert import (
     RevokeCertRequest,
     VerifyResponse,
 )
+from src.services.capabilities import describe_capability
 from src.services.cert import (
     CertIssuanceError,
     issue_agent_cert,
@@ -28,6 +29,16 @@ from src.services.cert import (
 )
 
 router = APIRouter()
+
+
+def _with_capability(cert: AgentCert) -> AgentCertOut:
+    """Attach the derived plain-language capability label (same catalog as the Readiness Matrix)."""
+    out = AgentCertOut.model_validate(cert)
+    d = describe_capability(cert.forgeCap)
+    out.capabilityLabel = d["label"]
+    out.capabilityForge = d["forge"]
+    out.capabilityDescription = d["description"]
+    return out
 
 
 @router.post(
@@ -101,7 +112,7 @@ async def list_agent_certs(
 
     total = (await session.execute(_apply(count_stmt))).scalar_one()
     rows = (await session.execute(_apply(stmt).order_by(AgentCert.issuedAt.desc()))).scalars().all()
-    return AgentCertList(items=[AgentCertOut.model_validate(r) for r in rows], total=total)
+    return AgentCertList(items=[_with_capability(r) for r in rows], total=total)
 
 
 @router.get(
@@ -115,7 +126,7 @@ async def get_agent_cert(
     ).scalar_one_or_none()
     if cert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cert not found")
-    return AgentCertOut.model_validate(cert)
+    return _with_capability(cert)
 
 
 @router.post(
