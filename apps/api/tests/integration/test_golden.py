@@ -47,3 +47,27 @@ async def test_golden_baseline_endpoint(client: AsyncClient) -> None:
     baseline = resp.json()
     assert "scn.gs.src.001" in baseline["scenarios"]
     assert baseline["provider"] == "stub"
+    # Provenance + a derived, stable hash of the scenario baseline (STEP 4).
+    assert baseline["committed_by"] and baseline["committed_at"]
+    assert len(baseline["hash"]) == 64  # sha256 hex
+
+
+async def test_golden_run_is_persisted_and_listed(client: AsyncClient) -> None:
+    await _ingest_greenstone(client)
+    # No history before the first run.
+    assert (await client.get("/api/golden/run-history")).json()["runs"] == []
+    report = (await client.post("/api/golden/run")).json()
+    assert report["passed"] is True
+
+    hist = (await client.get("/api/golden/run-history")).json()["runs"]
+    assert len(hist) == 1
+    last = hist[0]
+    assert last["passed"] is True
+    assert last["total"] == 3 and last["matched"] == 3 and last["regressions"] == 0
+    assert last["ran_at"]
+    # The full per-scenario results persist (so a failure's diff survives a reload).
+    assert {r["scenario_id"] for r in last["results"]} == {
+        "scn.gs.src.001",
+        "scn.gs.buy.002",
+        "scn.gs.crisis.003",
+    }

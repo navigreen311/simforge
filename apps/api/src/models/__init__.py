@@ -14,6 +14,7 @@ from src.models.cert import (
 from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
 from src.models.gap import SoftwareGap, VillageOSGap
+from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.pack import Pack, ReadinessGate, Scenario
@@ -54,4 +55,5 @@ __all__ = [
     "Venture",
     "SpecDocument",
     "MetaEvalIntent",
+    "GoldenRun",
 ]

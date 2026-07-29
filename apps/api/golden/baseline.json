@@ -1,6 +1,8 @@
 {
   "note": "Golden Benchmark baseline (ADR-0033). Regenerate via scripts/golden-baseline.py only when a change to golden behavior is intended. p4_time_to_resolution is wall-clock-derived and compared with a coarse tolerance.",
   "provider": "stub",
+  "committed_by": "navigreen311",
+  "committed_at": "2026-07-21T18:09:15-07:00",
   "scenarios": {
     "scn.gs.buy.002": {
       "outcome": "resolved",

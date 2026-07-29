@@ -1034,13 +1034,30 @@ export interface GoldenBaselineEntry {
 export interface GoldenBaseline {
   note?: string;
   provider?: string;
+  committed_by?: string;
+  committed_at?: string;
+  hash?: string;
+  titles?: Record<string, string>;
   scenarios: Record<string, GoldenBaselineEntry>;
+}
+
+export interface GoldenRunHistoryEntry {
+  id: string;
+  passed: boolean;
+  total: number;
+  matched: number;
+  regressions: number;
+  ran_at: string | null;
+  ran_by: string;
+  results: GoldenResult[];
 }
 
 export const golden = {
   scenarios: () =>
     apiGet<{ scenarios: GoldenScenario[]; total: number }>("/api/golden/scenarios"),
   baseline: () => apiGet<GoldenBaseline>("/api/golden/baseline"),
+  runHistory: (limit = 5) =>
+    apiGet<{ runs: GoldenRunHistoryEntry[] }>(`/api/golden/run-history?limit=${limit}`),
 };
 
 export const runGoldenSuite = () => apiPost<GoldenReport>("/api/golden/run");
