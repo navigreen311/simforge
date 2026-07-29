@@ -93,6 +93,11 @@ async def test_flag_catalog_labels_every_used_flag(client: AsyncClient) -> None:
     # HIPAA is a PHI flag and maps to the federal jurisdiction.
     assert cat["flags"]["hipaa"]["phi"] is True
     assert cat["flags"]["hipaa"]["jurisdiction"] == "US-FED"
+    # The one catalog also covers every Jurisdiction-engine flag, even for states with no pack yet
+    # (so the Jurisdiction Engine page's Required / PHI-gated columns are legible). Single source.
+    for flag in ["adhs_az", "ahca_fl", "hhsc_tx", "nysdoh_ny"]:
+        assert flag in cat["flags"], flag
+        assert cat["flags"][flag]["label"] and cat["flags"][flag]["tooltip"]
     # Legend copy is present for the non-flag chips.
     assert "venture" in cat["legend"] and "phi" in cat["legend"] and "sandbox" in cat["legend"]
 

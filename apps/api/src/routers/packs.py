@@ -85,14 +85,19 @@ async def list_packs(session: AsyncSession = Depends(get_session)) -> PackList:
     "/flag-catalog", response_model=FlagCatalogOut, dependencies=[Depends(require_role("viewer"))]
 )
 async def flag_catalog(session: AsyncSession = Depends(get_session)) -> FlagCatalogOut:
-    """Plain-language label + tooltip for every flag that appears on any pack (Part A).
+    """Plain-language label + tooltip for every compliance flag (Part A). One authoritative map.
 
-    Queries the distinct flags actually used across all packs (so no chip is ever unexplained) and
-    labels each via the deterministic catalog, which maps to the Jurisdiction engine where known.
+    Covers the union of flags actually used across packs (so no pack chip is unexplained) AND every
+    flag the Jurisdiction engine defines (so the jurisdiction catalog's Required / PHI-gated columns
+    are legible too — including states with no pack yet). Labelled via the deterministic catalog,
+    the single source reused by both the Packs page and the Jurisdiction Engine page.
     """
     used: set[str] = set()
     for (flags,) in await session.execute(select(Pack.complianceFlags)):
         used.update(flags or [])
+    for j in JURISDICTIONS.values():
+        used.update(j.required_flags)
+        used.update(j.phi_flags)
     return FlagCatalogOut(
         flags={f: FlagInfoOut(**describe_flag(f)) for f in sorted(used)},
         legend=LEGEND,
