@@ -88,6 +88,11 @@ async def test_constitution_drift_detects_but_never_enforces(
     assert f["pinned_constitution"] == "v1.0.0"
     assert f["current_constitution"] == "v1.0.1"
     assert f["stale"] is True
+    # Capability id on the finding + a shared-catalog label map so the rows are distinguishable.
+    assert f["capability"] == "cre-forge.x"
+    assert body["cap_labels"]["cre-forge.x"]["cap_id"] == "cre-forge.x"
+    assert "label" in body["cap_labels"]["cre-forge.x"]
+    assert body["agent_names"]["david_kim"]  # display name present for linking
 
     # The cert must be UNCHANGED — detection never mutates cert status.
     cert = (await db_session.execute(select(AgentCert).where(AgentCert.id == cert_id))).scalar_one()

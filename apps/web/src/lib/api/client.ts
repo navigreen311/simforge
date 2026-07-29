@@ -1082,6 +1082,7 @@ export interface DriftReport {
 export interface ConstitutionDriftFinding {
   cert_id: string;
   agent: string;
+  capability: string; // raw cap id; friendly label via cap_labels
   cert_status: string;
   pinned_constitution: string | null;
   current_constitution: string | null;
@@ -1094,6 +1095,8 @@ export interface ConstitutionDriftReport {
   stale_certs: number;
   active_stale_certs: number;
   enforced: boolean;
+  cap_labels: Record<string, CapLabel>; // cap id → friendly label (shared catalog)
+  agent_names: Record<string, string>; // villageAgentId → display name
   findings: ConstitutionDriftFinding[];
 }
 

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { DriftEnforceButton } from "@/components/drift/DriftEnforceButton";
 import { PageMeta } from "@/components/ui/PageMeta";
 import { VerifiedState, verdictFor } from "@/components/ui/VerifiedState";
@@ -25,7 +27,9 @@ export default async function DriftPage() {
         <h1 className="text-3xl">Drift Canary</h1>
         <div className="flex items-center gap-3">
           <PageMeta />
-          {report && <DriftEnforceButton wouldSuspend={report.findings} />}
+          {report && (
+            <DriftEnforceButton wouldSuspend={report.findings} activeCerts={report.scanned} />
+          )}
         </div>
       </div>
       <p className="mb-6 text-ink-200">
@@ -111,12 +115,32 @@ export default async function DriftPage() {
                   constitution drift.
                 </p>
               </VerifiedState>
+
+              {/* Advisory next-step (STEP 3) — what to do about the FAIL. Advisory only; no policy. */}
+              {constitution.stale_certs > 0 && (
+                <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm text-ink-100">
+                  <p>
+                    All {constitution.stale_certs} certificate
+                    {constitution.stale_certs === 1 ? " was" : "s were"} certified against
+                    constitution {constitution.findings.find((f) => f.stale)?.pinned_constitution ?? "v1.0.0"},
+                    which has been superseded by {constitution.current_constitution}. Until an
+                    enforcement policy is chosen, these remain valid but flagged. Deciding the policy
+                    (auto-suspend / flag-and-grace / amendment-scoped) is a governance decision —{" "}
+                    <Link href="/dashboard/constitution" className="text-gold-400 underline hover:text-gold-300">
+                      see the Constitution page
+                    </Link>
+                    .
+                  </p>
+                </div>
+              )}
+
               {constitution.findings.length > 0 && (
                 <div className="mt-3 overflow-x-auto rounded-xl border border-ink-500">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-ink-800 text-ink-200">
                       <tr>
                         <th className="px-4 py-2 font-medium">Agent</th>
+                        <th className="px-4 py-2 font-medium">Capability</th>
                         <th className="px-4 py-2 font-medium">Cert status</th>
                         <th className="px-4 py-2 font-medium">Pinned constitution</th>
                         <th className="px-4 py-2 font-medium">Current</th>
@@ -124,17 +148,37 @@ export default async function DriftPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-ink-600">
-                      {constitution.findings.map((f) => (
-                        <tr key={f.cert_id} className={f.stale ? "bg-danger/5" : ""}>
-                          <td className="px-4 py-2 font-mono text-xs text-ink-100">{f.agent}</td>
-                          <td className="px-4 py-2 text-xs text-ink-200">{f.cert_status}</td>
-                          <td className="px-4 py-2 font-mono text-xs">{f.pinned_constitution ?? "—"}</td>
-                          <td className="px-4 py-2 font-mono text-xs">{f.current_constitution ?? "—"}</td>
-                          <td className="px-4 py-2">
-                            {f.stale ? <span className="text-danger">stale</span> : <span className="text-success">ok</span>}
-                          </td>
-                        </tr>
-                      ))}
+                      {constitution.findings.map((f) => {
+                        const cap = constitution.cap_labels[f.capability];
+                        const agentName = constitution.agent_names[f.agent] ?? f.agent;
+                        return (
+                          <tr key={f.cert_id} className={f.stale ? "bg-danger/5" : ""}>
+                            <td className="px-4 py-2 text-xs text-ink-100">
+                              <Link
+                                href={`/dashboard/runs?agent=${f.agent}`}
+                                title={f.agent}
+                                className="hover:text-gold-300 hover:underline"
+                              >
+                                {agentName}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-2 text-xs text-gold-400" title={f.capability}>
+                              <Link
+                                href={`/dashboard/lineage?root=urn:gc:village:cert:${f.cert_id}`}
+                                className="hover:text-gold-300 hover:underline"
+                              >
+                                {cap?.label ?? f.capability}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-2 text-xs text-ink-200">{f.cert_status}</td>
+                            <td className="px-4 py-2 font-mono text-xs">{f.pinned_constitution ?? "—"}</td>
+                            <td className="px-4 py-2 font-mono text-xs">{f.current_constitution ?? "—"}</td>
+                            <td className="px-4 py-2">
+                              {f.stale ? <span className="text-danger">stale</span> : <span className="text-success">ok</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
