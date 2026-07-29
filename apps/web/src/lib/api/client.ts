@@ -1254,10 +1254,45 @@ export interface IntegratedAction {
   reverted_by?: string;
 }
 
+export interface LedgerAction {
+  action_id: string;
+  agent: string;
+  agent_name: string;
+  action: string;
+  capability_label: string;
+  capability_forge: string | null;
+  decision: string | null;
+  reason_code: string | null;
+  applied: boolean | null;
+  status: string; // applied | blocked | reverted
+  reverted: boolean;
+  reverted_by: string | null;
+  recorded_at: string;
+  current_decision: string | null;
+  current_reason_code: string | null;
+  historical: boolean;
+}
+
+export interface LedgerRun {
+  run_id: string;
+  scenario_id: string;
+  scenario_title: string | null;
+  agent: string | null;
+  agent_name: string | null;
+  started_at: string | null;
+  actions: LedgerAction[];
+}
+
+export interface IntegratedLedger {
+  integrated_execution_enabled: boolean;
+  runs: LedgerRun[];
+}
+
 export const execution = {
   status: () => apiGet<{ integrated_execution_enabled: boolean }>("/api/execution/status"),
   runActions: (runId: string) =>
     apiGet<{ run_id: string; actions: IntegratedAction[] }>(
       `/api/execution/run/${runId}/actions`,
     ),
+  ledger: () => apiGet<IntegratedLedger>("/api/execution/ledger"),
 };

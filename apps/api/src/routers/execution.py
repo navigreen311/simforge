@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
 from src.db import get_session
 from src.deps import require_role
-from src.services.execution import integrated_actions_for_run, revert_integrated_action
+from src.services.execution import (
+    integrated_actions_for_run,
+    integrated_ledger,
+    revert_integrated_action,
+)
 
 router = APIRouter()
 
@@ -22,6 +26,15 @@ class RevertRequest(BaseModel):
 async def integrated_status() -> dict:
     """Whether integrated execution is enabled on this deployment (default off)."""
     return {"integrated_execution_enabled": settings.integrated_execution_enabled}
+
+
+@router.get("/ledger", dependencies=[Depends(require_role("viewer"))])
+async def ledger(session: AsyncSession = Depends(get_session)) -> dict:
+    """Enriched, aggregated integrated-action ledger across all integrated runs (read-only).
+
+    Friendly labels + a live PDP re-check per action so the console can flag historical records
+    whose authorization has since changed. Never enables execution and never mutates data."""
+    return await integrated_ledger(session)
 
 
 @router.get("/run/{run_id}/actions", dependencies=[Depends(require_role("viewer"))])

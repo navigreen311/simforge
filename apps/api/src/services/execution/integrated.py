@@ -104,6 +104,114 @@ async def integrated_actions_for_run(session: AsyncSession, run_id: str) -> list
     return ledger
 
 
+async def integrated_ledger(session: AsyncSession) -> dict:
+    """Aggregated, enriched integrated-execution ledger across every integrated run (read-only).
+
+    Enriches each recorded action with friendly labels (capability / agent / scenario) and a LIVE
+    PDP re-check, so the console can flag point-in-time *historical* records whose authorization has
+    since changed (e.g. an action applied while a cert was active, whose cert was later suspended).
+    Never mutates the ledger or any cert. The recorded decision is the point-in-time truth; the live
+    re-check is advisory context only.
+    """
+    from src.services.capabilities import describe_capability
+
+    runs = (
+        (
+            await session.execute(
+                select(Run).where(Run.executionMode == "integrated").order_by(Run.startedAt.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    agents = {a.id: a for a in (await session.execute(select(Agent))).scalars().all()}
+    scenarios = {s.id: s for s in (await session.execute(select(Scenario))).scalars().all()}
+
+    # Cache the live PDP decision per (agent, action) — hit the PDP once per distinct pair.
+    pdp_cache: dict[tuple[str, str], tuple[str, str]] = {}
+
+    async def _current(agent_vid: str, action: str) -> tuple[str, str]:
+        key = (agent_vid, action)
+        if key not in pdp_cache:
+            d = await pdp.decide(session, AuthRequest(subject_agent_id=agent_vid, action=action))
+            pdp_cache[key] = (d.decision, d.reason_code)
+        return pdp_cache[key]
+
+    run_ledgers: list[dict] = []
+    for run in runs:
+        events = (
+            (
+                await session.execute(
+                    select(TraceEvent)
+                    .where(TraceEvent.runId == run.id)
+                    .where(TraceEvent.eventType.in_(("integrated_action", "integrated_revert")))
+                    .order_by(TraceEvent.timestamp)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        reverts = {e.payload["action_id"]: e for e in events if e.eventType == "integrated_revert"}
+        actions: list[dict] = []
+        for e in events:
+            if e.eventType != "integrated_action":
+                continue
+            p = e.payload
+            agent_vid = p.get("agent") or ""
+            action = p.get("action") or ""
+            cap = describe_capability(action) if action else None
+            rv = reverts.get(p.get("action_id"))
+            status = "reverted" if rv is not None else p.get("status")
+            cur_decision, cur_reason = (
+                await _current(agent_vid, action) if agent_vid and action else (None, None)
+            )
+            # Historical = applied at run time under a decision the PDP would no longer make now.
+            historical = bool(
+                p.get("applied") and cur_decision is not None and cur_decision != p.get("decision")
+            )
+            agent_row = agents.get(run.agentId)
+            actions.append(
+                {
+                    "action_id": p.get("action_id"),
+                    "agent": agent_vid,
+                    "agent_name": agent_row.name if agent_row else agent_vid,
+                    "action": action,
+                    "capability_label": cap["label"] if cap else action,
+                    "capability_forge": cap["forge"] if cap else None,
+                    "decision": p.get("decision"),
+                    "reason_code": p.get("reason_code"),
+                    "applied": p.get("applied"),
+                    "status": status,
+                    "reverted": rv is not None,
+                    "reverted_by": rv.payload.get("actor") if rv is not None else None,
+                    "recorded_at": e.timestamp.isoformat(),
+                    "current_decision": cur_decision,
+                    "current_reason_code": cur_reason,
+                    "historical": historical,
+                }
+            )
+        if not actions:
+            continue
+        scenario = scenarios.get(run.scenarioId)
+        agent_row = agents.get(run.agentId)
+        run_ledgers.append(
+            {
+                "run_id": run.runId,
+                "scenario_id": scenario.scenarioId if scenario else run.scenarioId,
+                "scenario_title": scenario.title if scenario else None,
+                "agent": agent_row.villageAgentId if agent_row else None,
+                "agent_name": agent_row.name if agent_row else None,
+                "started_at": run.startedAt.isoformat() if run.startedAt else None,
+                "actions": actions,
+            }
+        )
+
+    return {
+        "integrated_execution_enabled": settings.integrated_execution_enabled,
+        "runs": run_ledgers,
+    }
+
+
 async def revert_integrated_action(
     session: AsyncSession, run_id: str, action_id: str, actor: str
 ) -> dict:
