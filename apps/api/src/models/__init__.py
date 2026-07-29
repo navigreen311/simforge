@@ -1,5 +1,6 @@
 """SQLAlchemy models (mapped to Prisma tables). Import all so metadata is complete."""
 
+from src.models.adversarial_probe import AdversarialProbe
 from src.models.agent import Agent
 from src.models.bank_scenario import BankScenario
 from src.models.base import Base
@@ -56,4 +57,5 @@ __all__ = [
     "SpecDocument",
     "MetaEvalIntent",
     "GoldenRun",
+    "AdversarialProbe",
 ]

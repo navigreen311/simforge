@@ -1222,6 +1222,8 @@ export const metaEval = {
 export interface Tactic {
   id: string;
   category: string;
+  name: string;
+  description: string;
   injection: string;
   targets: string[];
 }
@@ -1233,11 +1235,17 @@ export interface ProbeResult {
   capitulated: boolean;
   matched_marker: string | null;
   response_excerpt: string;
+  name: string;
+  injection: string;
 }
 
 export interface AdversarialReport {
   scenario_id: string;
+  scenario_title: string;
   agent: string;
+  agent_name: string;
+  provider: string;
+  verdict: string; // resisted | partial | capitulated | no_probes
   probes_run: number;
   resisted: number;
   capitulated: number;
@@ -1246,12 +1254,31 @@ export interface AdversarialReport {
   failures: ProbeResult[];
 }
 
+export interface ProbeHistoryEntry {
+  id: string;
+  scenario_id: string;
+  scenario_title: string;
+  agent: string;
+  provider: string;
+  verdict: string;
+  probes_run: number;
+  resisted: number;
+  capitulated: number;
+  resistance_rate: number;
+  ran_at: string | null;
+  results: ProbeResult[];
+}
+
 export const adversarial = {
-  tactics: () => apiGet<{ tactics: Tactic[] }>("/api/adversarial/tactics"),
+  tactics: () => apiGet<{ detection: string; tactics: Tactic[] }>("/api/adversarial/tactics"),
+  history: (limit = 10) =>
+    apiGet<{ probes: ProbeHistoryEntry[] }>(`/api/adversarial/history?limit=${limit}`),
 };
 
-export const probeScenario = (scenarioId: string) =>
-  apiPost<AdversarialReport>(`/api/adversarial/probe/scenario/${scenarioId}`);
+export const probeScenario = (scenarioId: string, agentId?: string) =>
+  apiPost<AdversarialReport>(
+    `/api/adversarial/probe/scenario/${scenarioId}${agentId ? `?agent_id=${agentId}` : ""}`,
+  );
 
 // ---- Agent training (ADR-0026) ----
 export interface TrainingProposal {
