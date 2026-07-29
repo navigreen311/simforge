@@ -1,41 +1,36 @@
-import { DecisionPill } from "@/components/common/DecisionPill";
-import { api, execution, type IntegratedAction, type RunSummary } from "@/lib/api/client";
+import { LedgerView } from "@/components/execution/LedgerView";
+import { PageMeta } from "@/components/ui/PageMeta";
+import { execution, type IntegratedLedger } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
 
-type RunLedger = { run: RunSummary; actions: IntegratedAction[] };
-
 export default async function ExecutionPage() {
-  let enabled = false;
-  let ledgers: RunLedger[] = [];
+  let ledger: IntegratedLedger | null = null;
   let error: string | null = null;
-
   try {
-    const [status, runList] = await Promise.all([execution.status(), api.runs()]);
-    enabled = status.integrated_execution_enabled;
-    const integratedRuns = runList.items.filter((r) => r.execution_mode === "integrated");
-    ledgers = (
-      await Promise.all(
-        integratedRuns.map(async (run) => {
-          try {
-            const { actions } = await execution.runActions(run.run_id);
-            return { run, actions };
-          } catch {
-            return { run, actions: [] as IntegratedAction[] };
-          }
-        }),
-      )
-    ).filter((l) => l.actions.length > 0);
+    ledger = await execution.ledger();
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load execution data";
   }
 
+  const enabled = ledger?.integrated_execution_enabled ?? false;
+  const runs = ledger?.runs ?? [];
+
   return (
-    <div className="mx-auto max-w-6xl">
-      <h1 className="mb-1 text-3xl">Integrated Execution</h1>
-      <p className="mb-6 text-ink-200">
-        Integrated runs commit agent actions — but every action is PDP-gated, VillageData is never
-        written, and the ledger is auditable and reversible (ADR-0025). Off by default.
+    <div className="mx-auto max-w-7xl">
+      <div className="mb-1 flex items-start justify-between">
+        <h1 className="text-3xl">Integrated Execution</h1>
+        <PageMeta />
+      </div>
+
+      {/* STEP 1 — the stakes, in plain language. */}
+      <p className="mb-4 max-w-4xl text-ink-200">
+        Integrated execution is where agent actions stop being practice and actually happen in real
+        systems. When it&apos;s ON, a passing agent&apos;s action — releasing funds, assigning a
+        deal, sending a message — is committed for real. Every action is first checked by the policy
+        engine (PDP): <strong className="text-success">denied actions are blocked</strong> and never
+        commit; <strong className="text-ink-50">allowed actions are applied</strong> and recorded in
+        an auditable, reversible ledger. It is OFF by default so nothing commits by accident.
       </p>
 
       {error ? (
@@ -44,11 +39,10 @@ export default async function ExecutionPage() {
         </div>
       ) : (
         <>
+          {/* STEP 5 — the deployment setting as a labelled status, not a raw env string. */}
           <div
-            className={`mb-8 flex items-center gap-3 rounded-xl border p-4 ${
-              enabled
-                ? "border-warning/40 bg-warning/10"
-                : "border-ink-500 bg-ink-800"
+            className={`mb-6 flex flex-wrap items-center gap-3 rounded-xl border p-4 ${
+              enabled ? "border-warning/40 bg-warning/10" : "border-ink-500 bg-ink-800"
             }`}
           >
             <span
@@ -56,75 +50,89 @@ export default async function ExecutionPage() {
               aria-hidden
             />
             <span className="text-sm text-ink-50">
-              Integrated execution is{" "}
+              Deployment setting:{" "}
               <strong className={enabled ? "text-warning" : "text-ink-100"}>
-                {enabled ? "ENABLED" : "disabled"}
-              </strong>{" "}
-              on this deployment.
-            </span>
-            <span className="ml-auto font-mono text-xs text-ink-400">
-              INTEGRATED_EXECUTION_ENABLED={String(enabled)}
+                integrated execution {enabled ? "ENABLED" : "disabled"}
+              </strong>
+              .{" "}
+              {enabled
+                ? "Allowed agent actions can commit to real systems on this deployment."
+                : "Currently OFF — no agent action can commit to a real system on this deployment. The ledger below is a record of what was evaluated when runs executed."}
             </span>
           </div>
 
-          <h2 className="mb-4 text-xl">Action ledgers</h2>
-          {ledgers.length === 0 ? (
+          {/* STEP 2 — the decision → outcome chain, framed as the safety proof. */}
+          <div className="mb-8 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-sm">
+              <div className="mb-1 flex items-center gap-2">
+                <DecisionArrow decision="Deny" outcome="blocked" tone="good" />
+              </div>
+              <p className="text-ink-200">
+                The policy engine denied the action, so it was <strong>blocked</strong> and never
+                committed. This is the gate working — a bad action was stopped.
+              </p>
+            </div>
+            <div className="rounded-lg border border-ink-500 bg-ink-800 p-4 text-sm">
+              <div className="mb-1 flex items-center gap-2">
+                <DecisionArrow decision="Allow" outcome="applied" tone="neutral" />
+              </div>
+              <p className="text-ink-200">
+                The policy engine allowed the action, so it was <strong>applied</strong> and recorded
+                in the auditable, reversible ledger.
+              </p>
+            </div>
+          </div>
+
+          <h2 className="mb-1 text-xl">Action ledger</h2>
+          <p className="mb-4 text-xs text-ink-400">
+            Each row is one agent action evaluated during an integrated run, grouped by run. The PDP
+            decision shown is what was recorded at run time. Entries tagged{" "}
+            <span className="text-warning">historical</span> were recorded before the agent&apos;s
+            cert status changed and do not reflect current permissions.
+          </p>
+
+          {runs.length === 0 ? (
             <div className="rounded-lg border border-ink-500 bg-ink-800 p-6 text-ink-200">
               No integrated-execution runs with committed actions yet. Sandbox runs never write, so
               they don&apos;t appear here.
             </div>
           ) : (
-            <div className="flex flex-col gap-6">
-              {ledgers.map(({ run, actions }) => (
-                <div key={run.run_id} className="overflow-hidden rounded-xl border border-ink-500">
-                  <div className="flex items-center justify-between bg-ink-800 px-4 py-3">
-                    <span className="font-mono text-xs text-ink-100">{run.run_id}</span>
-                    <span className="text-xs text-ink-300">{run.scenario_id}</span>
-                  </div>
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-ink-900/40 text-ink-300">
-                      <tr>
-                        <th className="px-4 py-2 font-medium">Action</th>
-                        <th className="px-4 py-2 font-medium">Agent</th>
-                        <th className="px-4 py-2 font-medium">PDP decision</th>
-                        <th className="px-4 py-2 font-medium">Outcome</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-ink-600">
-                      {actions.map((a) => (
-                        <tr key={a.action_id} className="hover:bg-ink-800/60">
-                          <td className="px-4 py-2 font-mono text-xs text-gold-400">
-                            {a.action ?? "—"}
-                          </td>
-                          <td className="px-4 py-2 font-mono text-xs text-ink-200">
-                            {a.agent ?? "—"}
-                          </td>
-                          <td className="px-4 py-2">
-                            {a.decision ? <DecisionPill decision={a.decision} /> : "—"}
-                          </td>
-                          <td className="px-4 py-2">
-                            <span
-                              className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                                a.status === "applied"
-                                  ? "bg-success/15 text-success"
-                                  : a.status === "reverted"
-                                    ? "bg-info/15 text-info"
-                                    : "bg-danger/15 text-danger"
-                              }`}
-                            >
-                              {a.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
+            <LedgerView runs={runs} />
           )}
         </>
       )}
     </div>
+  );
+}
+
+function DecisionArrow({
+  decision,
+  outcome,
+  tone,
+}: {
+  decision: string;
+  outcome: string;
+  tone: "good" | "neutral";
+}) {
+  return (
+    <span className="flex items-center gap-2 text-xs font-semibold">
+      <span
+        className={`rounded px-2 py-0.5 ${
+          decision === "Deny" ? "bg-danger/15 text-danger" : "bg-success/15 text-success"
+        }`}
+      >
+        {decision}
+      </span>
+      <span className="text-ink-400" aria-hidden>
+        →
+      </span>
+      <span
+        className={`rounded px-2 py-0.5 ${
+          tone === "good" ? "bg-success/15 text-success" : "bg-ink-600 text-ink-100"
+        }`}
+      >
+        {outcome}
+      </span>
+    </span>
   );
 }

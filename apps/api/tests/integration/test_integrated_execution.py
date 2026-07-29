@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.models.agent import Agent
+from src.models.cert import AgentCert
 from src.models.pack import Pack
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -90,6 +91,48 @@ async def test_integrated_applies_certified_blocks_uncertified(
     after = (await client.get(f"/api/execution/run/{run['run_id']}/actions")).json()["actions"]
     reverted = next(a for a in after if a["action_id"] == action_id)
     assert reverted["reverted"] is True and reverted["status"] == "reverted"
+
+
+async def test_ledger_enriches_and_flags_historical(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The aggregated ledger adds friendly labels + a live PDP re-check, tagging an applied action
+    as `historical` once its cert is suspended (the point-in-time integrity case)."""
+    monkeypatch.setattr(settings, "integrated_execution_enabled", True)
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    await _issue_cert_and_elevate(client, db_session)
+    run = (
+        await client.post("/api/scenarios/scn.gs.buy.002/run", params={"integrated": True})
+    ).json()
+
+    # Suspend the cert AFTER the applied run → the recorded allow is now a historical point-in-time
+    # record; the live PDP would deny.
+    cert = (
+        await db_session.execute(
+            select(AgentCert).where(AgentCert.forgeCap == CERTED_CAP, AgentCert.status == "active")
+        )
+    ).scalar_one()
+    cert.status = "suspended"
+    await db_session.commit()
+
+    ledger = (await client.get("/api/execution/ledger")).json()
+    assert ledger["integrated_execution_enabled"] is True
+    run_row = next(r for r in ledger["runs"] if r["run_id"] == run["run_id"])
+    assert run_row["scenario_title"]  # readable scenario title present
+    assert run_row["agent_name"]  # display name present
+    by_cap = {a["action"]: a for a in run_row["actions"]}
+
+    applied = by_cap[CERTED_CAP]
+    assert applied["capability_label"] == "Earnest Money Release"  # shared catalog label
+    assert applied["status"] == "applied"
+    assert applied["decision"] == "allow"  # recorded point-in-time truth unchanged
+    assert applied["historical"] is True  # live PDP now differs
+    assert applied["current_decision"] == "deny"
+    assert applied["current_reason_code"] == "cert_suspended"
+
+    blocked = by_cap[UNCERTED_CAP]
+    assert blocked["status"] == "blocked"
+    assert blocked["historical"] is False  # deny then, deny now — not historical
 
 
 async def test_cannot_revert_blocked_action(
