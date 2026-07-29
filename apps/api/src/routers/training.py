@@ -13,13 +13,19 @@ from src.db import get_session
 from src.deps import require_role
 from src.models.agent import Agent
 from src.models.training import TrainingProposal
-from src.services.training import analyze_run_for_training, approve_proposal, reject_proposal
+from src.services.training import (
+    analyze_run_for_training,
+    approve_proposal,
+    enrich_proposals,
+    reject_proposal,
+)
 
 router = APIRouter()
 
 
 class ReviewRequest(BaseModel):
     reviewer: str = "ivan"
+    reason: str = ""  # optional rejection note (echoed; not persisted — no column yet)
 
 
 class ProposalOut(BaseModel):
@@ -72,6 +78,15 @@ async def list_proposals(
     return [ProposalOut.model_validate(r) for r in rows]
 
 
+@router.get("/proposals/enriched", dependencies=[Depends(require_role("viewer"))])
+async def list_proposals_enriched(session: AsyncSession = Depends(get_session)) -> dict:
+    """Every proposal + readable agent/run context + the approval consequence (read-only).
+
+    For approved proposals: the certs the approval suspended (inferred from lifecycle-event reason).
+    For pending proposals: the blast-radius preview (certs approval WOULD suspend)."""
+    return {"proposals": await enrich_proposals(session)}
+
+
 @router.post("/proposals/{proposal_id}/approve", dependencies=[Depends(require_role("admin"))])
 async def approve(
     proposal_id: str, body: ReviewRequest, session: AsyncSession = Depends(get_session)
@@ -88,6 +103,6 @@ async def reject(
     proposal_id: str, body: ReviewRequest, session: AsyncSession = Depends(get_session)
 ) -> dict:
     try:
-        return await reject_proposal(session, proposal_id, body.reviewer)
+        return await reject_proposal(session, proposal_id, body.reviewer, reason=body.reason)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

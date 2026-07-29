@@ -169,7 +169,106 @@ async def approve_proposal(session: AsyncSession, proposal_id: str, approver: st
     }
 
 
-async def reject_proposal(session: AsyncSession, proposal_id: str, reviewer: str) -> dict:
+def _suspend_reason(proposed_version: str) -> str:
+    return f"agent prompt updated to {proposed_version} pending re-cert"
+
+
+async def enrich_proposals(session: AsyncSession) -> list[dict]:
+    """Every proposal + readable agent/run context + the approval CONSEQUENCE (read-only).
+
+    For an APPROVED proposal: the certs its approval suspended (matched by the lifecycle-event
+    reason string it writes — an INFERRED link, flagged as such). For a PENDING proposal: the
+    blast-radius preview (active certs pinned to the old prompt version approval WOULD suspend).
+    Never mutates anything; this surface makes the app-wide suspended-cert state legible.
+    """
+    from src.services.capabilities import describe_capability
+
+    proposals = (
+        (
+            await session.execute(
+                select(TrainingProposal).order_by(TrainingProposal.createdAt.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    agents = {a.id: a for a in (await session.execute(select(Agent))).scalars().all()}
+    runs = {r.id: r for r in (await session.execute(select(Run))).scalars().all()}
+    from src.models.pack import Scenario
+
+    scenarios = {s.id: s for s in (await session.execute(select(Scenario))).scalars().all()}
+    all_certs = (await session.execute(select(AgentCert))).scalars().all()
+    snaps = {s.id: s for s in (await session.execute(select(CertSnapshot))).scalars().all()}
+    events = (await session.execute(select(CertLifecycleEvent))).scalars().all()
+
+    def _cap(cap: str) -> dict:
+        d = describe_capability(cap)
+        return {"cap": cap, "label": d["label"]}
+
+    out: list[dict] = []
+    for p in proposals:
+        agent = agents.get(p.agentId)
+        run = runs.get(p.runId) if p.runId else None
+        scenario = scenarios.get(run.scenarioId) if run else None
+
+        consequence: dict
+        if p.status == "approved":
+            reason = _suspend_reason(p.proposedPromptVersion)
+            cert_ids = {
+                e.agentCertId
+                for e in events
+                if e.reason == reason and e.actor == (p.reviewedBy or "")
+            }
+            suspended = [
+                _cap(c.forgeCap) for c in all_certs if c.id in cert_ids and c.agentId == p.agentId
+            ]
+            consequence = {
+                "kind": "applied",
+                "promoted_on": p.reviewedAt.isoformat() if p.reviewedAt else None,
+                "certs": suspended,
+                "inferred": True,  # matched by lifecycle-event reason string, not a stored FK
+            }
+        elif p.status == "proposed":
+            would: list[dict] = []
+            for c in all_certs:
+                if c.agentId != p.agentId or c.status != "active":
+                    continue
+                snap = snaps.get(c.certSnapshotId)
+                pinned = snap.pinnedVersions.get("agent_prompt_version") if snap else None
+                if pinned == p.currentPromptVersion:
+                    would.append(_cap(c.forgeCap))
+            consequence = {"kind": "preview", "certs": would, "inferred": False}
+        else:
+            consequence = {"kind": "none", "certs": [], "inferred": False}
+
+        out.append(
+            {
+                "id": p.id,
+                "agent_id": p.agentId,
+                "agent_village_id": agent.villageAgentId if agent else None,
+                "agent_name": agent.name if agent else None,
+                "run_id": p.runId,
+                "run_hash": run.runId if run else None,
+                "scenario_id": scenario.scenarioId if scenario else None,
+                "scenario_title": scenario.title if scenario else None,
+                "weak_dims": list(p.weakDims or []),
+                "current_prompt_version": p.currentPromptVersion,
+                "proposed_prompt_version": p.proposedPromptVersion,
+                "rationale": p.rationale,
+                "proposed_refinement": p.proposedRefinement,
+                "status": p.status,
+                "reviewed_by": p.reviewedBy,
+                "reviewed_at": p.reviewedAt.isoformat() if p.reviewedAt else None,
+                "created_at": p.createdAt.isoformat() if p.createdAt else None,
+                "consequence": consequence,
+            }
+        )
+    return out
+
+
+async def reject_proposal(
+    session: AsyncSession, proposal_id: str, reviewer: str, *, reason: str = ""
+) -> dict:
     proposal = (
         await session.execute(select(TrainingProposal).where(TrainingProposal.id == proposal_id))
     ).scalar_one_or_none()
@@ -181,4 +280,5 @@ async def reject_proposal(session: AsyncSession, proposal_id: str, reviewer: str
     proposal.reviewedBy = reviewer
     proposal.reviewedAt = utcnow()
     await session.commit()
-    return {"proposal_id": proposal_id, "status": "rejected"}
+    # `reason` is echoed for the caller/UI; it is not persisted (no rejection-reason column yet).
+    return {"proposal_id": proposal_id, "status": "rejected", "reason": reason}

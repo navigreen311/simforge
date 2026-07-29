@@ -1297,6 +1297,39 @@ export interface TrainingProposal {
   createdAt: string;
 }
 
+export interface ConsequenceCert {
+  cap: string;
+  label: string;
+}
+
+export interface ProposalConsequence {
+  kind: "applied" | "preview" | "none";
+  promoted_on?: string | null;
+  certs: ConsequenceCert[];
+  inferred: boolean;
+}
+
+export interface EnrichedProposal {
+  id: string;
+  agent_id: string;
+  agent_village_id: string | null;
+  agent_name: string | null;
+  run_id: string | null;
+  run_hash: string | null;
+  scenario_id: string | null;
+  scenario_title: string | null;
+  weak_dims: string[];
+  current_prompt_version: string;
+  proposed_prompt_version: string;
+  rationale: string;
+  proposed_refinement: string;
+  status: string; // proposed | approved | rejected
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string | null;
+  consequence: ProposalConsequence;
+}
+
 export const training = {
   proposals: (params?: { status?: string; agent_village_id?: string }) => {
     const q = new URLSearchParams();
@@ -1305,12 +1338,13 @@ export const training = {
     const qs = q.toString();
     return apiGet<TrainingProposal[]>(`/api/training/proposals${qs ? `?${qs}` : ""}`);
   },
+  enriched: () => apiGet<{ proposals: EnrichedProposal[] }>("/api/training/proposals/enriched"),
 };
 
 export const approveProposal = (id: string) =>
   apiPost<Record<string, unknown>>(`/api/training/proposals/${id}/approve`, {});
-export const rejectProposal = (id: string) =>
-  apiPost<Record<string, unknown>>(`/api/training/proposals/${id}/reject`, {});
+export const rejectProposal = (id: string, reason = "") =>
+  apiPost<Record<string, unknown>>(`/api/training/proposals/${id}/reject`, { reason });
 
 // ---- Integrated execution (ADR-0025) ----
 export interface IntegratedAction {

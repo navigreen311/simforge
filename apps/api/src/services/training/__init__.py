@@ -3,7 +3,13 @@
 from src.services.training.proposals import (
     analyze_run_for_training,
     approve_proposal,
+    enrich_proposals,
     reject_proposal,
 )
 
-__all__ = ["analyze_run_for_training", "approve_proposal", "reject_proposal"]
+__all__ = [
+    "analyze_run_for_training",
+    "approve_proposal",
+    "enrich_proposals",
+    "reject_proposal",
+]

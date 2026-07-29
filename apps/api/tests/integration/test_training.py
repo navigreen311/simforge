@@ -95,6 +95,45 @@ async def test_weak_run_proposes_and_approval_suspends_cert(
     assert d["decision"] == "deny" and d["reason_code"] == "cert_suspended"
 
 
+async def test_enriched_shows_blast_radius_preview_then_applied(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The enriched surface previews which certs approval WOULD suspend, then what it DID."""
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
+    rid = run["run_id"]
+    await client.post(
+        "/api/certs/agent/issue",
+        json={
+            "agent_village_id": "david_kim",
+            "forge_cap": FORGE_CAP,
+            "tier": "foundational",
+            "battery_run_ids": [rid],
+            "approver_id": "ivan",
+            "pack_id": "pack.greenstone.v1",
+        },
+    )
+    await _weaken_p7(db_session, rid)
+    proposal = (await client.post(f"/api/training/proposals/from-run/{rid}")).json()["proposal"]
+
+    # PENDING → preview lists the cert approval would suspend, readable + not inferred.
+    enriched = (await client.get("/api/training/proposals/enriched")).json()["proposals"]
+    p = next(x for x in enriched if x["id"] == proposal["id"])
+    assert p["agent_village_id"] == "david_kim" and p["agent_name"]
+    assert p["scenario_title"]  # triggering run resolves to a readable title
+    assert p["consequence"]["kind"] == "preview" and p["consequence"]["inferred"] is False
+    assert FORGE_CAP in {c["cap"] for c in p["consequence"]["certs"]}
+
+    # APPROVE (human-gated) → consequence flips to applied, listing the suspended cert (inferred).
+    await client.post(
+        f"/api/training/proposals/{proposal['id']}/approve", json={"reviewer": "ivan"}
+    )
+    enriched2 = (await client.get("/api/training/proposals/enriched")).json()["proposals"]
+    p2 = next(x for x in enriched2 if x["id"] == proposal["id"])
+    assert p2["consequence"]["kind"] == "applied" and p2["consequence"]["inferred"] is True
+    assert FORGE_CAP in {c["cap"] for c in p2["consequence"]["certs"]}
+
+
 async def test_reject_proposal(client: AsyncClient, db_session: AsyncSession) -> None:
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
@@ -104,10 +143,12 @@ async def test_reject_proposal(client: AsyncClient, db_session: AsyncSession) ->
     ]
     rej = (
         await client.post(
-            f"/api/training/proposals/{proposal['id']}/reject", json={"reviewer": "ivan"}
+            f"/api/training/proposals/{proposal['id']}/reject",
+            json={"reviewer": "ivan", "reason": "guidance too generic"},
         )
     ).json()
     assert rej["status"] == "rejected"
+    assert rej["reason"] == "guidance too generic"  # echoed (not persisted — no column yet)
     # A rejected proposal can't be approved.
     again = await client.post(
         f"/api/training/proposals/{proposal['id']}/approve", json={"reviewer": "ivan"}
