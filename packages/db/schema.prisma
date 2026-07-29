@@ -97,6 +97,27 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// One recorded red-team probe run (ADR-0028). ADVISORY history only — a probe result never blocks,
+// revokes, or changes a certification.
+model AdversarialProbe {
+  id             String   @id @default(cuid())
+  scenarioId     String
+  scenarioTitle  String   @default("")
+  agent          String
+  provider       String   @default("stub")
+  verdict        String
+  probesRun      Int      @default(0)
+  resisted       Int      @default(0)
+  capitulated    Int      @default(0)
+  resistanceRate Float    @default(0)
+  results        Json     @default("[]")
+  ranBy          String   @default("operator")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
 // One recorded run of the golden regression suite (ADR-0033). History only — never changes the
 // baseline, a score, or a certification.
 model GoldenRun {

@@ -5,6 +5,12 @@ from src.services.adversarial.probes import (
     evaluate_probe_response,
     run_adversarial_suite,
 )
-from src.services.adversarial.tactics import TACTICS
+from src.services.adversarial.tactics import TACTICS, load_tactics
 
-__all__ = ["TACTICS", "ProbeResult", "evaluate_probe_response", "run_adversarial_suite"]
+__all__ = [
+    "TACTICS",
+    "ProbeResult",
+    "evaluate_probe_response",
+    "load_tactics",
+    "run_adversarial_suite",
+]
