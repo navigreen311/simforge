@@ -67,3 +67,30 @@ def test_absent_dim_reports_no_data() -> None:
 def test_empty_population() -> None:
     r = analyze_scorecards([])
     assert r["n_scorecards"] == 0 and r["pass_rate"] == 0.0
+
+
+def test_verdicts_derived_from_stats() -> None:
+    r = analyze_scorecards(_population())
+    # p7 discriminates strongly (0.6) → working; p1 is constant → dead; p3 varies but not by
+    # outcome → weak.
+    assert _dim(r, "p7_cx")["verdict"] == "working"
+    assert _dim(r, "p1_correctness")["verdict"] == "dead"
+    assert _dim(r, "p3_process_fidelity")["verdict"] == "weak"
+    assert _dim(r, "c7_ame")["verdict"] == "insufficient"  # no data
+    assert r["verdict_counts"]["working"] == 1
+    assert r["working_dimensions"] == ["p7_cx"]
+
+
+def test_inverted_dim_verdict() -> None:
+    # Failing agents score HIGHER on this dim than passing agents → inverted (not merely dead/weak).
+    cards = [
+        _card(True, p6DocQuality=0.5),
+        _card(True, p6DocQuality=0.6),
+        _card(False, p6DocQuality=0.9),
+        _card(False, p6DocQuality=0.8),
+    ]
+    r = analyze_scorecards(cards)
+    p6 = _dim(r, "p6_doc_quality")
+    assert p6["discrimination"] < 0  # passed-mean − failed-mean is negative
+    assert p6["verdict"] == "inverted"
+    assert r["verdict_counts"]["inverted"] == 1

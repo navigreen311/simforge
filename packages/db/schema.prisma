@@ -97,6 +97,18 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// Owner's advisory remediation intent for a rubric dimension (Meta-Eval triage). ADVISORY ONLY —
+// never changes a score, weight, or certification. One row per dimension.
+model MetaEvalIntent {
+  id        String   @id @default(cuid())
+  dim       String   @unique
+  intent    String
+  note      String   @default("")
+  updatedBy String   @default("owner")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Pack {
   id                    String    @id @default(cuid())
   packId                String    @unique // "pack.greenstone.v1"
