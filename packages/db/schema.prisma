@@ -97,6 +97,20 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// One recorded run of the golden regression suite (ADR-0033). History only — never changes the
+// baseline, a score, or a certification.
+model GoldenRun {
+  id          String   @id @default(cuid())
+  passed      Boolean
+  total       Int      @default(0)
+  matched     Int      @default(0)
+  regressions Int      @default(0)
+  results     Json     @default("[]")
+  ranBy       String   @default("operator")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Owner's advisory remediation intent for a rubric dimension (Meta-Eval triage). ADVISORY ONLY —
 // never changes a score, weight, or certification. One row per dimension.
 model MetaEvalIntent {

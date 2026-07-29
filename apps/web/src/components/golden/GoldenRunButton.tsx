@@ -1,20 +1,23 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { runGoldenSuite, type GoldenReport } from "@/lib/api/client";
+import { runGoldenSuite } from "@/lib/api/client";
 
+// Triggers the REAL golden suite, then refreshes so the persisted last-run result + history
+// re-render from the server (the result panel is server-rendered, so it survives a reload).
 export function GoldenRunButton() {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [report, setReport] = useState<GoldenReport | null>(null);
 
   async function onClick() {
     setBusy(true);
     setError(null);
-    setReport(null);
     try {
-      setReport(await runGoldenSuite());
+      await runGoldenSuite();
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Golden run failed");
     } finally {
@@ -23,7 +26,7 @@ export function GoldenRunButton() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
         <button
           onClick={onClick}
@@ -32,47 +35,16 @@ export function GoldenRunButton() {
         >
           {busy ? "Running suite…" : "Run golden suite"}
         </button>
-        {report && (
-          <span
-            className={`rounded px-2 py-0.5 text-xs font-semibold ${
-              report.passed ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
-            }`}
-          >
-            {report.passed
-              ? `No regression · ${report.matched}/${report.total} match`
-              : `${report.regressions} regression(s)`}
+        {busy && (
+          <span className="text-xs text-ink-300">
+            Running every golden scenario through the real evaluator and comparing to baseline…
           </span>
         )}
       </div>
-
-      {error && <p className="text-sm text-danger">{error}</p>}
-
-      {report && (
-        <div className="flex flex-col gap-2">
-          {report.results.map((r) => (
-            <div key={r.scenario_id} className="rounded-lg border border-ink-500 bg-ink-800 px-4 py-3 text-sm">
-              <div className="flex items-center gap-3">
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    r.status === "match" ? "bg-success" : "bg-danger"
-                  }`}
-                  aria-hidden
-                />
-                <span className="font-mono text-xs text-gold-400">{r.scenario_id}</span>
-                <span className="ml-auto text-xs text-ink-300">{r.status}</span>
-              </div>
-              {r.diffs.length > 0 && (
-                <ul className="mt-2 flex flex-col gap-0.5">
-                  {r.diffs.map((d) => (
-                    <li key={d.dim} className="font-mono text-[11px] text-danger">
-                      {d.dim}: {String(d.expected)} → {String(d.actual)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
+      {error && (
+        <p className="rounded border border-danger/40 bg-danger/10 p-2 text-sm text-danger">
+          Run failed: {error}
+        </p>
       )}
     </div>
   );

@@ -33,8 +33,9 @@ const DIMENSIONS: Record<string, DimensionInfo> = {
   cognitive_aggregate: { label: "Aggregate", name: "Cognitive aggregate", tip: "Mean of the cognitive dimensions above. Higher is better." },
 };
 
-// Cohort uses the full scorecard-attribute keys → alias them to the canonical entries.
+// Cohort + Golden use the full scorecard-attribute keys → alias them to the canonical entries.
 const ALIASES: Record<string, string> = {
+  p7_customer_experience: "p7_cx",
   c1_breath_coherence: "c1_breath",
   c2_soul_stability: "c2_soul",
   c3_fot_pressure_management: "c3_fot",
