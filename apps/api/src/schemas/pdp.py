@@ -27,6 +27,10 @@ class EffectivePermission(BaseModel):
     cert_status: str
     decision: str
     reason_code: str
+    # Derived (presentation only) via the shared capability catalog — same source of truth as the
+    # Readiness Matrix / Certs / Incident Command. Not stored.
+    capability_label: str = ""
+    capability_forge: str = ""
 
 
 class EffectivePermissionsOut(BaseModel):

@@ -70,9 +70,12 @@ async def effective_permissions(
         .scalars()
         .all()
     )
+    from src.services.capabilities import describe_capability
+
     perms: list[EffectivePermission] = []
     for cert in certs:
         d = await pdp.decide(session, AuthRequest(subject_agent_id=agent_id, action=cert.forgeCap))
+        cap = describe_capability(cert.forgeCap)
         perms.append(
             EffectivePermission(
                 action=cert.forgeCap,
@@ -80,6 +83,8 @@ async def effective_permissions(
                 cert_status=cert.status,
                 decision=d.decision,
                 reason_code=d.reason_code,
+                capability_label=cap["label"],
+                capability_forge=cap["forge"],
             )
         )
     return EffectivePermissionsOut(

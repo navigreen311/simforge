@@ -1112,6 +1112,8 @@ export interface EffectivePermission {
   cert_status: string;
   decision: string;
   reason_code: string;
+  capability_label: string;
+  capability_forge: string;
 }
 
 export interface EffectivePermissions {
