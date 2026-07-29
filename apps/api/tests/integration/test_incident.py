@@ -67,3 +67,34 @@ async def test_revoked_cert_incident_with_blast_radius(client: AsyncClient) -> N
     assert "david_kim" in revoked["blast_radius"]["agents"]
     assert FORGE_CAP in revoked["blast_radius"]["forge_caps"]
     assert "Engineering" in revoked["blast_radius"]["departments"]
+
+    # Presentation-only enrichment (derived; no data changed): capability labels for every cap,
+    # the agent's display name, and a demo-driven flag from the underlying cert reasons.
+    assert revoked["cap_labels"][FORGE_CAP]["label"] == "Outbound Seller Outreach"
+    assert revoked["cap_labels"][FORGE_CAP]["forge"] == "cre-forge"
+    assert revoked["agent_names"]["david_kim"] == "David Kim"
+    # this cert was revoked for reason "policy" (a real reason), so NOT demo-driven
+    assert revoked["demo_driven"] is False
+
+
+async def test_demo_reason_marks_incident_demo_driven(client: AsyncClient) -> None:
+    await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
+    run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
+    issue = (
+        await client.post(
+            "/api/certs/agent/issue",
+            json={
+                "agent_village_id": "david_kim",
+                "forge_cap": FORGE_CAP,
+                "tier": "foundational",
+                "battery_run_ids": [run["run_id"]],
+                "approver_id": "ivan",
+                "pack_id": "pack.greenstone.v1",
+            },
+        )
+    ).json()
+    await client.post(f"/api/certs/agent/{issue['cert']['id']}/revoke", json={"reason": "demo"})
+
+    body = (await client.get("/api/incident/status")).json()
+    revoked = next(i for i in body["incidents"] if i["kind"] == "certs_revoked")
+    assert revoked["demo_driven"] is True  # reason=demo → seed/demo-driven, not a real outage

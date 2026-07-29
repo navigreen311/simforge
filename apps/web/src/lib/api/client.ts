@@ -839,12 +839,22 @@ export interface BlastRadius {
   departments: string[];
 }
 
+export interface CapLabel {
+  cap_id: string;
+  forge: string;
+  label: string;
+  description: string;
+}
+
 export interface Incident {
   kind: string;
   severity: string; // critical | high | medium
   summary: string;
   count: number;
   blast_radius: BlastRadius;
+  demo_driven: boolean;
+  agent_names: Record<string, string>; // villageAgentId → display name
+  cap_labels: Record<string, CapLabel>; // cap id → friendly label (reused catalog)
 }
 
 export interface BudgetMode {
