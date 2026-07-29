@@ -967,9 +967,17 @@ export interface CohortAnalytics {
   agents: CohortAgentRow[];
 }
 
+export interface SnapshotStatus {
+  snapshot_dates: number;
+  total_snapshots: number;
+  latest_date: string | null;
+  drift_available: boolean;
+}
+
 export const cohort = {
   analytics: (departmentKey: string) =>
     apiGet<CohortAnalytics>(`/api/cohort/department/${departmentKey}/analytics`),
+  snapshotStatus: () => apiGet<SnapshotStatus>("/api/cohort/snapshots/status"),
 };
 
 export const captureCognitiveSnapshots = () =>

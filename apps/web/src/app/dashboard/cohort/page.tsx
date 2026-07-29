@@ -1,48 +1,120 @@
+import Link from "next/link";
+
 import { SnapshotCaptureButton } from "@/components/cohort/SnapshotCaptureButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RefreshButton } from "@/components/ui/RefreshButton";
-import { api, cohort, type CohortAnalytics } from "@/lib/api/client";
+import { api, cohort, type CohortAnalytics, type SnapshotStatus } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
 
-// Canonical dimension labels (blueprint §5.2) with a short tooltip.
-const DIM: Record<string, { label: string; tip: string }> = {
-  c1_breath_coherence: { label: "C1 BREATH Coherence", tip: "Consistency with declared beliefs/values" },
-  c2_soul_stability: { label: "C2 SOUL Stability", tip: "Emotional trajectory & proportionality" },
-  c3_fot_pressure_management: { label: "C3 FOT Management", tip: "Flow-of-time pressure handling" },
-  c5_echo_regret_load: { label: "C5 ECHO Regret Load", tip: "Accumulated regret signal" },
-  c6_hfm_drive_balance: { label: "C6 HFM Drive Balance", tip: "Human-fundamental-motive balance" },
-  c7_ame_reputation_trajectory: { label: "C7 AME Trajectory", tip: "Reputation / standing trend" },
-  cognitive_aggregate: { label: "Aggregate", tip: "Mean of cognitive dimensions" },
+// A percentile within a cohort smaller than this has no meaning (too few peers).
+const MIN_COHORT_FOR_PERCENTILE = 3;
+
+// Plain-language cognitive-dimension definitions + direction, confirmed from the scorer source
+// (services/evaluation/dimensions/{c1,c2}.py docstrings + cognitive.py logic) — NOT invented. Every
+// numeric cognitive dimension is scored higher-is-better (C5 is stored as 1 − regret, so a higher
+// number means LESS regret). C4 ARC is a categorical string, not a 0–1 score, so it has no column.
+const DIM: Record<string, { label: string; name: string; tip: string }> = {
+  c1_breath_coherence: {
+    label: "C1 BREATH",
+    name: "Belief coherence",
+    tip: "How consistently the agent's responses reflect its declared worldview, values, ethics, and habits. Higher is better.",
+  },
+  c2_soul_stability: {
+    label: "C2 SOUL",
+    name: "Emotional stability",
+    tip: "Whether the emotional trajectory stayed appropriate — no runaway hostility, inappropriate calm, or unresolved grudges. Higher is better.",
+  },
+  c3_fot_pressure_management: {
+    label: "C3 FOT",
+    name: "Pressure management",
+    tip: "How well the agent handled time/pressure (an elevated-but-stable state still scores well). Higher is better.",
+  },
+  c5_echo_regret_load: {
+    label: "C5 ECHO",
+    name: "Regret management",
+    tip: "Scored as 1 − regret load, so a HIGHER number means LESS accumulated regret. Higher is better.",
+  },
+  c6_hfm_drive_balance: {
+    label: "C6 HFM",
+    name: "Motive balance",
+    tip: "Balance across the agent's human fundamental motives. Higher is better.",
+  },
+  c7_ame_reputation_trajectory: {
+    label: "C7 AME",
+    name: "Reputation trajectory",
+    tip: "Reputation/standing with a small rising/declining adjustment. Higher is better.",
+  },
+  cognitive_aggregate: {
+    label: "Aggregate",
+    name: "Cognitive aggregate",
+    tip: "Mean of the cognitive dimensions above. Higher is better.",
+  },
 };
+
+const COG_DIMS = Object.keys(DIM);
 
 function cellStyle(v: number | null): React.CSSProperties {
   if (v === null || v === undefined) return { background: "rgba(255,255,255,0.02)" };
-  const alpha = 0.12 + 0.5 * Math.max(0, Math.min(1, v));
+  const alpha = 0.12 + 0.5 * Math.max(0, Math.min(1, v)); // higher = more gold (all dims higher-better)
   return { background: `rgba(212,175,55,${alpha.toFixed(3)})` };
 }
 
+function Legend() {
+  return (
+    <details className="rounded-lg border border-ink-500 bg-ink-800 p-3 text-xs" open>
+      <summary className="cursor-pointer font-semibold text-ink-200">
+        What the cognitive dimensions mean (all ↑ higher-is-better)
+      </summary>
+      <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+        {COG_DIMS.filter((d) => d !== "cognitive_aggregate").map((d) => (
+          <div key={d}>
+            <dt className="text-ink-100">
+              <span className="font-mono">{DIM[d].label}</span> · {DIM[d].name}{" "}
+              <span className="text-success" title="Higher is better">
+                ↑
+              </span>
+            </dt>
+            <dd className="text-ink-400">{DIM[d].tip}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-ink-500">
+        C4 ARC Narrative Coherence is a categorical value (e.g. “stable” / “sudden_shift”), not a
+        0–1 score, so it is not shown as a column here.
+      </p>
+    </details>
+  );
+}
+
 function Heatmap({ data }: { data: CohortAnalytics }) {
+  const scored = data.agents.filter((a) => a.aggregate_percentile !== null).length;
+  const percentileMeaningful = scored >= MIN_COHORT_FOR_PERCENTILE;
   return (
     <div className="overflow-x-auto rounded-xl border border-ink-500">
       <table className="min-w-full text-left text-sm">
-        <thead className="bg-ink-800 text-ink-200">
+        <thead className="sticky top-0 bg-ink-800 text-ink-200">
           <tr>
             <th className="px-4 py-3 font-medium">Agent</th>
             <th className="px-3 py-3 font-medium">Runs</th>
             {data.dimensions.map((d) => (
               <th key={d} className="px-3 py-3 text-center font-medium" title={DIM[d]?.tip}>
-                {DIM[d]?.label ?? d}
+                {DIM[d]?.label ?? d} <span className="text-success">↑</span>
               </th>
             ))}
-            <th className="px-3 py-3 font-medium">Pctile</th>
+            <th className="px-3 py-3 font-medium">Percentile</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-ink-600">
           {data.agents.map((a) => (
             <tr key={a.agent}>
               <td className="px-4 py-2">
-                <div className="font-mono text-xs text-ink-50">{a.agent}</div>
+                <Link
+                  href={`/dashboard/runs?agent=${a.agent}`}
+                  className="font-mono text-xs text-gold-400 hover:underline"
+                >
+                  {a.agent}
+                </Link>
                 <div className="text-[10px] text-ink-400">{a.role}</div>
               </td>
               <td className="px-3 py-2 text-ink-300">{a.runs}</td>
@@ -57,9 +129,18 @@ function Heatmap({ data }: { data: CohortAnalytics }) {
                 );
               })}
               <td className="px-3 py-2 text-ink-100">
-                {a.aggregate_percentile === null
-                  ? "—"
-                  : `${(a.aggregate_percentile * 100).toFixed(0)}%`}
+                {a.aggregate_percentile === null ? (
+                  "—"
+                ) : percentileMeaningful ? (
+                  `${(a.aggregate_percentile * 100).toFixed(0)}%`
+                ) : (
+                  <span
+                    className="cursor-help text-xs italic text-ink-500"
+                    title={`Percentile ranks compare an agent to others in its department. With only ${scored} scored agent${scored === 1 ? "" : "s"} here, a percentile isn't meaningful.`}
+                  >
+                    n/a · {scored} in cohort
+                  </span>
+                )}
               </td>
             </tr>
           ))}
@@ -69,54 +150,48 @@ function Heatmap({ data }: { data: CohortAnalytics }) {
   );
 }
 
-const COG_DIMS = [
-  "c1_breath_coherence",
-  "c2_soul_stability",
-  "c3_fot_pressure_management",
-  "c5_echo_regret_load",
-  "c6_hfm_drive_balance",
-  "c7_ame_reputation_trajectory",
-  "cognitive_aggregate",
-];
-
 export default async function CohortPage() {
   let analytics: CohortAnalytics[] = [];
+  let snap: SnapshotStatus | null = null;
   let error: string | null = null;
   try {
     const depts = await api.departments();
-    analytics = (
-      await Promise.all(
-        depts.items.map(async (d) => {
-          try {
-            return await cohort.analytics(d.villageKey);
-          } catch {
-            return null;
-          }
-        }),
-      )
-    ).filter((a): a is CohortAnalytics => a !== null);
+    [analytics, snap] = await Promise.all([
+      Promise.all(
+        depts.items.map((d) => cohort.analytics(d.villageKey).catch(() => null)),
+      ).then((xs) => xs.filter((a): a is CohortAnalytics => a !== null)),
+      cohort.snapshotStatus().catch(() => null),
+    ]);
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load cohort analytics";
   }
 
   const hasData = (a: CohortAnalytics) => a.agents.some((ag) => ag.runs > 0);
 
-  // Village-wide mean per dimension across every scored agent.
+  // Real coverage + a thin Village-wide mean per dimension across every scored agent.
+  const totalAgents = analytics.reduce((s, a) => s + a.cohort_size, 0);
+  const scoredAgents = new Set<string>();
+  let totalScoredRuns = 0;
   const villageAgg: Record<string, number | null> = {};
   for (const d of COG_DIMS) {
     const vals: number[] = [];
-    for (const dept of analytics) {
+    for (const dept of analytics)
       for (const ag of dept.agents) {
+        if (ag.runs > 0) {
+          scoredAgents.add(ag.agent);
+        }
         const v = ag.dims[d];
         if (v !== null && v !== undefined) vals.push(v);
       }
-    }
     villageAgg[d] = vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : null;
   }
-  const anyData = analytics.some(hasData);
+  for (const dept of analytics) for (const ag of dept.agents) totalScoredRuns += ag.runs;
+  const withData = analytics.filter(hasData);
+  const empty = analytics.filter((a) => !hasData(a));
+  const anyData = withData.length > 0;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <div className="mb-1 flex items-start justify-between">
         <h1 className="text-3xl">Cohort Analytics</h1>
         <div className="flex items-center gap-2">
@@ -124,28 +199,72 @@ export default async function CohortPage() {
           <RefreshButton />
         </div>
       </div>
-      <p className="mb-2 text-ink-200">
+      <p className="mb-2 max-w-prose text-ink-200">
         Department-level cognitive drift — each agent&apos;s mean cognitive-dimension scores across
-        scored runs, with percentile rank within the cohort (ADR-0034).
+        scored runs, with a percentile rank within its department cohort (ADR-0034).
       </p>
-      <p className="mb-8 text-xs text-ink-400">as of {new Date().toLocaleString()}</p>
+      <p className="mb-6 text-xs text-ink-400">as of {new Date().toLocaleString()}</p>
 
       {error ? (
         <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm">
           Could not load cohort analytics: <code className="text-danger">{error}</code>
         </div>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-6">
+          {/* Coverage + honesty */}
+          <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm">
+            <p className="text-ink-100">
+              <strong>{scoredAgents.size}</strong> of {totalAgents} agents have scored runs.{" "}
+              <strong>{empty.length}</strong> of {analytics.length} departments have no scored runs
+              yet.
+            </p>
+            <p className="mt-1 text-xs text-ink-300">
+              The Village-wide average below is computed from {scoredAgents.size} scored agent
+              {scoredAgents.size === 1 ? "" : "s"} across {totalScoredRuns} run
+              {totalScoredRuns === 1 ? "" : "s"} — it is not yet representative of the full roster.
+              Scores include stub-provider heuristics (P7/C1/C2 are LLM-judge dims, deterministic
+              under the stub), so treat them as indicative, not settled.
+            </p>
+          </div>
+
+          {/* Drift status — honest about snapshots */}
+          <div className="rounded-lg border border-ink-500 bg-ink-800 p-3 text-xs">
+            <span className="font-semibold text-ink-200">Drift: </span>
+            {snap === null ? (
+              <span className="text-ink-400">snapshot status unavailable.</span>
+            ) : snap.drift_available ? (
+              <span className="text-ink-200">
+                {snap.snapshot_dates} snapshot dates captured (latest {snap.latest_date}). Per-agent
+                drift is available via each agent&apos;s cognitive history.
+              </span>
+            ) : (
+              <span className="text-ink-300">
+                {snap.total_snapshots > 0
+                  ? `Snapshots exist for a single date${snap.latest_date ? ` (${snap.latest_date})` : ""}, so no drift is available yet — drift compares snapshots across dates.`
+                  : "No historical snapshots captured yet — drift will appear once daily snapshots accumulate."}{" "}
+                Use “Capture snapshots” above (it records today&apos;s cognitive state for every
+                agent) and capture again on a later day to see drift.
+              </span>
+            )}
+          </div>
+
+          <Legend />
+
           {anyData && (
             <section>
-              <h2 className="mb-3 text-xl">Village-wide average</h2>
+              <h2 className="mb-3 text-xl">
+                Village-wide average{" "}
+                <span className="text-sm font-normal text-ink-400">
+                  · thin sample ({scoredAgents.size} agent{scoredAgents.size === 1 ? "" : "s"})
+                </span>
+              </h2>
               <div className="overflow-x-auto rounded-xl border border-gold-700/40">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-ink-800 text-ink-200">
                     <tr>
                       {COG_DIMS.map((d) => (
                         <th key={d} className="px-3 py-3 text-center font-medium" title={DIM[d]?.tip}>
-                          {DIM[d]?.label ?? d}
+                          {DIM[d]?.label ?? d} <span className="text-success">↑</span>
                         </th>
                       ))}
                     </tr>
@@ -164,22 +283,36 @@ export default async function CohortPage() {
             </section>
           )}
 
-          {analytics.map((a) => (
+          {/* Departments with data first */}
+          {withData.map((a) => (
             <section key={a.department}>
               <h2 className="mb-3 text-xl">
-                {a.department} <span className="text-sm text-ink-400">· {a.cohort_size} agents</span>
+                {a.department}{" "}
+                <span className="text-sm text-ink-400">· {a.cohort_size} agents</span>
               </h2>
-              {hasData(a) ? (
-                <Heatmap data={a} />
-              ) : (
-                <EmptyState
-                  title="No scored runs yet"
-                  description={`This department will populate as agents are certified and exercised. Currently 0 scored runs across ${a.cohort_size} agent${a.cohort_size === 1 ? "" : "s"}.`}
-                  icon="📊"
-                />
-              )}
+              <Heatmap data={a} />
             </section>
           ))}
+
+          {/* Empty departments collapsed so they don't bury the real data */}
+          {empty.length > 0 && (
+            <details className="rounded-xl border border-ink-500 bg-ink-800/40 p-4">
+              <summary className="cursor-pointer text-sm text-ink-300">
+                {empty.length} department{empty.length === 1 ? "" : "s"} with no scored runs yet —
+                expand
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                {empty.map((a) => (
+                  <EmptyState
+                    key={a.department}
+                    title={a.department}
+                    description={`No scored runs yet — ${a.cohort_size} agent${a.cohort_size === 1 ? "" : "s"}, 0 scored. Will populate as agents are certified and exercised.`}
+                    icon="📊"
+                  />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </div>
