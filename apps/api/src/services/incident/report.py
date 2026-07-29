@@ -17,13 +17,27 @@ from src.models.cert import AgentCert
 from src.models.department import Department
 from src.models.gap import SoftwareGap
 from src.services.budget import budget_status
+from src.services.capabilities import describe_capability
 from src.services.governance.safe_mode import safe_mode
 
 # severity → rank for sorting/counting (higher = worse)
 _RANK = {"critical": 3, "high": 2, "medium": 1}
+_DEMO_REASONS = {"demo", "demo revocation"}
 
 
-async def _cert_blast_radius(session: AsyncSession, certs: list[AgentCert]) -> dict:
+def _cert_demo_driven(certs: list[AgentCert]) -> bool:
+    """True if the group is dominated by seed/demo certs (reason=demo or a *.demo.* capability)."""
+    demo = sum(
+        1
+        for c in certs
+        if (c.revocationReason or "").strip().lower() in _DEMO_REASONS or ".demo." in c.forgeCap
+    )
+    return demo > len(certs) / 2
+
+
+async def _cert_blast_radius(
+    session: AsyncSession, certs: list[AgentCert]
+) -> tuple[dict, dict[str, str]]:
     agent_ids = {c.agentId for c in certs}
     agents = (
         (await session.execute(select(Agent).where(Agent.id.in_(agent_ids)))).scalars().all()
@@ -38,11 +52,12 @@ async def _cert_blast_radius(session: AsyncSession, certs: list[AgentCert]) -> d
         if dept_ids
         else []
     )
-    return {
+    radius = {
         "agents": sorted({a.villageAgentId for a in agents}),
         "forge_caps": sorted({c.forgeCap for c in certs}),
         "departments": sorted({d.name for d in depts}),
     }
+    return radius, {a.villageAgentId: a.name for a in agents}
 
 
 async def incident_report(session: AsyncSession) -> dict:
@@ -75,13 +90,16 @@ async def incident_report(session: AsyncSession) -> dict:
     for status_val, severity in (("revoked", "high"), ("suspended", "medium")):
         group = [c for c in invalidated if c.status == status_val]
         if group:
+            radius, agent_names = await _cert_blast_radius(session, group)
             incidents.append(
                 {
                     "kind": f"certs_{status_val}",
                     "severity": severity,
                     "summary": f"{len(group)} cert(s) {status_val}",
                     "count": len(group),
-                    "blast_radius": await _cert_blast_radius(session, group),
+                    "blast_radius": radius,
+                    "demo_driven": _cert_demo_driven(group),
+                    "agent_names": agent_names,
                 }
             )
 
@@ -122,6 +140,15 @@ async def incident_report(session: AsyncSession) -> dict:
                     "blast_radius": {"agents": [], "forge_caps": [], "departments": []},
                 }
             )
+
+    # Presentation-only enrichment (derived, nothing stored): plain-language capability labels for
+    # every blast-radius cap (reusing the Readiness/Certs capability catalog), plus safe defaults.
+    for inc in incidents:
+        inc.setdefault("demo_driven", False)
+        inc.setdefault("agent_names", {})
+        inc["cap_labels"] = {
+            cap: describe_capability(cap) for cap in inc["blast_radius"]["forge_caps"]
+        }
 
     incidents.sort(key=lambda i: _RANK.get(i["severity"], 0), reverse=True)
     counts = {sev: sum(1 for i in incidents if i["severity"] == sev) for sev in _RANK}
