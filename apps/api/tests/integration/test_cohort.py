@@ -58,3 +58,12 @@ async def test_cohort_analytics_heatmap(client: AsyncClient) -> None:
 async def test_cohort_analytics_unknown_department_404(client: AsyncClient) -> None:
     resp = await client.get("/api/cohort/department/Nonexistent/analytics")
     assert resp.status_code == 404
+
+
+async def test_snapshot_status_reports_drift_availability(client: AsyncClient) -> None:
+    # With no snapshots captured, drift is not available (needs >= 2 dates) — reported honestly.
+    body = (await client.get("/api/cohort/snapshots/status")).json()
+    assert body["snapshot_dates"] == 0
+    assert body["total_snapshots"] == 0
+    assert body["drift_available"] is False
+    assert body["latest_date"] is None

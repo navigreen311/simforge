@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
 from src.deps import get_village_reader, require_role
+from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.services.cognitive import (
     capture_daily_snapshots,
     cohort_analytics,
@@ -15,6 +17,24 @@ from src.services.cognitive import (
 from src.services.village.reader import VillageReader
 
 router = APIRouter()
+
+
+@router.get("/snapshots/status", dependencies=[Depends(require_role("viewer"))])
+async def snapshots_status(session: AsyncSession = Depends(get_session)) -> dict:
+    """Whether historical snapshots exist to compute drift (derived; drift needs ≥2 dates)."""
+    dates = (
+        await session.execute(select(func.count(func.distinct(CognitiveSnapshot.date))))
+    ).scalar_one()
+    total = (
+        await session.execute(select(func.count()).select_from(CognitiveSnapshot))
+    ).scalar_one()
+    latest = (await session.execute(select(func.max(CognitiveSnapshot.date)))).scalar_one()
+    return {
+        "snapshot_dates": dates,
+        "total_snapshots": total,
+        "latest_date": latest.isoformat() if latest else None,
+        "drift_available": dates >= 2,
+    }
 
 
 @router.post("/snapshots", dependencies=[Depends(require_role("compliance_analyst"))])
