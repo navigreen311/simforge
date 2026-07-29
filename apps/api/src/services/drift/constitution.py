@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.agent import Agent
 from src.models.cert import AgentCert, CertSnapshot
 from src.models.governance import Constitution
+from src.services.capabilities import describe_capability
 
 
 def _pinned_constitution(pinned: dict | None) -> str | None:
@@ -38,9 +39,9 @@ async def constitution_drift_report(session: AsyncSession) -> dict:
     current_version = current.version if current else None
 
     certs = (await session.execute(select(AgentCert))).scalars().all()
-    agents = {
-        a.id: a.villageAgentId for a in (await session.execute(select(Agent))).scalars().all()
-    }
+    all_agents = (await session.execute(select(Agent))).scalars().all()
+    agents = {a.id: a.villageAgentId for a in all_agents}
+    agent_names = {a.villageAgentId: a.name for a in all_agents}
     snaps = {s.id: s for s in (await session.execute(select(CertSnapshot))).scalars().all()}
 
     findings: list[dict] = []
@@ -52,6 +53,7 @@ async def constitution_drift_report(session: AsyncSession) -> dict:
             {
                 "cert_id": cert.id,
                 "agent": agents.get(cert.agentId, cert.agentId),
+                "capability": cert.forgeCap,  # raw cap id; label via cap_labels (shared catalog)
                 "cert_status": cert.status,
                 "pinned_constitution": pinned,
                 "current_constitution": current_version,
@@ -59,6 +61,9 @@ async def constitution_drift_report(session: AsyncSession) -> dict:
             }
         )
 
+    # Reuse the shared capability catalog + agent display-name map (as Incident/Readiness do) so
+    # the 10 otherwise-identical rows are distinguishable and rows can link to cert/agent.
+    cap_labels = {cap: describe_capability(cap) for cap in {f["capability"] for f in findings}}
     stale_total = sum(1 for f in findings if f["stale"])
     active_stale = sum(1 for f in findings if f["stale"] and f["cert_status"] == "active")
     return {
@@ -67,5 +72,7 @@ async def constitution_drift_report(session: AsyncSession) -> dict:
         "stale_certs": stale_total,
         "active_stale_certs": active_stale,
         "enforced": False,  # detection only; suspension policy pending (Finding 2)
+        "cap_labels": cap_labels,
+        "agent_names": agent_names,
         "findings": findings,
     }
