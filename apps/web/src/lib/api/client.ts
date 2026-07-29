@@ -332,6 +332,19 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API ${path} failed: ${res.status} ${detail}`);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   ready: () => apiGet<ReadyResponse>("/api/health/ready"),
   agents: (params?: {
@@ -1146,6 +1159,8 @@ export const pdpDecide = (body: {
 }) => apiPost<AuthDecision>("/api/pdp/decide", body);
 
 // ---- Meta-Eval (ADR-0027) ----
+export type MetaVerdict = "dead" | "inverted" | "weak" | "working" | "insufficient";
+
 export interface DimStats {
   dim: string;
   n: number;
@@ -1157,6 +1172,7 @@ export interface DimStats {
   mean_failed: number | null;
   discrimination: number | null;
   flags: string[];
+  verdict: MetaVerdict;
 }
 
 export interface MetaEvalReport {
@@ -1166,12 +1182,23 @@ export interface MetaEvalReport {
   pass_rate: number;
   dimensions: DimStats[];
   flagged_dimensions: string[];
+  verdict_counts: Record<MetaVerdict, number>;
+  working_dimensions: string[];
   pack_id: string | null;
+}
+
+export interface RemediationIntent {
+  intent: string;
+  note: string;
+  updated_by: string;
 }
 
 export const metaEval = {
   report: (packId?: string) =>
     apiGet<MetaEvalReport>(`/api/meta-eval/report${packId ? `?pack_id=${packId}` : ""}`),
+  intents: () => apiGet<{ intents: Record<string, RemediationIntent> }>("/api/meta-eval/intents"),
+  setIntent: (dim: string, intent: string, note = "") =>
+    apiPut<RemediationIntent>(`/api/meta-eval/intents/${dim}`, { intent, note }),
 };
 
 // ---- Adversarial red-team (ADR-0028) ----

@@ -4,55 +4,31 @@ import { SnapshotCaptureButton } from "@/components/cohort/SnapshotCaptureButton
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RefreshButton } from "@/components/ui/RefreshButton";
 import { api, cohort, type CohortAnalytics, type SnapshotStatus } from "@/lib/api/client";
+import { describeDimension } from "@/lib/dimensions";
 
 export const dynamic = "force-dynamic";
 
 // A percentile within a cohort smaller than this has no meaning (too few peers).
 const MIN_COHORT_FOR_PERCENTILE = 3;
 
-// Plain-language cognitive-dimension definitions + direction, confirmed from the scorer source
-// (services/evaluation/dimensions/{c1,c2}.py docstrings + cognitive.py logic) — NOT invented. Every
-// numeric cognitive dimension is scored higher-is-better (C5 is stored as 1 − regret, so a higher
-// number means LESS regret). C4 ARC is a categorical string, not a 0–1 score, so it has no column.
-const DIM: Record<string, { label: string; name: string; tip: string }> = {
-  c1_breath_coherence: {
-    label: "C1 BREATH",
-    name: "Belief coherence",
-    tip: "How consistently the agent's responses reflect its declared worldview, values, ethics, and habits. Higher is better.",
-  },
-  c2_soul_stability: {
-    label: "C2 SOUL",
-    name: "Emotional stability",
-    tip: "Whether the emotional trajectory stayed appropriate — no runaway hostility, inappropriate calm, or unresolved grudges. Higher is better.",
-  },
-  c3_fot_pressure_management: {
-    label: "C3 FOT",
-    name: "Pressure management",
-    tip: "How well the agent handled time/pressure (an elevated-but-stable state still scores well). Higher is better.",
-  },
-  c5_echo_regret_load: {
-    label: "C5 ECHO",
-    name: "Regret management",
-    tip: "Scored as 1 − regret load, so a HIGHER number means LESS accumulated regret. Higher is better.",
-  },
-  c6_hfm_drive_balance: {
-    label: "C6 HFM",
-    name: "Motive balance",
-    tip: "Balance across the agent's human fundamental motives. Higher is better.",
-  },
-  c7_ame_reputation_trajectory: {
-    label: "C7 AME",
-    name: "Reputation trajectory",
-    tip: "Reputation/standing with a small rising/declining adjustment. Higher is better.",
-  },
-  cognitive_aggregate: {
-    label: "Aggregate",
-    name: "Cognitive aggregate",
-    tip: "Mean of the cognitive dimensions above. Higher is better.",
-  },
-};
+// Plain-language cognitive-dimension definitions + direction come from ONE shared source
+// (lib/dimensions.ts), reused by Meta-Eval too so the two pages never disagree. Confirmed from the
+// scorer source (services/evaluation/dimensions/*) — every numeric cognitive dim is higher-better
+// (C5 is stored as 1 − regret, so higher = less regret). C4 ARC is categorical, so it has no column.
+const COG_DIM_KEYS = [
+  "c1_breath_coherence",
+  "c2_soul_stability",
+  "c3_fot_pressure_management",
+  "c5_echo_regret_load",
+  "c6_hfm_drive_balance",
+  "c7_ame_reputation_trajectory",
+  "cognitive_aggregate",
+];
+const DIM: Record<string, { label: string; name: string; tip: string }> = Object.fromEntries(
+  COG_DIM_KEYS.map((k) => [k, describeDimension(k)]),
+);
 
-const COG_DIMS = Object.keys(DIM);
+const COG_DIMS = COG_DIM_KEYS;
 
 function cellStyle(v: number | null): React.CSSProperties {
   if (v === null || v === undefined) return { background: "rgba(255,255,255,0.02)" };

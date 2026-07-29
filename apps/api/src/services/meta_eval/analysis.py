@@ -38,6 +38,36 @@ _NUMERIC_DIMS: dict[str, str] = {
 
 _CONSTANT_EPS = 0.01  # stddev below this = no variance → no signal
 _DISCRIMINATION_MIN = 0.05  # |mean_passed − mean_failed| below this = doesn't separate outcomes
+_INVERTED_MAX = -0.02  # discrimination below this = failing agents score meaningfully HIGHER
+
+# Plain verdicts, derived from the stats (never invented). A dim is one of these five.
+VERDICT_DEAD = "dead"
+VERDICT_INVERTED = "inverted"
+VERDICT_WEAK = "weak"
+VERDICT_WORKING = "working"
+VERDICT_INSUFFICIENT = "insufficient"
+
+
+def _classify(*, flags: list[str], discrimination: float | None, has_variance: bool) -> str:
+    """The plain verdict for a dimension, derived from its stats. Priority: dead > inverted > weak.
+
+    dead = constant (no variance, no signal); inverted = failing agents score meaningfully higher
+    (rewards the wrong thing); weak = varies but doesn't separate pass/fail; working = positive
+    discrimination with real variance.
+    """
+    if "no_data" in flags or "insufficient_data" in flags:
+        return VERDICT_INSUFFICIENT
+    if "constant" in flags:
+        return VERDICT_DEAD
+    if discrimination is not None and discrimination < _INVERTED_MAX:
+        return VERDICT_INVERTED
+    if "non_discriminating" in flags or (
+        discrimination is not None and abs(discrimination) < _DISCRIMINATION_MIN
+    ):
+        return VERDICT_WEAK
+    if discrimination is not None and discrimination >= _DISCRIMINATION_MIN and has_variance:
+        return VERDICT_WORKING
+    return VERDICT_WEAK
 
 
 @dataclass
@@ -52,6 +82,7 @@ class DimStats:
     mean_failed: float | None
     discrimination: float | None
     flags: list[str]
+    verdict: str = VERDICT_INSUFFICIENT
 
     def as_dict(self) -> dict:
         return self.__dict__
@@ -71,7 +102,21 @@ def analyze_scorecards(cards: list[Scorecard]) -> dict:
         flags: list[str] = []
 
         if not vals:
-            dims.append(DimStats(label, 0, None, None, None, None, None, None, None, ["no_data"]))
+            dims.append(
+                DimStats(
+                    label,
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    ["no_data"],
+                    verdict=VERDICT_INSUFFICIENT,
+                )
+            )
             continue
 
         std = statistics.pstdev(vals) if len(vals) > 1 else 0.0
@@ -86,6 +131,7 @@ def analyze_scorecards(cards: list[Scorecard]) -> dict:
         if disc is not None and abs(disc) < _DISCRIMINATION_MIN:
             flags.append("non_discriminating")  # passers & failers score the same
 
+        verdict = _classify(flags=flags, discrimination=disc, has_variance=std >= _CONSTANT_EPS)
         dims.append(
             DimStats(
                 dim=label,
@@ -98,12 +144,24 @@ def analyze_scorecards(cards: list[Scorecard]) -> dict:
                 mean_failed=mean_f,
                 discrimination=disc,
                 flags=flags,
+                verdict=verdict,
             )
         )
 
     # Only actionable flags (a dim that carries no signal) count as "flagged" — not data gaps.
     _ACTIONABLE = {"constant", "non_discriminating"}
     flagged = [d.dim for d in dims if _ACTIONABLE & set(d.flags)]
+    working = [d.dim for d in dims if d.verdict == VERDICT_WORKING]
+    verdict_counts = {
+        v: sum(1 for d in dims if d.verdict == v)
+        for v in (
+            VERDICT_DEAD,
+            VERDICT_INVERTED,
+            VERDICT_WEAK,
+            VERDICT_WORKING,
+            VERDICT_INSUFFICIENT,
+        )
+    }
     return {
         "n_scorecards": n_cards,
         "n_passed": len(passed),
@@ -111,6 +169,9 @@ def analyze_scorecards(cards: list[Scorecard]) -> dict:
         "pass_rate": (len(passed) / n_cards) if n_cards else 0.0,
         "dimensions": [d.as_dict() for d in dims],
         "flagged_dimensions": flagged,
+        # The headline: how many dims are dead/inverted/weak/working, and which ones actually work.
+        "verdict_counts": verdict_counts,
+        "working_dimensions": working,
     }
 
 

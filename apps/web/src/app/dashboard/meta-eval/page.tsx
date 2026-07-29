@@ -2,11 +2,16 @@ import Link from "next/link";
 
 import { MetaEvalTable } from "@/components/metaeval/MetaEvalTable";
 import { PageMeta } from "@/components/ui/PageMeta";
-import { api, metaEval, type MetaEvalReport, type PackSummary } from "@/lib/api/client";
+import {
+  api,
+  metaEval,
+  type MetaEvalReport,
+  type PackSummary,
+  type RemediationIntent,
+} from "@/lib/api/client";
+import { describeDimension, JUDGE_DIMS } from "@/lib/dimensions";
 
 export const dynamic = "force-dynamic";
-
-const JUDGE_DIMS = new Set(["p7_customer_experience", "c1_breath_coherence", "c2_soul_stability"]);
 
 export default async function MetaEvalPage({
   searchParams,
@@ -16,12 +21,18 @@ export default async function MetaEvalPage({
   const packId = searchParams.pack;
   let report: MetaEvalReport | null = null;
   let packs: PackSummary[] = [];
+  let intents: Record<string, RemediationIntent> = {};
   let error: string | null = null;
 
   try {
-    const [rep, packList] = await Promise.all([metaEval.report(packId), api.packs()]);
+    const [rep, packList, intentList] = await Promise.all([
+      metaEval.report(packId),
+      api.packs(),
+      metaEval.intents(),
+    ]);
     report = rep;
     packs = packList.items;
+    intents = intentList.intents;
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load meta-eval";
   }
@@ -34,14 +45,18 @@ export default async function MetaEvalPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <div className="mb-1 flex items-start justify-between">
         <h1 className="text-3xl">Meta-Eval</h1>
         <PageMeta />
       </div>
-      <p className="mb-6 text-ink-200">
-        Evaluating the evaluator — per-dimension variance + discrimination (mean when passed − mean
-        when failed). Flagged dims carry no signal (ADR-0027).
+      <p className="mb-6 max-w-4xl text-ink-200">
+        This page checks whether the certification rubric actually works. Each &quot;dimension&quot;
+        is one thing an agent is scored on. A dimension is only useful if it <strong>varies</strong>{" "}
+        — gives different scores to different agents — and <strong>discriminates</strong> — agents
+        who pass score higher on it than agents who fail. A dimension that gives everyone the same
+        score, or scores failing agents higher than passing ones, is not helping decide who&apos;s
+        certified. This page finds those broken dimensions (ADR-0027).
       </p>
 
       <div className="mb-6 flex flex-wrap gap-2 text-xs">
@@ -90,14 +105,46 @@ export default async function MetaEvalPage({
             </div>
           )}
 
+          {/* STEP 4 — the headline: state the consequence in plain English. */}
+          <div className="mb-6 rounded-xl border border-gold-600/40 bg-gold-600/5 p-4 text-sm text-ink-50">
+            <div className="mb-1 font-semibold text-gold-300">What this means for certification</div>
+            <p>
+              Of {report.dimensions.length} dimensions,{" "}
+              <strong className="text-danger">{report.verdict_counts.dead} dead</strong> (same score
+              for everyone), <strong className="text-warning">{report.verdict_counts.inverted} inverted</strong>{" "}
+              (reward the wrong thing), <strong>{report.verdict_counts.weak} weak</strong> (no
+              pass/fail signal), and{" "}
+              <strong className="text-success">{report.verdict_counts.working} working</strong>. That
+              means certification is effectively driven by{" "}
+              <strong>
+                {report.working_dimensions.length} dimension
+                {report.working_dimensions.length === 1 ? "" : "s"}
+              </strong>
+              {report.working_dimensions.length > 0 && (
+                <>
+                  :{" "}
+                  {report.working_dimensions.map((d, i) => (
+                    <span key={d}>
+                      {i > 0 && ", "}
+                      <span className="text-success">{describeDimension(d).name}</span>
+                    </span>
+                  ))}
+                </>
+              )}
+              . Until the rubric is fixed, a certificate reflects a narrow slice of what it claims to
+              measure. Use the <em>Intent</em> column below to record what to do about each broken
+              dimension — advisory only; it changes no scores.
+            </p>
+          </div>
+
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Stat label="Scorecards" value={report.n_scorecards} />
             <Stat label="Pass rate" value={`${(report.pass_rate * 100).toFixed(0)}%`} sub={`${report.n_passed}✓ ${report.n_failed}✗`} />
             <Stat label="Numeric dims" value={report.dimensions.length} />
-            <Stat label="Flagged" value={report.flagged_dimensions.length} danger={report.flagged_dimensions.length > 0} />
+            <Stat label="Working" value={report.verdict_counts.working} danger={report.verdict_counts.working <= 2} />
           </div>
 
-          <MetaEvalTable dimensions={report.dimensions} />
+          <MetaEvalTable dimensions={report.dimensions} intents={intents} />
 
           {/* p2 / c4 explanation (Phase 0 D5). */}
           <p className="mt-4 rounded-lg border border-ink-600 bg-ink-800 p-3 text-xs text-ink-300">
