@@ -73,6 +73,10 @@ async def test_effective_permissions_lists_decisions(client: AsyncClient) -> Non
     assert FORGE_CAP in perms
     assert perms[FORGE_CAP]["decision"] == "downgrade_and_retry"
     assert perms[FORGE_CAP]["cert_status"] == "active"
+    # Presentation-only enrichment (derived; no data changed): friendly capability label reused
+    # from the shared catalog — same source as Readiness/Certs/Incident.
+    assert perms[FORGE_CAP]["capability_label"] == "Outbound Seller Outreach"
+    assert perms[FORGE_CAP]["capability_forge"] == "cre-forge"
 
 
 async def test_unknown_agent_effective_404(client: AsyncClient) -> None:
