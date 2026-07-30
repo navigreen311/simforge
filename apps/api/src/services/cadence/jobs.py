@@ -63,6 +63,15 @@ async def daily_snapshot(session: AsyncSession | None = None) -> dict:
     return {"job": "daily_snapshot", **result}
 
 
+async def safe_mode_auto_trigger(session: AsyncSession | None = None) -> dict:
+    """Auto-raise a scoped safe mode when compliance failures spike (§11.7)."""
+    from src.services.governance.safe_mode_service import maybe_auto_activate
+
+    async with _session(session) as s:
+        row = await maybe_auto_activate(s)
+    return {"job": "safe_mode_auto_trigger", "activated": row.id if row else None}
+
+
 async def hourly_approval_escalation(session: AsyncSession | None = None) -> dict:
     """Expire approval requests past their TTL (§11.5 time-bound auto-escalation)."""
     from src.services.governance.approval import expire_stale_requests

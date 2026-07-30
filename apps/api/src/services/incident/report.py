@@ -18,7 +18,6 @@ from src.models.department import Department
 from src.models.gap import SoftwareGap
 from src.services.budget import budget_status
 from src.services.capabilities import describe_capability
-from src.services.governance.safe_mode import safe_mode
 
 # severity → rank for sorting/counting (higher = worse)
 _RANK = {"critical": 3, "high": 2, "medium": 1}
@@ -64,16 +63,22 @@ async def incident_report(session: AsyncSession) -> dict:
     """Assemble the current incident list + blast radius from live platform signals."""
     incidents: list[dict] = []
 
-    # 1. Emergency safe mode.
-    sm = safe_mode.status()
+    # 1. Emergency safe mode (persisted, scoped — §11.7).
+    from src.services.governance.safe_mode_service import status as safe_mode_status
+
+    sm = await safe_mode_status(session)
     if sm["active"]:
+        scopes = [
+            f"{s['scope_type']}:{s['scope_value']}" if s["scope_value"] else s["scope_type"]
+            for s in sm["states"]
+        ]
         incidents.append(
             {
                 "kind": "safe_mode",
                 "severity": "critical",
-                "summary": f"Safe mode active: {sm['reason'] or 'emergency halt'}",
-                "count": 1,
-                "blast_radius": {"agents": [], "forge_caps": [], "departments": sm["domains"]},
+                "summary": f"Safe mode active ({', '.join(scopes)})",
+                "count": len(sm["states"]),
+                "blast_radius": {"agents": [], "forge_caps": [], "departments": scopes},
             }
         )
 

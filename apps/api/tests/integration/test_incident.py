@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from httpx import AsyncClient
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -12,13 +11,7 @@ GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
 FORGE_CAP = "cre-forge.call_center.outbound_seller_outreach"
 
 
-@pytest.fixture(autouse=True)
-def _reset_safe_mode():
-    from src.services.governance.safe_mode import safe_mode
-
-    safe_mode.deactivate()
-    yield
-    safe_mode.deactivate()
+# Safe mode is now DB-backed (§11.7); the test DB is fresh per test, so no reset fixture is needed.
 
 
 async def test_incident_report_clean(client: AsyncClient) -> None:
@@ -32,13 +25,14 @@ async def test_incident_report_clean(client: AsyncClient) -> None:
 
 async def test_safe_mode_is_a_critical_incident(client: AsyncClient) -> None:
     await client.post(
-        "/api/constitution/safe-mode", json={"active": True, "reason": "drill", "domains": ["cre"]}
+        "/api/constitution/safe-mode",
+        json={"active": True, "reason": "drill", "scope_type": "forge", "scope_value": "cre-forge"},
     )
     body = (await client.get("/api/incident/status")).json()
     assert body["status"] == "critical"
     sm = next(i for i in body["incidents"] if i["kind"] == "safe_mode")
     assert sm["severity"] == "critical"
-    assert sm["blast_radius"]["departments"] == ["cre"]
+    assert sm["blast_radius"]["departments"] == ["forge:cre-forge"]
 
 
 async def test_revoked_cert_incident_with_blast_radius(client: AsyncClient) -> None:

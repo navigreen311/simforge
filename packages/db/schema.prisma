@@ -97,6 +97,22 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// Persisted, fleet-wide, scoped emergency safe mode (§11.7). Multiple scopes can be active at once.
+model SafeModeState {
+  id            String    @id @default(cuid())
+  scopeType     String
+  scopeValue    String    @default("")
+  active        Boolean   @default(true)
+  reason        String    @default("")
+  activatedBy   String    @default("admin")
+  activatedAt   DateTime  @default(now())
+  deactivatedAt DateTime?
+  deactivatedBy String?
+  autoTriggered Boolean   @default(false)
+
+  @@index([active])
+}
+
 // A governed decision needing sign-off + its append-only signed decision journal (§11.5).
 model ApprovalRequest {
   id                String    @id @default(cuid())
