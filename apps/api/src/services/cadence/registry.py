@@ -63,6 +63,13 @@ JOBS: tuple[CadenceJob, ...] = (
         "Auto-raise scoped safe mode when compliance failures spike (§11.7).",
         jobs.safe_mode_auto_trigger,
     ),
+    CadenceJob(
+        "evidence_purge",
+        "daily 03:00 UTC",
+        {"hour": 3, "minute": 0},
+        "Purge evidence past retention unless on legal hold (§12.3).",
+        jobs.evidence_purge,
+    ),
 )
 
 JOBS_BY_NAME: dict[str, CadenceJob] = {j.name: j for j in JOBS}

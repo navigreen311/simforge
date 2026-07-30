@@ -63,6 +63,15 @@ async def daily_snapshot(session: AsyncSession | None = None) -> dict:
     return {"job": "daily_snapshot", **result}
 
 
+async def evidence_purge(session: AsyncSession | None = None) -> dict:
+    """Purge evidence records past retention (unless on legal hold) — §12.3."""
+    from src.services.evidence import purge_expired
+
+    async with _session(session) as s:
+        purged = await purge_expired(s)
+    return {"job": "evidence_purge", "purged": len(purged)}
+
+
 async def safe_mode_auto_trigger(session: AsyncSession | None = None) -> dict:
     """Auto-raise a scoped safe mode when compliance failures spike (§11.7)."""
     from src.services.governance.safe_mode_service import maybe_auto_activate

@@ -15,6 +15,7 @@ from src.models.cert import (
 )
 from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
+from src.models.evidence import EvidenceAccess, EvidenceRecord
 from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
@@ -63,4 +64,6 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalDecision",
     "SafeModeState",
+    "EvidenceRecord",
+    "EvidenceAccess",
 ]

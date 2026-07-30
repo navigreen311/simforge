@@ -160,6 +160,20 @@ async def _create_snapshot(
     )
     session.add(snapshot)
     await session.flush()
+
+    # Record the bundle on the evidence lifecycle ledger — Merkle chain-of-custody + retention
+    # (§12.3). PHI packs default to the phi_synthetic redaction class for external export.
+    from src.services.evidence import register_evidence
+    from src.services.evidence.lifecycle import default_redaction_for
+
+    await register_evidence(
+        session,
+        bundle_id=snapshot.snapshotId,
+        ref=evidence_ref,
+        content_hash=content_hash,
+        redaction_class=default_redaction_for(bool(getattr(pack, "phiRequired", False))),
+        pack_id=pack.packId,
+    )
     return snapshot, now, expires
 
 
