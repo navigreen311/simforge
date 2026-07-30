@@ -97,6 +97,20 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// A gated go-live Dress Rehearsal run (§15): entry/exit criteria snapshots + signed sign-offs.
+model DressRehearsal {
+  id           String   @id @default(cuid())
+  packId       String
+  status       String   @default("open")
+  entryResults Json     @default("{}")
+  exitResults  Json     @default("{}")
+  signoffs     Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([packId])
+}
+
 // Evidence lifecycle (§12.3): retention, tiered storage, legal hold, redaction class, and a
 // tamper-evident Merkle chain-of-custody anchor. EvidenceAccess is the append-only access audit.
 model EvidenceRecord {
