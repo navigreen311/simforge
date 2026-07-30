@@ -97,6 +97,36 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// A governed decision needing sign-off + its append-only signed decision journal (§11.5).
+model ApprovalRequest {
+  id                String    @id @default(cuid())
+  kind              String
+  subject           Json      @default("{}")
+  summary           String    @default("")
+  quorumRule        String    @default("single")
+  requiredApprovers String[]
+  status            String    @default("pending")
+  createdBy         String    @default("system")
+  createdAt         DateTime  @default(now())
+  expiresAt         DateTime?
+  resolvedAt        DateTime?
+  resolution        String?
+
+  @@index([status])
+  @@index([kind])
+}
+
+model ApprovalDecision {
+  id        String   @id @default(cuid())
+  requestId String
+  approver  String
+  decision  String
+  reason    String   @default("")
+  timestamp DateTime @default(now())
+
+  @@index([requestId])
+}
+
 // One recorded red-team probe run (ADR-0028). ADVISORY history only — a probe result never blocks,
 // revokes, or changes a certification.
 model AdversarialProbe {

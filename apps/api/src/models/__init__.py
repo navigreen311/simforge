@@ -2,6 +2,7 @@
 
 from src.models.adversarial_probe import AdversarialProbe
 from src.models.agent import Agent
+from src.models.approval import ApprovalDecision, ApprovalRequest
 from src.models.bank_scenario import BankScenario
 from src.models.base import Base
 from src.models.ccb import CCB
@@ -58,4 +59,6 @@ __all__ = [
     "MetaEvalIntent",
     "GoldenRun",
     "AdversarialProbe",
+    "ApprovalRequest",
+    "ApprovalDecision",
 ]
