@@ -1,10 +1,12 @@
 import { PageMeta } from "@/components/ui/PageMeta";
 import {
   dashboard,
+  transfer,
   type CertTimelineEvent,
   type CoverageHeatmap,
   type CoverageOptimizerReport,
   type DeptContextMatrix,
+  type TransferReport,
 } from "@/lib/api/client";
 
 export const dynamic = "force-dynamic";
@@ -25,18 +27,21 @@ export default async function CoveragePage() {
   let matrix: DeptContextMatrix | null = null;
   let timeline: CertTimelineEvent[] = [];
   let optimizer: CoverageOptimizerReport | null = null;
+  let xfer: TransferReport | null = null;
   let error: string | null = null;
   try {
-    const [h, m, t, o] = await Promise.all([
+    const [h, m, t, o, x] = await Promise.all([
       dashboard.coverageHeatmap(),
       dashboard.deptContextMatrix(),
       dashboard.certTimeline(50),
       dashboard.coverageRecommendations(),
+      transfer.opportunities(),
     ]);
     heatmap = h;
     matrix = m;
     timeline = t.events;
     optimizer = o;
+    xfer = x;
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load coverage data";
   }
@@ -126,6 +131,58 @@ export default async function CoveragePage() {
               </EmptyNote>
             )}
           </section>
+
+          {/* Cross-pack learning transfer. */}
+          {xfer && xfer.total_opportunities > 0 && (
+            <section className="mb-10">
+              <h2 className="mb-1 text-lg">Cross-pack transfer opportunities</h2>
+              <p className="mb-3 text-xs text-ink-400">
+                Where one pack has invested in a forge capability and another exercises the same
+                capability only thinly — adapt the donor&apos;s scenarios instead of authoring from
+                scratch.
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-ink-500">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-ink-800 text-ink-200">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Forge cap</th>
+                      <th className="px-4 py-2 font-medium">Donor</th>
+                      <th className="px-4 py-2 font-medium">Recipient</th>
+                      <th className="px-3 py-2 text-center font-medium">Adapt</th>
+                      <th className="px-4 py-2 font-medium">Scope</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink-600">
+                    {xfer.transfers.slice(0, 12).map((t, i) => (
+                      <tr key={`${t.forge_cap}-${t.recipient_pack}-${i}`}>
+                        <td className="px-4 py-2 font-mono text-xs text-ink-100">{t.forge_cap}</td>
+                        <td className="px-4 py-2 text-xs text-ink-200">
+                          {t.donor_pack}{" "}
+                          <span className="text-ink-500">({t.donor_scenarios})</span>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-ink-200">
+                          {t.recipient_pack}{" "}
+                          <span className="text-ink-500">({t.recipient_scenarios})</span>
+                        </td>
+                        <td className="px-3 py-2 text-center font-mono text-gold-400">
+                          +{t.suggested_transfer}
+                        </td>
+                        <td className="px-4 py-2">
+                          {t.cross_venture ? (
+                            <span className="rounded bg-ink-700 px-2 py-0.5 text-xs text-ink-100">
+                              cross-venture
+                            </span>
+                          ) : (
+                            <span className="text-xs text-ink-400">same venture</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Coverage heatmap — role × tier. */}
           <section className="mb-10">
