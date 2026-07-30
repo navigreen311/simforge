@@ -696,6 +696,29 @@ export const stakeholder = {
   brief: () => apiGet<StakeholderBrief>("/api/stakeholder/brief"),
 };
 
+export interface CorrelationFinding {
+  agent: string;
+  forge_cap: string;
+  kind: string; // cert_overstates_readiness | under_certified
+  outcome_score: number;
+  detail: string;
+}
+
+export interface CorrelationReport {
+  measured_pairs: number;
+  findings: CorrelationFinding[];
+  summary: {
+    aligned?: number;
+    miscalibrated?: number;
+    cert_overstates?: number;
+    under_certified?: number;
+  };
+}
+
+export const productionOutcomes = {
+  correlation: () => apiGet<CorrelationReport>("/api/production-outcomes/correlation"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>

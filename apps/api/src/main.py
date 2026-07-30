@@ -45,6 +45,7 @@ from src.routers import (
     packs,
     parity,
     pdp,
+    production_outcome,
     registry,
     regression,
     rehearsal,
@@ -143,6 +144,9 @@ def create_app() -> FastAPI:
     app.include_router(transfer.router, prefix="/api/transfer", tags=["transfer"])
     app.include_router(cold_start.router, prefix="/api/cold-start", tags=["cold-start"])
     app.include_router(stakeholder.router, prefix="/api/stakeholder", tags=["stakeholder"])
+    app.include_router(
+        production_outcome.router, prefix="/api/production-outcomes", tags=["production-outcomes"]
+    )
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
