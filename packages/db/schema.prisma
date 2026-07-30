@@ -131,6 +131,19 @@ model GoldenNomination {
   @@index([status])
 }
 
+// Multi-agent handoff integrity testing (v1.1). A department-level test of a cross-agent process:
+// an ordered chain of handoffs, checked for completeness, continuity, and consent preservation.
+model HandoffTest {
+  id         String   @id @default(cuid())
+  name       String
+  scenarioId String?
+  chain      Json     @default("[]")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([scenarioId])
+}
+
 // Knowledge Graph / Domain Ontology per venture (v1.1). The entities and relationships that define a
 // venture's world, so scenarios can be grounded in (and checked against) a real domain model.
 model OntologyEntity {

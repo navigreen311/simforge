@@ -35,6 +35,7 @@ from src.routers import (
     forges,
     gaps,
     golden,
+    handoff,
     health,
     incident,
     jurisdictions,
@@ -151,6 +152,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(temporal.router, prefix="/api/temporal", tags=["temporal"])
     app.include_router(ontology.router, prefix="/api/ontology", tags=["ontology"])
+    app.include_router(handoff.router, prefix="/api/handoff", tags=["handoff"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
