@@ -131,6 +131,24 @@ model GoldenNomination {
   @@index([status])
 }
 
+// Production Outcome Correlation (v1.1). Real production performance per agent × forge capability,
+// so certification scores can be correlated against production reality (miscalibration detection).
+model ProductionOutcome {
+  id             String   @id @default(cuid())
+  agentVillageId String
+  forgeCap       String
+  outcomeScore   Float
+  period         String   @default("")
+  sampleSize     Int      @default(0)
+  source         String   @default("manual")
+  notes          String?
+  recordedAt     DateTime @default(now())
+  recordedBy     String   @default("system")
+
+  @@index([agentVillageId])
+  @@index([forgeCap])
+}
+
 // Scenario Truth Review Gate (v1.1). A per-scenario attestation that the scenario faithfully
 // represents reality (realistic, correct expected outcome, no fabrication, accurate compliance)
 // before it may certify agents. Approved only when every checklist item holds.

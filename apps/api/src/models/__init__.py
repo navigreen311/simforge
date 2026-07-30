@@ -24,6 +24,7 @@ from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.pack import Pack, ReadinessGate, Scenario
+from src.models.production_outcome import ProductionOutcome
 from src.models.registry import LineageEdge, ObjectRegistryEntry
 from src.models.run import Run, TraceEvent
 from src.models.safe_mode import SafeModeState
@@ -46,6 +47,7 @@ __all__ = [
     "Pack",
     "Scenario",
     "ReadinessGate",
+    "ProductionOutcome",
     "Run",
     "TraceEvent",
     "Scorecard",
