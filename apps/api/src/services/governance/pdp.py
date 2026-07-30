@@ -26,8 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.agent import Agent
 from src.models.cert import AgentCert
+from src.models.department import Department
 from src.services.cert.autonomy_ladder import LEVELS
-from src.services.governance.safe_mode import safe_mode
 from src.utils.time import utcnow
 
 Decision = Literal["allow", "deny", "step_up_approval_required", "downgrade_and_retry"]
@@ -80,20 +80,38 @@ class PDP:
     async def decide(self, session: AsyncSession, req: AuthRequest) -> AuthDecision:
         fail = fail_policy_for(req.action)
 
-        # Emergency safe-mode: nothing runs autonomously — everything needs a human.
-        if safe_mode.active:
+        agent = (
+            await session.execute(select(Agent).where(Agent.villageAgentId == req.subject_agent_id))
+        ).scalar_one_or_none()
+
+        # Emergency safe-mode (§11.7): a global OR scope-covering active safe mode forces step-up.
+        from src.services.governance.safe_mode_service import ScopeContext, covering_state
+
+        dept_key = None
+        if agent is not None:
+            dept = await session.execute(
+                select(Department.villageKey).where(Department.id == agent.departmentId)
+            )
+            dept_key = dept.scalar_one_or_none()
+        scope = ScopeContext(
+            forge=req.action.split(".")[0] if "." in req.action else req.action,
+            department=dept_key,
+            venture=req.context.get("venture"),
+            jurisdiction=req.context.get("jurisdiction"),
+            tool_class=req.context.get("tool_class"),
+        )
+        sm = await covering_state(session, scope)
+        if sm is not None:
+            label = "global" if sm.scopeType == "global" else f"{sm.scopeType}:{sm.scopeValue}"
             return AuthDecision(
                 "step_up_approval_required",
                 "safe_mode_active",
-                f"Safe mode active: {safe_mode.reason or 'emergency halt'}",
+                f"Safe mode active ({label}): {sm.reason or 'emergency halt'}",
                 ttl_seconds=10,
                 required_approver=self._approver(req),
                 fail_policy=fail,
             )
 
-        agent = (
-            await session.execute(select(Agent).where(Agent.villageAgentId == req.subject_agent_id))
-        ).scalar_one_or_none()
         if agent is None:
             return AuthDecision(
                 "deny",

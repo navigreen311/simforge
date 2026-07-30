@@ -15,7 +15,6 @@ from src.services.governance import (
     get_current_constitution,
     propose_amendment,
     ratify_amendment,
-    safe_mode,
     veto_amendment,
     withdraw_amendment,
 )
@@ -35,7 +34,8 @@ class ProposeAmendmentRequest(BaseModel):
 class SafeModeRequest(BaseModel):
     active: bool
     reason: str | None = None
-    domains: list[str] = []
+    scope_type: str = "global"
+    scope_value: str = ""
 
 
 def _const_out(c: Constitution) -> dict:
@@ -176,14 +176,34 @@ async def ratify(amendment_id: str, session: AsyncSession = Depends(get_session)
 
 
 @router.get("/safe-mode/status", dependencies=[Depends(require_role("viewer"))])
-async def safe_mode_status() -> dict:
-    return safe_mode.status()
+async def safe_mode_status_endpoint(session: AsyncSession = Depends(get_session)) -> dict:
+    from src.services.governance import safe_mode_service
+
+    return await safe_mode_service.status(session)
 
 
 @router.post("/safe-mode", dependencies=[Depends(require_role("admin"))])
-async def set_safe_mode(body: SafeModeRequest) -> dict:
-    if body.active:
-        safe_mode.activate("admin", body.reason or "manual", body.domains)
-    else:
-        safe_mode.deactivate()
-    return safe_mode.status()
+async def set_safe_mode(
+    body: SafeModeRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Activate/deactivate a persisted, scoped safe mode (§11.7). scope_type: global | venture |
+    jurisdiction | forge | department | tool_class."""
+    from src.services.governance import safe_mode_service
+    from src.services.governance.safe_mode_service import SafeModeError
+
+    try:
+        if body.active:
+            await safe_mode_service.activate(
+                session,
+                scope_type=body.scope_type,
+                scope_value=body.scope_value,
+                reason=body.reason or "manual",
+                actor="admin",
+            )
+        else:
+            await safe_mode_service.deactivate(
+                session, scope_type=body.scope_type, scope_value=body.scope_value, actor="admin"
+            )
+    except SafeModeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return await safe_mode_service.status(session)

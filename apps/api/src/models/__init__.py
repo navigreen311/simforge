@@ -22,6 +22,7 @@ from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.registry import LineageEdge, ObjectRegistryEntry
 from src.models.run import Run, TraceEvent
+from src.models.safe_mode import SafeModeState
 from src.models.scorecard import Scorecard
 from src.models.spec_document import SpecDocument
 from src.models.training import TrainingProposal
@@ -61,4 +62,5 @@ __all__ = [
     "AdversarialProbe",
     "ApprovalRequest",
     "ApprovalDecision",
+    "SafeModeState",
 ]

@@ -5,14 +5,13 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.agent import Agent
 from src.models.cert import AgentCert, CertSnapshot
 from src.models.department import Department
+from src.services.governance import safe_mode_service
 from src.services.governance.pdp import AuthRequest, fail_policy_for, pdp
-from src.services.governance.safe_mode import safe_mode
 from src.utils.time import utcnow
 
 ACTION = "cre-forge.call_center.outbound"
@@ -68,11 +67,7 @@ async def _seed_cert(
     return agent.villageAgentId
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def _reset_safe_mode():
-    safe_mode.deactivate()
-    yield
-    safe_mode.deactivate()
+# Safe mode is now DB-backed (§11.7) and the test DB is fresh per test — no reset fixture needed.
 
 
 @pytest.mark.parametrize(
@@ -126,9 +121,22 @@ async def test_no_cert_and_unknown_agent_deny(db_session: AsyncSession) -> None:
 
 async def test_safe_mode_forces_step_up(db_session: AsyncSession) -> None:
     aid = await _seed_cert(db_session, autonomy="L5")  # would otherwise allow
-    safe_mode.activate("admin", "incident", None)
+    await safe_mode_service.activate(db_session, scope_type="global", reason="incident")
     d = await pdp.decide(db_session, AuthRequest(subject_agent_id=aid, action=ACTION))
     assert d.decision == "step_up_approval_required" and d.reason_code == "safe_mode_active"
+
+
+async def test_scoped_safe_mode_only_covers_matching_forge(db_session: AsyncSession) -> None:
+    aid = await _seed_cert(db_session, autonomy="L5")
+    forge = ACTION.split(".")[0]
+    # A safe mode scoped to a DIFFERENT forge does not freeze this action.
+    await safe_mode_service.activate(db_session, scope_type="forge", scope_value="other-forge")
+    d = await pdp.decide(db_session, AuthRequest(subject_agent_id=aid, action=ACTION))
+    assert d.decision == "allow"
+    # Scoped to THIS forge → step-up.
+    await safe_mode_service.activate(db_session, scope_type="forge", scope_value=forge)
+    d2 = await pdp.decide(db_session, AuthRequest(subject_agent_id=aid, action=ACTION))
+    assert d2.decision == "step_up_approval_required" and d2.reason_code == "safe_mode_active"
 
 
 def test_fail_policy_default_closed() -> None:

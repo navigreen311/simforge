@@ -56,6 +56,13 @@ JOBS: tuple[CadenceJob, ...] = (
         "Expire approval requests past their TTL — time-bound auto-escalation (§11.5).",
         jobs.hourly_approval_escalation,
     ),
+    CadenceJob(
+        "safe_mode_auto_trigger",
+        "every 15 min",
+        {"minute": "*/15"},
+        "Auto-raise scoped safe mode when compliance failures spike (§11.7).",
+        jobs.safe_mode_auto_trigger,
+    ),
 )
 
 JOBS_BY_NAME: dict[str, CadenceJob] = {j.name: j for j in JOBS}
