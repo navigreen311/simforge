@@ -8,13 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
 from src.deps import require_role
-from src.models.cert import AgentCert, CertSnapshot
+from src.models.cert import AgentCert, CertSnapshot, DeptCert
+from src.models.department import Department
 from src.schemas.cert import (
     AgentCertList,
     AgentCertOut,
     CertSnapshotOut,
+    DeptCertList,
+    DeptCertOut,
+    DeptPrereqStatusOut,
     IssueAgentCertRequest,
     IssueCertResponse,
+    IssueDeptCertRequest,
+    IssueDeptCertResponse,
     ReinstateCertRequest,
     RevokeCertRequest,
     VerifyResponse,
@@ -22,9 +28,12 @@ from src.schemas.cert import (
 from src.services.capabilities import describe_capability
 from src.services.cert import (
     CertIssuanceError,
+    dept_prerequisite_status,
     issue_agent_cert,
+    issue_dept_cert,
     reinstate_agent_cert,
     revoke_agent_cert,
+    revoke_dept_cert,
     verify_snapshot,
 )
 
@@ -165,6 +174,99 @@ async def reinstate_cert(
         autonomy_from=issued.autonomy_from,
         autonomy_to=issued.autonomy_to,
     )
+
+
+# --- DeptCerts (department × forge-context composite; D2 dual certification) ---
+
+
+async def _dept_out(session: AsyncSession, cert: DeptCert) -> DeptCertOut:
+    out = DeptCertOut.model_validate(cert)
+    dept = (
+        await session.execute(select(Department).where(Department.id == cert.departmentId))
+    ).scalar_one_or_none()
+    out.departmentKey = dept.villageKey if dept else ""
+    return out
+
+
+@router.get(
+    "/dept/prerequisites",
+    response_model=DeptPrereqStatusOut,
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def dept_prereqs(
+    department_key: str = Query(...),
+    forge_caps: str | None = Query(default=None, description="Comma-separated required forge caps"),
+    session: AsyncSession = Depends(get_session),
+) -> DeptPrereqStatusOut:
+    """Whether a department has enough covering AgentCerts to issue a DeptCert (blast preview)."""
+    caps = [c for c in (forge_caps.split(",") if forge_caps else []) if c]
+    try:
+        status_obj = await dept_prerequisite_status(session, department_key, caps)
+    except CertIssuanceError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return DeptPrereqStatusOut(**status_obj.as_dict())
+
+
+@router.get("/dept", response_model=DeptCertList, dependencies=[Depends(require_role("viewer"))])
+async def list_dept_certs(
+    department_key: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    session: AsyncSession = Depends(get_session),
+) -> DeptCertList:
+    stmt = select(DeptCert).order_by(DeptCert.issuedAt.desc())
+    if department_key:
+        dept = (
+            await session.execute(select(Department).where(Department.villageKey == department_key))
+        ).scalar_one_or_none()
+        stmt = stmt.where(DeptCert.departmentId == (dept.id if dept else "none"))
+    if status_filter:
+        stmt = stmt.where(DeptCert.status == status_filter)
+    rows = (await session.execute(stmt)).scalars().all()
+    items = [await _dept_out(session, c) for c in rows]
+    return DeptCertList(items=items, total=len(items))
+
+
+@router.post(
+    "/dept/issue",
+    response_model=IssueDeptCertResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def issue_dept(
+    body: IssueDeptCertRequest, session: AsyncSession = Depends(get_session)
+) -> IssueDeptCertResponse:
+    try:
+        issued = await issue_dept_cert(
+            session,
+            department_key=body.department_key,
+            forge_context=body.forge_context,
+            tier=body.tier,
+            dept_battery_run_ids=body.dept_battery_run_ids,
+            approver_id=body.approver_id,
+            pack_id=body.pack_id,
+            required_forge_caps=body.required_forge_caps,
+            prerequisite_min=body.prerequisite_min,
+        )
+    except CertIssuanceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return IssueDeptCertResponse(
+        cert=await _dept_out(session, issued.dept_cert),
+        snapshot=CertSnapshotOut.model_validate(issued.snapshot),
+    )
+
+
+@router.post(
+    "/dept/{cert_id}/revoke",
+    response_model=DeptCertOut,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def revoke_dept(
+    cert_id: str, body: RevokeCertRequest, session: AsyncSession = Depends(get_session)
+) -> DeptCertOut:
+    try:
+        cert = await revoke_dept_cert(session, cert_id, body.reason, actor="admin")
+    except CertIssuanceError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return await _dept_out(session, cert)
 
 
 # --- snapshots (mounted under /api/snapshots via a separate include) ---
