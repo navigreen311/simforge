@@ -23,6 +23,7 @@ from src.models.golden_nomination import GoldenNomination
 from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.meta_eval_intent import MetaEvalIntent
+from src.models.ontology import OntologyEntity, OntologyRelation
 from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.production_outcome import ProductionOutcome
 from src.models.registry import LineageEdge, ObjectRegistryEntry
@@ -68,6 +69,8 @@ __all__ = [
     "SpecDocument",
     "TemporalScenario",
     "MetaEvalIntent",
+    "OntologyEntity",
+    "OntologyRelation",
     "GoldenRun",
     "GoldenNomination",
     "AdversarialProbe",

@@ -131,6 +131,30 @@ model GoldenNomination {
   @@index([status])
 }
 
+// Knowledge Graph / Domain Ontology per venture (v1.1). The entities and relationships that define a
+// venture's world, so scenarios can be grounded in (and checked against) a real domain model.
+model OntologyEntity {
+  id          String   @id @default(cuid())
+  venture     String
+  name        String
+  category    String   @default("concept")
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@unique([venture, name])
+}
+
+model OntologyRelation {
+  id         String   @id @default(cuid())
+  venture    String
+  fromEntity String
+  relation   String
+  toEntity   String
+  createdAt  DateTime @default(now())
+
+  @@index([venture])
+}
+
 // Temporal Realism Engine (v1.1). A reusable definition of time-based scenario dynamics: scheduled
 // events (delayed/async) and time-bombs (a deadline turn + a defuse action + a consequence).
 model TemporalScenario {

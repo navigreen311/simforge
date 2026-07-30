@@ -744,6 +744,30 @@ export const temporal = {
     apiGet<{ temporal_scenarios: TemporalScenario[]; total: number }>("/api/temporal/"),
 };
 
+export interface OntologyEntity {
+  name: string;
+  category: string;
+  description: string;
+}
+
+export interface OntologyRelation {
+  from: string;
+  relation: string;
+  to: string;
+}
+
+export interface OntologyGraph {
+  venture: string;
+  entities: OntologyEntity[];
+  relations: OntologyRelation[];
+  integrity: { dangling_relations: OntologyRelation[]; ok: boolean };
+  grounding: { grounded: string[]; orphans: string[]; grounded_pct: number };
+}
+
+export const ontology = {
+  graph: (venture: string) => apiGet<OntologyGraph>(`/api/ontology/${venture}`),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>
