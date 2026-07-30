@@ -55,8 +55,11 @@ async def evaluate_rubric(
     s = DimensionScores()
 
     # Performance — heuristic (P1–P6, P8)
+    from src.services.evaluation.compliance import evaluate_compliance
+
     s.p1_correctness = perf.p1_correctness(ctx)
-    s.p2_compliance = perf.p2_compliance(ctx)
+    compliance = evaluate_compliance(ctx)  # real rules engine (§5.1 P2)
+    s.p2_compliance = compliance.passed
     s.p3_process_fidelity = perf.p3_process_fidelity(ctx)
     s.p4_time_to_resolution = perf.p4_time_to_resolution(ctx)
     s.p5_escalation = perf.p5_escalation(ctx)
@@ -71,6 +74,13 @@ async def evaluate_rubric(
     s.c7_ame_reputation_trajectory = cog.c7_ame_reputation_trajectory(ctx.ccb_post)
 
     annotations = _annotations(ctx)
+    # Surface compliance findings (failures + unmet-obligation warnings) as turn annotations so the
+    # scorecard names which rule tripped, not just P2=false.
+    for r in compliance.results:
+        if r.status in ("fail", "warn"):
+            annotations.append(
+                {"turn": 0, "tag": f"compliance_{r.status}", "detail": f"{r.check}: {r.evidence}"}
+            )
 
     # LLM-judge dims (P7, C1, C2)
     p7 = await p7_cx.score(ctx, judge_llm, run_id)
