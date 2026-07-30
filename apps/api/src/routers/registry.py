@@ -11,9 +11,13 @@ from src.db import get_session
 from src.deps import require_role
 from src.models.registry import ObjectRegistryEntry
 from src.services.registry import (
+    KINDS,
+    RegistryError,
     edges_from,
     edges_to,
+    find_duplicates,
     find_path,
+    merge_entries,
     register_entry,
     resolve_urn,
     subgraph,
@@ -33,6 +37,12 @@ class RegisterRequest(BaseModel):
 
 class TombstoneRequest(BaseModel):
     reason: str
+
+
+class MergeRequest(BaseModel):
+    loser_urn: str
+    winner_urn: str
+    reason: str = ""
 
 
 def _entry_out(e: ObjectRegistryEntry) -> dict:
@@ -63,11 +73,38 @@ async def list_by_kind(kind: str, session: AsyncSession = Depends(get_session)) 
     return {"items": [_entry_out(e) for e in rows], "total": len(rows)}
 
 
+@router.get("/kinds", dependencies=[Depends(require_role("viewer"))])
+async def kinds() -> dict:
+    """The canonical object-kind taxonomy (§12.1)."""
+    return {"kinds": list(KINDS)}
+
+
+@router.get("/duplicates", dependencies=[Depends(require_role("viewer"))])
+async def duplicates(session: AsyncSession = Depends(get_session)) -> dict:
+    """Live entries sharing (kind, canonical_id) under different URNs — merge candidates."""
+    return {"duplicates": await find_duplicates(session)}
+
+
 @router.post("/", dependencies=[Depends(require_role("admin"))])
 async def register(body: RegisterRequest, session: AsyncSession = Depends(get_session)) -> dict:
-    e = await register_entry(session, body.urn, body.kind, body.canonical_id, body.metadata)
+    try:
+        e = await register_entry(
+            session, body.urn, body.kind, body.canonical_id, body.metadata, strict_kind=True
+        )
+    except RegistryError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await session.commit()
     return _entry_out(e)
+
+
+@router.post("/merge", dependencies=[Depends(require_role("admin"))])
+async def merge(body: MergeRequest, session: AsyncSession = Depends(get_session)) -> dict:
+    """Merge loser → winner (§12.1): tombstone + redirect the loser, audited. Never hard-deletes."""
+    try:
+        winner = await merge_entries(session, body.loser_urn, body.winner_urn, "admin", body.reason)
+    except RegistryError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _entry_out(winner)
 
 
 @router.post("/{urn:path}/tombstone", dependencies=[Depends(require_role("admin"))])
