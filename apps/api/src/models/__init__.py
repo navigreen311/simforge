@@ -29,6 +29,7 @@ from src.models.spec_document import SpecDocument
 from src.models.training import TrainingProposal
 from src.models.venture import Venture
 from src.models.village_fingerprint import VillageFingerprint
+from src.models.waiver import Appeal, Waiver
 
 __all__ = [
     "Base",
@@ -66,4 +67,6 @@ __all__ = [
     "SafeModeState",
     "EvidenceRecord",
     "EvidenceAccess",
+    "Waiver",
+    "Appeal",
 ]

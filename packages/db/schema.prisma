@@ -143,6 +143,41 @@ model SafeModeState {
   @@index([active])
 }
 
+// A temporary, expiring exception grant (§11.5 waiver/exception registry).
+model Waiver {
+  id                   String    @id @default(cuid())
+  subject              String
+  scope                String
+  reason               String    @default("")
+  compensatingControls String[]
+  status               String    @default("active")
+  grantedBy            String    @default("admin")
+  grantedAt            DateTime  @default(now())
+  expiresAt            DateTime
+  revokedAt            DateTime?
+
+  @@index([status])
+}
+
+// A challenge to a cert decision within the 7-day window (§11.5 appeal workflow).
+model Appeal {
+  id                 String    @id @default(cuid())
+  targetType         String    @default("cert_decision")
+  targetId           String
+  appellant          String
+  grounds            String    @default("")
+  originalApprover   String?
+  status             String    @default("open")
+  secondReviewer     String?
+  reviewerDecision   String?
+  resolutionNote     String    @default("")
+  escalatedToFounder Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  resolvedAt         DateTime?
+
+  @@index([status])
+}
+
 // A governed decision needing sign-off + its append-only signed decision journal (§11.5).
 model ApprovalRequest {
   id                String    @id @default(cuid())
