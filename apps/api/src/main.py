@@ -44,6 +44,7 @@ from src.routers import (
     pdp,
     registry,
     regression,
+    rehearsal,
     runs,
     scenario_bank,
     scenarios,
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals.appeals_router, prefix="/api/appeals", tags=["appeals"])
     app.include_router(evidence.router, prefix="/api/evidence", tags=["evidence"])
     app.include_router(ops.router, prefix="/api/ops", tags=["ops"])
+    app.include_router(rehearsal.router, prefix="/api/dress-rehearsal", tags=["dress-rehearsal"])
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])

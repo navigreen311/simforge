@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     # Continuous cadence scheduler (Part 16). Off by default (CI/tests + single-shot runs); flip on
     # in a long-running deployment to fire the daily/nightly batteries in-process.
     scheduler_enabled: bool = Field(default=False, alias="SCHEDULER_ENABLED")
+
+    # Dress Rehearsal (§15) seams: forge-vs-prod parity has no production to compare in this repo,
+    # so it's a configurable metric (default meets the ≥0.90 floor); red-team pass count likewise.
+    dress_rehearsal_forge_parity: float = Field(default=1.0, alias="DRESS_REHEARSAL_FORGE_PARITY")
+    dress_rehearsal_redteam_passes: int = Field(default=0, alias="DRESS_REHEARSAL_REDTEAM_PASSES")
     # P2 compliance: enforce OBLIGATION rules as hard failures (default off — honest seam).
     # Obligations are always computed + reported; become P2 auto-fails once flipped on for real.
     compliance_enforce_obligations: bool = Field(
