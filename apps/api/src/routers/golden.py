@@ -5,18 +5,61 @@ from __future__ import annotations
 import hashlib
 import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
 from src.deps import get_village_reader, require_role
+from src.models.golden_nomination import GoldenNomination
 from src.models.golden_run import GoldenRun
 from src.models.pack import Scenario
 from src.services.golden import load_baseline, run_golden_suite
+from src.services.golden.governance import (
+    GoldenGovernanceError,
+    list_nominations,
+    nominate,
+    review,
+    withdraw,
+)
 from src.services.village.reader import VillageReader
 
 router = APIRouter()
+
+
+class NominateBody(BaseModel):
+    scenario_id: str
+    nominated_by: str
+    rationale: str = ""
+    inter_rater_reliability: float | None = None
+    council: list[str] | None = None
+    quorum_rule: str = "two_of_three"
+
+
+class ReviewBody(BaseModel):
+    approver: str
+    decision: str  # approve | reject | abstain
+    reason: str = ""
+
+
+class WithdrawBody(BaseModel):
+    actor: str
+
+
+def _nom_out(n: GoldenNomination) -> dict:
+    return {
+        "id": n.id,
+        "scenario_id": n.scenarioId,
+        "nominated_by": n.nominatedBy,
+        "rationale": n.rationale,
+        "inter_rater_reliability": n.interRaterReliability,
+        "approval_request_id": n.approvalRequestId,
+        "status": n.status,
+        "frozen_at": n.frozenAt.isoformat() if n.frozenAt else None,
+        "frozen_by": n.frozenBy,
+        "created_at": n.createdAt.isoformat() if n.createdAt else None,
+    }
 
 
 @router.get("/scenarios", dependencies=[Depends(require_role("viewer"))])
@@ -104,3 +147,65 @@ async def run_golden(
     )
     await session.commit()
     return report
+
+
+# --- §12.5 Golden Benchmark Bank governance: nomination + council review + freeze ---
+
+
+@router.get("/nominations", dependencies=[Depends(require_role("viewer"))])
+async def golden_nominations(
+    status_filter: str | None = Query(default=None, alias="status"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    noms = await list_nominations(session, status=status_filter)
+    return {"nominations": [_nom_out(n) for n in noms], "total": len(noms)}
+
+
+@router.post("/nominations", dependencies=[Depends(require_role("compliance_analyst"))])
+async def create_nomination(
+    body: NominateBody, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        nom = await nominate(
+            session,
+            scenario_id=body.scenario_id,
+            nominated_by=body.nominated_by,
+            rationale=body.rationale,
+            inter_rater_reliability=body.inter_rater_reliability,
+            council=body.council,
+            quorum_rule=body.quorum_rule,
+        )
+    except GoldenGovernanceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _nom_out(nom)
+
+
+@router.post("/nominations/{nomination_id}/review", dependencies=[Depends(require_role("admin"))])
+async def review_nomination(
+    nomination_id: str, body: ReviewBody, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        nom = await review(
+            session,
+            nomination_id=nomination_id,
+            approver=body.approver,
+            decision=body.decision,
+            reason=body.reason,
+        )
+    except GoldenGovernanceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _nom_out(nom)
+
+
+@router.post(
+    "/nominations/{nomination_id}/withdraw",
+    dependencies=[Depends(require_role("compliance_analyst"))],
+)
+async def withdraw_nomination(
+    nomination_id: str, body: WithdrawBody, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        nom = await withdraw(session, nomination_id=nomination_id, actor=body.actor)
+    except GoldenGovernanceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _nom_out(nom)

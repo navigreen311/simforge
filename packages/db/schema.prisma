@@ -111,6 +111,26 @@ model DressRehearsal {
   @@index([packId])
 }
 
+// Golden Benchmark Bank governance (§12.5): promotion to the immutable gold set requires formal
+// nomination + multi-party council review (an ApprovalRequest) + a recorded freeze. The nomination
+// row is the durable governance record; Scenario.isGolden flips only when the request is approved.
+model GoldenNomination {
+  id                    String    @id @default(cuid())
+  scenarioId            String
+  nominatedBy           String
+  rationale             String    @default("")
+  interRaterReliability Float?
+  approvalRequestId     String?
+  status                String    @default("pending")
+  frozenAt              DateTime?
+  frozenBy              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([scenarioId])
+  @@index([status])
+}
+
 // Evidence lifecycle (§12.3): retention, tiered storage, legal hold, redaction class, and a
 // tamper-evident Merkle chain-of-custody anchor. EvidenceAccess is the append-only access audit.
 model EvidenceRecord {

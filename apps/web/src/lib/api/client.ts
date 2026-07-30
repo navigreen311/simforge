@@ -1147,7 +1147,24 @@ export const golden = {
   baseline: () => apiGet<GoldenBaseline>("/api/golden/baseline"),
   runHistory: (limit = 5) =>
     apiGet<{ runs: GoldenRunHistoryEntry[] }>(`/api/golden/run-history?limit=${limit}`),
+  nominations: (status?: string) =>
+    apiGet<{ nominations: GoldenNomination[]; total: number }>(
+      `/api/golden/nominations${status ? `?status=${status}` : ""}`,
+    ),
 };
+
+export interface GoldenNomination {
+  id: string;
+  scenario_id: string;
+  nominated_by: string;
+  rationale: string;
+  inter_rater_reliability: number | null;
+  approval_request_id: string | null;
+  status: string; // pending | frozen | rejected | withdrawn
+  frozen_at: string | null;
+  frozen_by: string | null;
+  created_at: string | null;
+}
 
 export const runGoldenSuite = () => apiPost<GoldenReport>("/api/golden/run");
 
