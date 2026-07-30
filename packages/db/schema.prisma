@@ -97,6 +97,36 @@ model SpecDocument {
   @@index([ventureSlug])
 }
 
+// Evidence lifecycle (§12.3): retention, tiered storage, legal hold, redaction class, and a
+// tamper-evident Merkle chain-of-custody anchor. EvidenceAccess is the append-only access audit.
+model EvidenceRecord {
+  id             String    @id @default(cuid())
+  bundleId       String    @unique
+  ref            String
+  contentHash    String
+  prevAnchor     String?
+  chainAnchor    String
+  redactionClass String    @default("standard")
+  tier           String    @default("hot")
+  retentionUntil DateTime
+  legalHold      Boolean   @default(false)
+  packId         String?
+  createdAt      DateTime  @default(now())
+  purgedAt       DateTime?
+
+  @@index([createdAt])
+}
+
+model EvidenceAccess {
+  id        String   @id @default(cuid())
+  recordId  String
+  accessor  String
+  reason    String   @default("")
+  at        DateTime @default(now())
+
+  @@index([recordId])
+}
+
 // Persisted, fleet-wide, scoped emergency safe mode (§11.7). Multiple scopes can be active at once.
 model SafeModeState {
   id            String    @id @default(cuid())

@@ -28,6 +28,7 @@ from src.routers import (
     dashboard,
     departments,
     drift,
+    evidence,
     execution,
     forges,
     gaps,
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(regression.router, prefix="/api/regression", tags=["regression"])
     app.include_router(cadence.router, prefix="/api/scheduler", tags=["scheduler"])
     app.include_router(approvals.router, prefix="/api/approvals", tags=["approvals"])
+    app.include_router(evidence.router, prefix="/api/evidence", tags=["evidence"])
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
