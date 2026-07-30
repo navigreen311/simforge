@@ -39,6 +39,7 @@ from src.routers import (
     locales,
     meta_eval,
     narrative,
+    ops,
     packs,
     pdp,
     registry,
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals.waivers_router, prefix="/api/waivers", tags=["waivers"])
     app.include_router(approvals.appeals_router, prefix="/api/appeals", tags=["appeals"])
     app.include_router(evidence.router, prefix="/api/evidence", tags=["evidence"])
+    app.include_router(ops.router, prefix="/api/ops", tags=["ops"])
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
