@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dev import Principal, get_current_principal
+from src.config import settings
 from src.db import get_session
 from src.deps import get_village_reader, require_role
 from src.models.pack import Pack, Scenario
@@ -83,6 +84,20 @@ async def run_scenario_endpoint(
     from src.services.narrative import apply_narrative_effects
     from src.services.reporter import emit_reports
     from src.telemetry.metrics import GATE_PASSED_TOTAL, RUN_DURATION, RUNS_TOTAL
+
+    # Scenario Truth Review Gate (v1.1). When enforced, a scenario must have an approved truth
+    # review before it can certify. Off by default → the unreviewed corpus still runs.
+    if settings.truth_gate_enforce:
+        from src.services.scenario.truth_review import is_truth_approved
+
+        if not await is_truth_approved(session, scenario_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"{scenario_id} has no approved truth review — it cannot certify until a "
+                    "reviewer affirms it faithfully represents reality (Truth Review Gate)."
+                ),
+            )
 
     try:
         run = await run_scenario(

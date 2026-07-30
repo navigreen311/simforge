@@ -590,6 +590,21 @@ export const parity = {
   summary: () => apiGet<ParitySummary>("/api/parity/"),
 };
 
+export interface TruthReviewChecklist {
+  dimensions: string[];
+  enforced: boolean;
+}
+
+export interface TruthReviewUnreviewed {
+  scenario_ids: string[];
+  total: number;
+}
+
+export const truthReview = {
+  checklist: () => apiGet<TruthReviewChecklist>("/api/truth-review/checklist"),
+  unreviewed: () => apiGet<TruthReviewUnreviewed>("/api/truth-review/unreviewed"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>

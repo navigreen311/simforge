@@ -51,6 +51,7 @@ from src.routers import (
     scenario_bank,
     scenarios,
     training,
+    truth_review,
     ventures,
     webhooks,
 )
@@ -129,6 +130,9 @@ def create_app() -> FastAPI:
     app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
     app.include_router(coverage.router, prefix="/api/coverage", tags=["coverage"])
     app.include_router(parity.router, prefix="/api/parity", tags=["parity"])
+    app.include_router(
+        truth_review.router, prefix="/api/truth-review", tags=["truth-review"]
+    )
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

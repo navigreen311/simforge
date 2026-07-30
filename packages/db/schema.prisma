@@ -131,6 +131,21 @@ model GoldenNomination {
   @@index([status])
 }
 
+// Scenario Truth Review Gate (v1.1). A per-scenario attestation that the scenario faithfully
+// represents reality (realistic, correct expected outcome, no fabrication, accurate compliance)
+// before it may certify agents. Approved only when every checklist item holds.
+model ScenarioTruthReview {
+  id         String    @id @default(cuid())
+  scenarioId String    @unique
+  status     String    @default("pending")
+  checklist  Json      @default("{}")
+  reviewer   String?
+  notes      String?
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
 // Sandbox-vs-production parity SLA (v1.1). Each row is a parity measurement for a forge capability;
 // a score below the SLA marks the forge unsafe_to_certify (annotated always, enforced under a flag).
 model ForgeParity {
