@@ -59,6 +59,17 @@ async def _validate_battery(
         if card is None or not card.readinessGatePassed:
             raise CertIssuanceError(f"Run {rid} did not pass the readiness gate")
         runs.append(run)
+
+    # Blind-mode floor (B4 / §5.3 condition 5): ≥ pct of the battery must be blind runs. Honest
+    # seam — enforced only when cert_enforce_blind_mode is on (real cert batteries).
+    if settings.cert_enforce_blind_mode and runs:
+        blind = sum(1 for r in runs if r.blindMode)
+        ratio = blind / len(runs)
+        if ratio < settings.cert_blind_mode_pct:
+            raise CertIssuanceError(
+                f"Blind-mode floor unmet: {blind}/{len(runs)} blind "
+                f"({ratio:.0%} < {settings.cert_blind_mode_pct:.0%} required)"
+            )
     return runs
 
 

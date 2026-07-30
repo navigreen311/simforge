@@ -65,6 +65,7 @@ async def get_scenario(
 async def run_scenario_endpoint(
     scenario_id: str,
     integrated: bool = False,
+    blind: bool = False,
     narrative_mode: str | None = None,
     session: AsyncSession = Depends(get_session),
     reader: VillageReader = Depends(get_village_reader),
@@ -85,7 +86,12 @@ async def run_scenario_endpoint(
 
     try:
         run = await run_scenario(
-            session, scenario_id, reader, integrated=integrated, narrative_mode=narrative_mode
+            session,
+            scenario_id,
+            reader,
+            integrated=integrated,
+            blind_mode=blind,
+            narrative_mode=narrative_mode,
         )
     except RunnerError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

@@ -224,13 +224,19 @@ async def _execute_into_run(
     provider = provider or get_llm_provider()
     runtime = AgentRuntime(village_reader=reader, provider=provider)
     world = MockWorld(persona_label=f"{pack.ownerVenture} counterparty", seed=scenario.seed)
-    injector = ComplicationInjector(
-        inject_at_turn=2,
-        complication_text=f"An unexpected obstacle complicates '{scenario.title}'.",
+    # Blind mode (§15.3): withhold scenario-identifying metadata from anything the AUT can see, so
+    # it can't key off a known test scenario. The complication text otherwise leaks the title into
+    # the transcript, and the runner's scenario_dict carries the id/title.
+    blind = bool(run.blindMode)
+    complication_text = (
+        "An unexpected obstacle complicates the situation."
+        if blind
+        else f"An unexpected obstacle complicates '{scenario.title}'."
     )
+    injector = ComplicationInjector(inject_at_turn=2, complication_text=complication_text)
     scenario_dict = {
-        "scenario_id": scenario.scenarioId,
-        "title": scenario.title,
+        "scenario_id": "blind" if blind else scenario.scenarioId,
+        "title": "" if blind else scenario.title,
         "slo_seconds": scenario.sloSeconds,
         "cold_open": _load_cold_open(scenario),
     }
