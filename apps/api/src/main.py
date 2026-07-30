@@ -42,6 +42,7 @@ from src.routers import (
     narrative,
     ops,
     packs,
+    parity,
     pdp,
     registry,
     regression,
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(locales.router, prefix="/api/locales", tags=["locales"])
     app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
     app.include_router(coverage.router, prefix="/api/coverage", tags=["coverage"])
+    app.include_router(parity.router, prefix="/api/parity", tags=["parity"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

@@ -568,6 +568,28 @@ export interface DashboardSummary {
   open_village_os_gaps: number;
 }
 
+export interface ForgeParity {
+  forge_cap: string;
+  parity_score: number;
+  sla_threshold: number;
+  unsafe_to_certify: boolean;
+  sample_size: number;
+  method: string;
+  notes: string | null;
+  measured_at: string | null;
+  measured_by: string;
+}
+
+export interface ParitySummary {
+  sla_threshold: number;
+  enforced: boolean;
+  forges: ForgeParity[];
+}
+
+export const parity = {
+  summary: () => apiGet<ParitySummary>("/api/parity/"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>

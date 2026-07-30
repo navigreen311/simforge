@@ -192,6 +192,17 @@ async def issue_agent_cert(
     if agent is None:
         raise CertIssuanceError(f"Agent not found: {agent_village_id}")
 
+    # Sandbox-vs-production parity SLA (v1.1). When enforcement is on, a forge whose sandbox has
+    # drifted below the parity SLA is unsafe_to_certify → block issuance. Off by default (annotate).
+    if settings.parity_enforce:
+        from src.services.forge.parity import is_unsafe_to_certify
+
+        if await is_unsafe_to_certify(session, forge_cap):
+            raise CertIssuanceError(
+                f"{forge_cap} is unsafe_to_certify: sandbox-vs-production parity is below the SLA. "
+                "Restore parity or clear PARITY_ENFORCE before certifying against this forge."
+            )
+
     runs = await _validate_battery(session, agent, battery_run_ids)
 
     # A cert already occupies this (agent, forge_cap) pair (UNIQUE in the schema). An active one

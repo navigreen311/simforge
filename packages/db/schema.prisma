@@ -131,6 +131,25 @@ model GoldenNomination {
   @@index([status])
 }
 
+// Sandbox-vs-production parity SLA (v1.1). Each row is a parity measurement for a forge capability;
+// a score below the SLA marks the forge unsafe_to_certify (annotated always, enforced under a flag).
+model ForgeParity {
+  id              String   @id @default(cuid())
+  forgeCap        String
+  parityScore     Float
+  slaThreshold    Float
+  unsafeToCertify Boolean  @default(false)
+  sampleSize      Int      @default(0)
+  method          String   @default("manual")
+  notes           String?
+  measuredAt      DateTime @default(now())
+  measuredBy      String   @default("system")
+  createdAt       DateTime @default(now())
+
+  @@index([forgeCap])
+  @@index([measuredAt])
+}
+
 // Evidence lifecycle (§12.3): retention, tiered storage, legal hold, redaction class, and a
 // tamper-evident Merkle chain-of-custody anchor. EvidenceAccess is the append-only access audit.
 model EvidenceRecord {
