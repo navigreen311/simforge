@@ -168,7 +168,7 @@ async def agent_certs_summary(session: AsyncSession = Depends(get_session)) -> d
     return {"items": [{"agent_village_id": k, **v} for k, v in rollup.items()]}
 
 
-# --- §10.4 dashboards: coverage heatmap, dept×context, cognitive trends, cert timeline, CCB diff ---
+# --- §10.4 dashboards: coverage heatmap, dept×context, cognitive trends, cert timeline, CCB diff
 
 
 @router.get("/coverage-heatmap", dependencies=[Depends(require_role("viewer"))])
@@ -290,7 +290,7 @@ async def cert_timeline(
 
 @router.get("/ccb-diff/{run_id}", dependencies=[Depends(require_role("viewer"))])
 async def ccb_diff(run_id: str, session: AsyncSession = Depends(get_session)) -> dict:
-    """The CCB pre→post diff for a run — a standalone artifact (§10.4). Per-framework changed keys."""
+    """CCB pre→post diff for a run — standalone artifact (§10.4), per-framework changed keys."""
     from src.models.ccb import CCB as CCBModel
 
     run = (await session.execute(select(Run).where(Run.runId == run_id))).scalar_one_or_none()
