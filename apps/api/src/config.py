@@ -183,6 +183,9 @@ class Settings(BaseSettings):
     supply_chain_denylist: str = Field(default="", alias="SUPPLY_CHAIN_DENYLIST")
     supply_chain_vuln_feed_url: str = Field(default="", alias="VULN_FEED_URL")
 
+    # Cold-Start Playbook (v1.2). Target days from venture registration to a certifiable v1 pack.
+    cold_start_sla_days: int = Field(default=60, alias="COLD_START_SLA_DAYS")
+
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 
