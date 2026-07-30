@@ -1,0 +1,8 @@
+id: persona.clinician.cg_005
+archetype: clinician
+descriptor: per-diem
+variant: 5
+synthetic: true
+summary: >
+  A synthetic per-diem clinician persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

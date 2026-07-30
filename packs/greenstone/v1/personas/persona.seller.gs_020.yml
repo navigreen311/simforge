@@ -1,0 +1,8 @@
+id: persona.seller.gs_020
+archetype: seller
+descriptor: divorcing
+variant: 20
+synthetic: true
+summary: >
+  A synthetic divorcing seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

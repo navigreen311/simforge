@@ -1,0 +1,8 @@
+id: persona.buyer.gs_015
+archetype: buyer
+descriptor: first-time
+variant: 15
+synthetic: true
+summary: >
+  A synthetic first-time buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

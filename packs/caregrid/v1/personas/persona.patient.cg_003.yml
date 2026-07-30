@@ -1,0 +1,8 @@
+id: persona.patient.cg_003
+archetype: patient
+descriptor: pediatric
+variant: 3
+synthetic: true
+summary: >
+  A synthetic pediatric patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

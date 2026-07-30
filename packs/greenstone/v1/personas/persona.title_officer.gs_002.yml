@@ -1,0 +1,8 @@
+id: persona.title_officer.gs_002
+archetype: title_officer
+descriptor: overloaded
+variant: 2
+synthetic: true
+summary: >
+  A synthetic overloaded title_officer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.property.gs_014
+archetype: property
+descriptor: townhome
+variant: 14
+synthetic: true
+summary: >
+  A synthetic townhome property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

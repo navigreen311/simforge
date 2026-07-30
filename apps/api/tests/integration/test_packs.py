@@ -24,7 +24,8 @@ async def test_ingest_and_list_pack(client: AsyncClient) -> None:
     body = resp.json()
     assert body["ok"] is True
     assert body["pack_id"] == "pack.greenstone.v1"
-    assert body["scenarios"] == 3
+    # Corpus is full-scale (Wave 5); assert the floor + that the golden seed survives.
+    assert body["scenarios"] >= 3
 
     # List
     lst = await client.get("/api/packs/")
@@ -36,7 +37,8 @@ async def test_ingest_and_list_pack(client: AsyncClient) -> None:
     assert detail.status_code == 200
     d = detail.json()
     assert d["ownerVenture"] == "greenstone"
-    assert len(d["scenarios"]) == 3
+    assert len(d["scenarios"]) >= 3
+    assert any(s["scenarioId"] == "scn.gs.src.001" for s in d["scenarios"])
     assert "tcpa" in d["complianceFlags"]
 
 
@@ -53,7 +55,7 @@ async def test_scenarios_endpoints(client: AsyncClient) -> None:
 
     all_scen = await client.get("/api/scenarios/", params={"pack_id": "pack.medlink-pro.v1"})
     assert all_scen.status_code == 200
-    assert all_scen.json()["total"] == 3
+    assert all_scen.json()["total"] >= 3
 
     crisis = await client.get("/api/scenarios/", params={"tier": "advanced_crisis"})
     assert crisis.status_code == 200
@@ -75,8 +77,8 @@ async def test_list_is_enriched_with_scenario_summary(client: AsyncClient) -> No
     # Part A: the list row carries scenario count, tier spread, golden count, and flags.
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     item = (await client.get("/api/packs/")).json()["items"][0]
-    assert item["scenarioCount"] == 3
-    assert sum(item["tierCounts"].values()) == 3
+    assert item["scenarioCount"] >= 3
+    assert sum(item["tierCounts"].values()) == item["scenarioCount"]
     assert set(item["tierCounts"]) == {"foundational", "intermediate", "advanced_crisis"}
     assert item["goldenCount"] >= 0
     assert "tcpa" in item["complianceFlags"]

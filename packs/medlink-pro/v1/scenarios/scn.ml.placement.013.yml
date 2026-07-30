@@ -1,0 +1,21 @@
+scenario_id: scn.ml.placement.013
+title: Onboard a clinician for a clinic placement
+tier: foundational
+stage: placement
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - vaf.doc_vault.retrieve
+training_domains:
+  - enrollments_onboarding
+seed: 1052
+slo_seconds: 300
+compliance_checks:
+  - verify_active_credentials
+  - oig_sam_exclusion_check
+setup:
+  personas:
+    - ref: persona.facility.ml_014
+cold_open: >
+  A clinic placement is ready. Confirm the clinician is not on any exclusion list, verify active Nevada credentials, and complete onboarding so the facility can rely on the assignment. Handle the routine case cleanly and by the book.
+is_golden: false

@@ -1,0 +1,8 @@
+id: persona.patient.cg_020
+archetype: patient
+descriptor: respiratory
+variant: 20
+synthetic: true
+summary: >
+  A synthetic respiratory patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

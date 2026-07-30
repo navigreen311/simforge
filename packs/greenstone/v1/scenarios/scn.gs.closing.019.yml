@@ -1,0 +1,21 @@
+scenario_id: scn.gs.closing.019
+title: Coordinate a responsive closing
+tier: intermediate
+stage: closing
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - capitalforge.emd.release
+  - cre-forge.deals.title
+training_domains:
+  - end_to_end_workflow
+seed: 1090
+slo_seconds: 600
+compliance_checks:
+  - verify_proof_of_funds
+  - accurate_disclosure_to_all_parties
+setup:
+  personas:
+    - ref: persona.title_officer.gs_020
+cold_open: >
+  A responsive closing is scheduled. Coordinate the title company and the EMD release, verify proof of funds, and keep every party accurately informed as you drive to a clean settlement. Expect a wrinkle mid-task that tests your judgment.
+is_golden: false

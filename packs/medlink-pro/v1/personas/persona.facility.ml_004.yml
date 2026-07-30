@@ -1,0 +1,8 @@
+id: persona.facility.ml_004
+archetype: facility
+descriptor: clinic
+variant: 4
+synthetic: true
+summary: >
+  A synthetic clinic facility persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

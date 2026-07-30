@@ -1,0 +1,21 @@
+scenario_id: scn.gs.contract.017
+title: Paper a landlord assignment contract
+tier: foundational
+stage: contract
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.deals.assignment
+  - vaf.doc_vault.retrieve
+training_domains:
+  - document_handling
+seed: 1056
+slo_seconds: 300
+compliance_checks:
+  - disclose_assignment_fee
+  - accurate_disclosure_to_all_parties
+setup:
+  personas:
+    - ref: persona.buyer.gs_018
+cold_open: >
+  You are assembling the assignment contract for a landlord buyer. Confirm every disclosure is present and accurate, retrieve the executed purchase agreement, and make sure the fee is stated plainly for all parties. Handle the routine case cleanly and by the book.
+is_golden: false

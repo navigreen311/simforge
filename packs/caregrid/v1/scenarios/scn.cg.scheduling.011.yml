@@ -1,0 +1,21 @@
+scenario_id: scn.cg.scheduling.011
+title: Schedule a LVN-candidate home-health visit
+tier: foundational
+stage: scheduling
+tested_agent_village_id: marcus_reed
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - funnelforge.sequences.trigger
+training_domains:
+  - end_to_end_workflow
+seed: 1034
+slo_seconds: 300
+compliance_checks:
+  - verify_active_credentials
+  - honor_patient_care_plan
+setup:
+  personas:
+    - ref: persona.clinician.cg_012
+cold_open: >
+  A LVN-candidate visit needs coverage. Match an eligible clinician with active California credentials, trigger the outreach sequence, honor the patient's care plan, and keep both the clinician and the family informed. Handle the routine case cleanly and by the book.
+is_golden: false

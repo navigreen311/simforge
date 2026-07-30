@@ -1,0 +1,8 @@
+id: persona.buyer.gs_010
+archetype: buyer
+descriptor: retail
+variant: 10
+synthetic: true
+summary: >
+  A synthetic retail buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

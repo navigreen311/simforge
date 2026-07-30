@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_014
+archetype: surveyor
+descriptor: documentation-focused
+variant: 14
+synthetic: true
+summary: >
+  A synthetic documentation-focused surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

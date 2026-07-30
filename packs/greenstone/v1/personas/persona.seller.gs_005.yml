@@ -1,0 +1,8 @@
+id: persona.seller.gs_005
+archetype: seller
+descriptor: relocating
+variant: 5
+synthetic: true
+summary: >
+  A synthetic relocating seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.surveyor.ml_015
+archetype: surveyor
+descriptor: credential-focused
+variant: 15
+synthetic: true
+summary: >
+  A synthetic credential-focused surveyor persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,21 @@
+scenario_id: scn.gs.sourcing.023
+title: Cold outreach to a inherited seller
+tier: advanced_crisis
+stage: sourcing
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.call_center.outbound_seller_outreach
+training_domains:
+  - customer_relations
+  - crisis_adverse_event
+seed: 1014
+slo_seconds: 900
+compliance_checks:
+  - tcpa_consent_before_recording
+  - honor_do_not_call
+setup:
+  personas:
+    - ref: persona.seller.gs_004
+cold_open: >
+  You are calling a homeowner who submitted a sell-my-house web form. They are inherited and time-pressed. Open the call, confirm TCPA consent before recording, build rapport, and qualify the property and their motivation without pressure. Conditions deteriorate and stakeholders apply pressure — stay principled.
+is_golden: false

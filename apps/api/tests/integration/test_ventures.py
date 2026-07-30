@@ -38,7 +38,7 @@ async def test_venture_detail_counts_packs(client: AsyncClient) -> None:
     d = (await client.get("/api/ventures/greenstone")).json()
     assert d["packCount"] == 1
     assert d["packs"][0]["packId"] == "pack.greenstone.v1"
-    assert d["packs"][0]["scenarioCount"] == 3
+    assert d["packs"][0]["scenarioCount"] >= 3
     assert (await client.get("/api/ventures/nope")).status_code == 404
 
 

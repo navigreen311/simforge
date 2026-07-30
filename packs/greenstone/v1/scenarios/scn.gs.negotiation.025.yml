@@ -1,0 +1,21 @@
+scenario_id: scn.gs.negotiation.025
+title: Negotiate with a institutional cash buyer
+tier: advanced_crisis
+stage: negotiation
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.deals.assignment
+training_domains:
+  - customer_relations
+  - crisis_adverse_event
+seed: 1048
+slo_seconds: 900
+compliance_checks:
+  - disclose_assignment_fee
+  - no_misrepresentation
+setup:
+  personas:
+    - ref: persona.buyer.gs_006
+cold_open: >
+  A institutional cash buyer questions your assignment fee. Negotiate the terms, disclose the fee transparently, and hold your margin without misrepresenting the deal. Conditions deteriorate and stakeholders apply pressure — stay principled.
+is_golden: false

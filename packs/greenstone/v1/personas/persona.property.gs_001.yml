@@ -1,0 +1,8 @@
+id: persona.property.gs_001
+archetype: property
+descriptor: single-family
+variant: 1
+synthetic: true
+summary: >
+  A synthetic single-family property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.property.gs_016
+archetype: property
+descriptor: occupied-rental
+variant: 16
+synthetic: true
+summary: >
+  A synthetic occupied-rental property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

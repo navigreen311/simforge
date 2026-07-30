@@ -1,0 +1,8 @@
+id: persona.facility.ml_008
+archetype: facility
+descriptor: surgical-center
+variant: 8
+synthetic: true
+summary: >
+  A synthetic surgical-center facility persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

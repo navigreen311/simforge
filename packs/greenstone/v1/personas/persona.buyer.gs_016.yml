@@ -1,0 +1,8 @@
+id: persona.buyer.gs_016
+archetype: buyer
+descriptor: institutional
+variant: 16
+synthetic: true
+summary: >
+  A synthetic institutional buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

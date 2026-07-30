@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_008
+archetype: surveyor
+descriptor: detail-oriented
+variant: 8
+synthetic: true
+summary: >
+  A synthetic detail-oriented surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

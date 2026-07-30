@@ -1,0 +1,21 @@
+scenario_id: scn.gs.disposition.015
+title: Market a institutional contract to the buyer list
+tier: foundational
+stage: disposition
+tested_agent_village_id: morgan_lee
+tested_forge_caps:
+  - funnelforge.sequences.trigger
+  - cre-forge.deals.assignment
+training_domains:
+  - end_to_end_workflow
+seed: 1070
+slo_seconds: 300
+compliance_checks:
+  - disclose_assignment_fee
+  - honor_do_not_call
+setup:
+  personas:
+    - ref: persona.buyer.gs_016
+cold_open: >
+  You hold a institutional contract and need a buyer fast. Trigger the outreach sequence to your vetted list, disclose the assignment fee, and honor opt-outs while you move the deal to the finish line. Handle the routine case cleanly and by the book.
+is_golden: false

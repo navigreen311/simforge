@@ -1,0 +1,8 @@
+id: persona.patient.cg_009
+archetype: patient
+descriptor: wound-care
+variant: 9
+synthetic: true
+summary: >
+  A synthetic wound-care patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

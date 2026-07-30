@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_016
+archetype: surveyor
+descriptor: senior
+variant: 16
+synthetic: true
+summary: >
+  A synthetic senior surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

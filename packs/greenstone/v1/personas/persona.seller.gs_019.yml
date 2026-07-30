@@ -1,0 +1,8 @@
+id: persona.seller.gs_019
+archetype: seller
+descriptor: probate
+variant: 19
+synthetic: true
+summary: >
+  A synthetic probate seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

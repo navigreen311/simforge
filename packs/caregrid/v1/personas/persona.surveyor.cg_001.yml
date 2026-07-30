@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_001
+archetype: surveyor
+descriptor: state
+variant: 1
+synthetic: true
+summary: >
+  A synthetic state surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

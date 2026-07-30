@@ -1,0 +1,20 @@
+scenario_id: scn.gs.negotiation.022
+title: Negotiate with a buy-and-hold cash buyer
+tier: intermediate
+stage: negotiation
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.deals.assignment
+training_domains:
+  - customer_relations
+seed: 1045
+slo_seconds: 600
+compliance_checks:
+  - disclose_assignment_fee
+  - no_misrepresentation
+setup:
+  personas:
+    - ref: persona.buyer.gs_003
+cold_open: >
+  A buy-and-hold cash buyer questions your assignment fee. Negotiate the terms, disclose the fee transparently, and hold your margin without misrepresenting the deal. Expect a wrinkle mid-task that tests your judgment.
+is_golden: false

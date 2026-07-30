@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_009
+archetype: surveyor
+descriptor: time-pressed
+variant: 9
+synthetic: true
+summary: >
+  A synthetic time-pressed surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

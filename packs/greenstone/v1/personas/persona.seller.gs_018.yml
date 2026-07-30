@@ -1,0 +1,8 @@
+id: persona.seller.gs_018
+archetype: seller
+descriptor: pre-foreclosure
+variant: 18
+synthetic: true
+summary: >
+  A synthetic pre-foreclosure seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.title_officer.gs_015
+archetype: title_officer
+descriptor: cautious
+variant: 15
+synthetic: true
+summary: >
+  A synthetic cautious title_officer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

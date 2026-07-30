@@ -1,0 +1,8 @@
+id: persona.facility.ml_009
+archetype: facility
+descriptor: hospice
+variant: 9
+synthetic: true
+summary: >
+  A synthetic hospice facility persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

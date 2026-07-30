@@ -1,0 +1,8 @@
+id: persona.property.gs_020
+archetype: property
+descriptor: estate
+variant: 20
+synthetic: true
+summary: >
+  A synthetic estate property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

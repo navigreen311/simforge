@@ -1,0 +1,8 @@
+id: persona.surveyor.ml_011
+archetype: surveyor
+descriptor: state
+variant: 11
+synthetic: true
+summary: >
+  A synthetic state surveyor persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

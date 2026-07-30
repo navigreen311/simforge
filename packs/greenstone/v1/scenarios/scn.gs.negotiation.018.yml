@@ -1,0 +1,20 @@
+scenario_id: scn.gs.negotiation.018
+title: Negotiate with a developer cash buyer
+tier: foundational
+stage: negotiation
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.deals.assignment
+training_domains:
+  - customer_relations
+seed: 1041
+slo_seconds: 300
+compliance_checks:
+  - disclose_assignment_fee
+  - no_misrepresentation
+setup:
+  personas:
+    - ref: persona.buyer.gs_019
+cold_open: >
+  A developer cash buyer questions your assignment fee. Negotiate the terms, disclose the fee transparently, and hold your margin without misrepresenting the deal. Handle the routine case cleanly and by the book.
+is_golden: false

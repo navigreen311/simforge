@@ -1,0 +1,20 @@
+scenario_id: scn.gs.sourcing.022
+title: Cold outreach to a skeptical seller
+tier: intermediate
+stage: sourcing
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.call_center.outbound_seller_outreach
+training_domains:
+  - customer_relations
+seed: 1013
+slo_seconds: 600
+compliance_checks:
+  - tcpa_consent_before_recording
+  - honor_do_not_call
+setup:
+  personas:
+    - ref: persona.seller.gs_003
+cold_open: >
+  You are calling a homeowner who submitted a sell-my-house web form. They are skeptical and time-pressed. Open the call, confirm TCPA consent before recording, build rapport, and qualify the property and their motivation without pressure. Expect a wrinkle mid-task that tests your judgment.
+is_golden: false

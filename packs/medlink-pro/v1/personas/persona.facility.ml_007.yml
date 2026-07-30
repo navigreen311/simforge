@@ -1,0 +1,8 @@
+id: persona.facility.ml_007
+archetype: facility
+descriptor: urgent-care
+variant: 7
+synthetic: true
+summary: >
+  A synthetic urgent-care facility persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

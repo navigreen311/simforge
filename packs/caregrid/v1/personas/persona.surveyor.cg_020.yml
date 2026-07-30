@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_020
+archetype: surveyor
+descriptor: by-the-book
+variant: 20
+synthetic: true
+summary: >
+  A synthetic by-the-book surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

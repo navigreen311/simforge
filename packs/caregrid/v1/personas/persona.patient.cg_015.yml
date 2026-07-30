@@ -1,0 +1,8 @@
+id: persona.patient.cg_015
+archetype: patient
+descriptor: palliative
+variant: 15
+synthetic: true
+summary: >
+  A synthetic palliative patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

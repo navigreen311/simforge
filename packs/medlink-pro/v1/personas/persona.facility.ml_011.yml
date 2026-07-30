@@ -1,0 +1,8 @@
+id: persona.facility.ml_011
+archetype: facility
+descriptor: skilled-nursing
+variant: 11
+synthetic: true
+summary: >
+  A synthetic skilled-nursing facility persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

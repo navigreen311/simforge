@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_003
+archetype: surveyor
+descriptor: unannounced
+variant: 3
+synthetic: true
+summary: >
+  A synthetic unannounced surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.
