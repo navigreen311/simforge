@@ -3,7 +3,7 @@
 Turns the raw coverage heatmap into a ranked worklist: which (pack × role × tier) cells are
 under-tested, and how many scenarios to add to close the gap. Priority weights a deficit by tier —
 an untested crisis path is worse than an untested foundational one — so the top of the list is where
-new authoring effort buys the most certification confidence. Pure derived analysis, no external deps.
+new authoring effort buys the most certification confidence. Pure derived analysis.
 """
 
 from __future__ import annotations
