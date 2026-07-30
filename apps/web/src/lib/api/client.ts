@@ -577,7 +577,79 @@ export const dashboard = {
       `/api/dashboard/runs-per-day?days=${days}`,
     ),
   agentCerts: () => apiGet<{ items: AgentCertRollup[] }>("/api/dashboard/agent-certs"),
+  coverageHeatmap: () => apiGet<CoverageHeatmap>("/api/dashboard/coverage-heatmap"),
+  deptContextMatrix: () => apiGet<DeptContextMatrix>("/api/dashboard/dept-context-matrix"),
+  cognitiveTrends: (agentVillageId: string) =>
+    apiGet<CognitiveTrends>(`/api/dashboard/cognitive-trends/${agentVillageId}`),
+  certTimeline: (limit = 100) =>
+    apiGet<{ events: CertTimelineEvent[] }>(`/api/dashboard/cert-timeline?limit=${limit}`),
+  ccbDiff: (runId: string) => apiGet<CcbDiff>(`/api/dashboard/ccb-diff/${runId}`),
 };
+
+export interface CoverageHeatmapCell {
+  pack: string;
+  role: string;
+  tier: string;
+  count: number;
+  meets_min: boolean;
+}
+
+export interface CoverageHeatmap {
+  axis: string;
+  cells: CoverageHeatmapCell[];
+  min_per_cell: number;
+}
+
+export interface DeptContextCell {
+  department: string;
+  forge_context: string;
+  tier: string;
+  status: string;
+  covering_certs: number;
+}
+
+export interface DeptContextMatrix {
+  forge_contexts: string[];
+  cells: DeptContextCell[];
+  total_dept_certs: number;
+}
+
+export interface CognitiveTrendPoint {
+  date: string | null;
+  values: Record<string, number>;
+  deltas: Record<string, number>;
+  drift_magnitude: number;
+}
+
+export interface CognitiveTrends {
+  agent: string;
+  points: CognitiveTrendPoint[];
+  has_trend: boolean;
+}
+
+export interface CertTimelineEvent {
+  event: string;
+  agent_cert_id: string | null;
+  dept_cert_id: string | null;
+  actor: string;
+  reason: string | null;
+  timestamp: string | null;
+}
+
+export interface CcbFrameworkDiff {
+  framework: string;
+  changed_keys: string[];
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+}
+
+export interface CcbDiff {
+  run_id: string;
+  available: boolean;
+  reason?: string;
+  identical?: boolean;
+  diffs?: CcbFrameworkDiff[];
+}
 
 export interface ConstitutionCurrent {
   version: string;

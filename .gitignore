@@ -22,6 +22,8 @@ build/
 out/
 *.tsbuildinfo
 coverage/
+# ...but the /dashboard/coverage app route is source, not a coverage report.
+!apps/web/src/app/dashboard/coverage/
 
 # Python
 __pycache__/
