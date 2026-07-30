@@ -719,6 +719,31 @@ export const productionOutcomes = {
   correlation: () => apiGet<CorrelationReport>("/api/production-outcomes/correlation"),
 };
 
+export interface TemporalEvent {
+  at_turn: number;
+  kind: string;
+  description: string;
+}
+
+export interface TemporalTimeBomb {
+  deadline_turn: number;
+  defuse: string;
+  consequence: string;
+}
+
+export interface TemporalScenario {
+  id: string;
+  name: string;
+  scenario_id: string | null;
+  events: TemporalEvent[];
+  time_bombs: TemporalTimeBomb[];
+}
+
+export const temporal = {
+  list: () =>
+    apiGet<{ temporal_scenarios: TemporalScenario[]; total: number }>("/api/temporal/"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>

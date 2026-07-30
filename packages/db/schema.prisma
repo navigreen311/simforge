@@ -131,6 +131,20 @@ model GoldenNomination {
   @@index([status])
 }
 
+// Temporal Realism Engine (v1.1). A reusable definition of time-based scenario dynamics: scheduled
+// events (delayed/async) and time-bombs (a deadline turn + a defuse action + a consequence).
+model TemporalScenario {
+  id         String   @id @default(cuid())
+  name       String
+  scenarioId String?
+  events     Json     @default("[]")
+  timeBombs  Json     @default("[]")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([scenarioId])
+}
+
 // Production Outcome Correlation (v1.1). Real production performance per agent × forge capability,
 // so certification scores can be correlated against production reality (miscalibration detection).
 model ProductionOutcome {
