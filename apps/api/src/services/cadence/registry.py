@@ -70,6 +70,13 @@ JOBS: tuple[CadenceJob, ...] = (
         "Purge evidence past retention unless on legal hold (§12.3).",
         jobs.evidence_purge,
     ),
+    CadenceJob(
+        "expire_waivers",
+        "hourly",
+        {"minute": 10},
+        "Expire waivers past their TTL (§11.5).",
+        jobs.expire_waivers_job,
+    ),
 )
 
 JOBS_BY_NAME: dict[str, CadenceJob] = {j.name: j for j in JOBS}

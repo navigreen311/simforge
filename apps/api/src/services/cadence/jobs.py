@@ -63,6 +63,15 @@ async def daily_snapshot(session: AsyncSession | None = None) -> dict:
     return {"job": "daily_snapshot", **result}
 
 
+async def expire_waivers_job(session: AsyncSession | None = None) -> dict:
+    """Expire waivers past their TTL (§11.5)."""
+    from src.services.governance.waiver import expire_waivers
+
+    async with _session(session) as s:
+        expired = await expire_waivers(s)
+    return {"job": "expire_waivers", "expired": len(expired)}
+
+
 async def evidence_purge(session: AsyncSession | None = None) -> dict:
     """Purge evidence records past retention (unless on legal hold) — §12.3."""
     from src.services.evidence import purge_expired
