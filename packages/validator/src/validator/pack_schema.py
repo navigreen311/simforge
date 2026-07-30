@@ -21,6 +21,13 @@ class ReadinessGateSpec(BaseModel):
     compliance_require_pass: bool = True
 
 
+class ForgeToolSpec(BaseModel):
+    forge: str
+    modules: list[str] = Field(default_factory=list)
+    min_version: str | None = None
+    sandbox_tenant_required: bool = False
+
+
 class PackSpec(BaseModel):
     pack_id: str = Field(..., pattern=r"^pack\.[a-z0-9_-]+\.v\d+$")
     name: str
@@ -34,6 +41,7 @@ class PackSpec(BaseModel):
     narrative_mode_default: str = "protected"
     locale: str = "en"
     rubric_profile: str
+    forge_tools: list[ForgeToolSpec] = Field(default_factory=list)  # spec §6.1 forge_tools
     readiness_gate: ReadinessGateSpec = Field(default_factory=ReadinessGateSpec)
 
     @field_validator("locale")

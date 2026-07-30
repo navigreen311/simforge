@@ -11,7 +11,7 @@ from validator.loader import PackLoadError, load_pack
 from validator.rules import validate_pack
 
 
-def validate_path(pack_dir: Path) -> bool:
+def validate_path(pack_dir: Path, strict: bool = False) -> bool:
     print(f"\n== {pack_dir} ==")
     try:
         loaded = load_pack(pack_dir)
@@ -19,7 +19,7 @@ def validate_path(pack_dir: Path) -> bool:
         print(f"  ERROR loading: {exc}")
         return False
 
-    result = validate_pack(loaded)
+    result = validate_pack(loaded, strict=strict)
     print(f"  pack: {loaded.spec.pack_id}  scenarios: {len(loaded.scenarios)}")
     for issue in result.issues:
         print(f"  [{issue.severity}] {issue.code}: {issue.message}")
@@ -29,8 +29,10 @@ def validate_path(pack_dir: Path) -> bool:
 
 def main() -> int:
     args = sys.argv[1:]
+    strict = "--strict" in args
+    args = [a for a in args if a != "--strict"]
     if not args:
-        print("usage: simforge-validate <pack_dir> [<pack_dir> ...]")
+        print("usage: simforge-validate [--strict] <pack_dir> [<pack_dir> ...]")
         return 1
 
     targets: list[Path] = []
@@ -46,7 +48,7 @@ def main() -> int:
         print(f"No pack.yml found under: {', '.join(args)}")
         return 1
 
-    all_ok = all(validate_path(t) for t in targets)
+    all_ok = all(validate_path(t, strict=strict) for t in targets)
     print("\nALL PACKS VALID" if all_ok else "\nVALIDATION FAILED")
     return 0 if all_ok else 1
 
