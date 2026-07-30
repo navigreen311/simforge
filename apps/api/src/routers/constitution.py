@@ -27,6 +27,9 @@ class ProposeAmendmentRequest(BaseModel):
     proposer_id: str
     diff_yaml: str
     cooling_days: int = 7
+    target_article: str | None = None
+    required_approvers: list[str] = []
+    quorum_rule: str | None = None
 
 
 class SafeModeRequest(BaseModel):
@@ -53,6 +56,23 @@ async def current(session: AsyncSession = Depends(get_session)) -> dict:
             status_code=status.HTTP_404_NOT_FOUND, detail="No constitution ratified"
         )
     return _const_out(c)
+
+
+@router.get("/articles", dependencies=[Depends(require_role("viewer"))])
+async def articles(session: AsyncSession = Depends(get_session)) -> dict:
+    """The current constitution's structured articles (§11.6) + which one governs amendments."""
+    from src.services.governance.constitution import AMENDMENT_PROCESS_ARTICLE, parse_articles
+
+    c = await get_current_constitution(session)
+    if c is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No constitution ratified"
+        )
+    return {
+        "version": c.version,
+        "articles": parse_articles(c.yamlContent),
+        "amendment_process_article": AMENDMENT_PROCESS_ARTICLE,
+    }
 
 
 @router.get("/history", dependencies=[Depends(require_role("viewer"))])
@@ -110,13 +130,22 @@ async def propose(
     body: ProposeAmendmentRequest, session: AsyncSession = Depends(get_session)
 ) -> dict:
     try:
-        a = await propose_amendment(session, body.proposer_id, body.diff_yaml, body.cooling_days)
+        a = await propose_amendment(
+            session,
+            body.proposer_id,
+            body.diff_yaml,
+            body.cooling_days,
+            target_article=body.target_article,
+            required_approvers=body.required_approvers,
+            quorum_rule=body.quorum_rule,
+        )
     except AmendmentError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {
         "amendment_id": a.amendmentId,
         "status": a.status,
         "cooling_ends_at": a.coolingPeriodEndsAt,
+        "impact": a.impactAnalysis,
     }
 
 

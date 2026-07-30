@@ -15,10 +15,15 @@ from ulid import ULID
 
 from src.models.cert import AgentCert, CertLifecycleEvent, CertSnapshot
 from src.models.governance import Constitution, ConstitutionalAmendment
-from src.services.governance.constitution import get_current_constitution
+from src.services.governance.constitution import (
+    AMENDMENT_PROCESS_ARTICLE,
+    get_current_constitution,
+)
 from src.utils.time import utcnow
 
 COOLING_DAYS_DEFAULT = 7
+# Meta-amendments (amending the amendment process itself) need a longer cooling + unanimous quorum.
+META_COOLING_DAYS = 14
 
 
 class AmendmentError(Exception):
@@ -54,11 +59,55 @@ async def propose_amendment(
     proposer: str,
     diff_yaml: str,
     cooling_days: int = COOLING_DAYS_DEFAULT,
+    *,
+    target_article: str | None = None,
+    required_approvers: list[str] | None = None,
+    quorum_rule: str | None = None,
 ) -> ConstitutionalAmendment:
+    """Propose an amendment. A META-amendment (target_article == the amendment-process article, or
+    an explicit unanimous request) forces a 14-day cooling + unanimous founder+witness quorum
+    (§11.6). When approvers are declared (always for meta), ratification is gated by a §11.5
+    ApprovalRequest; the simple no-approver path stays cooling-only (back-compat)."""
     base = await get_current_constitution(session)
     if base is None:
         raise AmendmentError("No ratified constitution to amend")
+
+    is_meta = target_article == AMENDMENT_PROCESS_ARTICLE
+    approvers = list(required_approvers or [])
+    if is_meta:
+        cooling_days = max(cooling_days, META_COOLING_DAYS)
+        quorum_rule = "unanimous"
+        if len(approvers) < 2:
+            raise AmendmentError(
+                "A meta-amendment (amending the amendment process) requires ≥2 named approvers "
+                "(founder + witness) under unanimous quorum (§11.6)."
+            )
+    quorum_rule = quorum_rule or "single"
+
     now = utcnow()
+    impact: dict = {
+        "affected_certs": await _count_affected_certs(session, base.version),
+        "is_meta": is_meta,
+        "target_article": target_article,
+        "quorum_rule": quorum_rule if approvers else None,
+    }
+
+    # If approvers are declared, gate ratification on a §11.5 approval request (quorum + journal).
+    if approvers:
+        from src.services.governance.approval import create_request
+
+        req = await create_request(
+            session,
+            kind="constitutional_amendment",
+            subject={"target_article": target_article, "proposer": proposer, "meta": is_meta},
+            summary=f"{'META ' if is_meta else ''}amendment to {target_article or 'constitution'}",
+            quorum_rule=quorum_rule,
+            required_approvers=approvers,
+            created_by=proposer,
+            ttl_hours=cooling_days * 24 + 24,  # let approvals accrue through the cooling window
+        )
+        impact["approval_request_id"] = req.id
+
     amendment = ConstitutionalAmendment(
         amendmentId=f"amend:{ULID()}",
         baseConstitutionId=base.id,
@@ -66,7 +115,7 @@ async def propose_amendment(
         proposedBy=proposer,
         coolingPeriodEndsAt=now + timedelta(days=cooling_days),
         diffYaml=diff_yaml,
-        impactAnalysis={"affected_certs": await _count_affected_certs(session, base.version)},
+        impactAnalysis=impact,
         status="in_cooling",
     )
     session.add(amendment)
@@ -116,6 +165,23 @@ async def ratify_amendment(session: AsyncSession, amendment_id: str, ratified_by
         raise AmendmentError(f"Cannot ratify amendment in status {a.status}")
     if a.coolingPeriodEndsAt > utcnow():
         raise AmendmentError("Cooling period has not ended")
+
+    # Quorum gate (§11.6): if the proposal declared approvers, its linked approval request must be
+    # resolved 'approved' before ratification. No linked request → cooling-only (back-compat).
+    approval_request_id = (a.impactAnalysis or {}).get("approval_request_id")
+    if approval_request_id:
+        from src.models.approval import ApprovalRequest
+
+        req = (
+            await session.execute(
+                select(ApprovalRequest).where(ApprovalRequest.id == approval_request_id)
+            )
+        ).scalar_one_or_none()
+        if req is None or req.status != "approved":
+            raise AmendmentError(
+                f"Quorum not met: approval request is "
+                f"'{req.status if req else 'missing'}', not 'approved' (§11.6)."
+            )
 
     base = (
         await session.execute(select(Constitution).where(Constitution.id == a.baseConstitutionId))

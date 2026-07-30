@@ -4,11 +4,36 @@ from __future__ import annotations
 
 import hashlib
 
+import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.governance import Constitution
 from src.utils.time import utcnow
+
+
+def parse_articles(yaml_content: str) -> list[dict]:
+    """Structured articles [{id, title, text}] parsed from a constitution's YAML (§11.6)."""
+    try:
+        data = yaml.safe_load(yaml_content) or {}
+    except yaml.YAMLError:
+        return []
+    out: list[dict] = []
+    for a in data.get("articles", []) or []:
+        if isinstance(a, dict):
+            out.append(
+                {
+                    "id": str(a.get("id", "")),
+                    "title": str(a.get("title", "")),
+                    "text": " ".join(str(a.get("text", "")).split()),
+                }
+            )
+    return out
+
+
+# The article that governs the amendment process itself — amending it is a META-amendment (§11.6),
+# which requires the longer cooling period + unanimous founder+witness quorum.
+AMENDMENT_PROCESS_ARTICLE = "A5"
 
 
 async def get_current_constitution(session: AsyncSession) -> Constitution | None:
