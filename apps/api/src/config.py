@@ -166,6 +166,13 @@ class Settings(BaseSettings):
     openai_transcribe_model: str = Field(default="whisper-1", alias="OPENAI_TRANSCRIBE_MODEL")
     transcript_timeout_seconds: float = Field(default=120.0, alias="TRANSCRIPT_TIMEOUT_SECONDS")
 
+    # Sandbox-vs-production parity SLA (v1.1). A Forge whose sandbox behaviour has drifted from
+    # production below this score is `unsafe_to_certify`. Measuring true parity needs production
+    # telemetry (a seam), so parity is *recorded* explicitly; absent measurements read as safe.
+    # PARITY_ENFORCE (default off) makes a sub-SLA forge hard-block cert issuance; off = annotate.
+    parity_sla_threshold: float = Field(default=0.90, alias="PARITY_SLA_THRESHOLD")
+    parity_enforce: bool = Field(default=False, alias="PARITY_ENFORCE")
+
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 

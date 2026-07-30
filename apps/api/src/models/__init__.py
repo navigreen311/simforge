@@ -17,6 +17,7 @@ from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
 from src.models.dress_rehearsal import DressRehearsal
 from src.models.evidence import EvidenceAccess, EvidenceRecord
+from src.models.forge_parity import ForgeParity
 from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.golden_nomination import GoldenNomination
 from src.models.golden_run import GoldenRun
@@ -70,6 +71,7 @@ __all__ = [
     "SafeModeState",
     "EvidenceRecord",
     "EvidenceAccess",
+    "ForgeParity",
     "Waiver",
     "Appeal",
     "DressRehearsal",

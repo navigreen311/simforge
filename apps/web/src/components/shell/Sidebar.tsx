@@ -33,6 +33,7 @@ const SECTIONS: NavSection[] = [
       { href: "/dashboard/policy", label: "Policy (PDP)" },
       { href: "/dashboard/execution", label: "Integrated Execution" },
       { href: "/dashboard/drift", label: "Drift Canary" },
+      { href: "/dashboard/parity", label: "Forge Parity" },
       { href: "/dashboard/jurisdictions", label: "Jurisdictions" },
     ],
   },
