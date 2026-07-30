@@ -13,6 +13,7 @@ from src.services.forges.base import Fault, FaultType, SandboxTenant
 from src.utils.time import utcnow
 
 _OPENING_BALANCE = 250_000.0
+_VELOCITY_THRESHOLD = 3  # wires within a tenant before the velocity signal trips
 
 
 @dataclass
@@ -21,6 +22,8 @@ class _Tenant:
     balance: float = _OPENING_BALANCE
     faults: dict[str, Fault] = field(default_factory=dict)  # fault_type -> Fault
     audit: list[dict] = field(default_factory=list)
+    ledger: list[dict] = field(default_factory=list)  # running transaction history
+    wire_count: int = 0  # velocity signal
 
 
 class MockBankEngine:
@@ -71,7 +74,12 @@ class MockBankEngine:
                     tenant_id, "apply", "declined", amount, reason=kind, fault=t.faults[kind]
                 )
         return self._result(
-            tenant_id, "apply", "approved", amount, reference=self._next_id("cf_app")
+            tenant_id,
+            "apply",
+            "approved",
+            amount,
+            reference=self._next_id("cf_app"),
+            decision=self._decision(amount, t.balance),
         )
 
     def wire(self, tenant_id: str, amount: float, to: str = "escrow") -> dict:
@@ -94,6 +102,7 @@ class MockBankEngine:
                 fault=t.faults[FaultType.VELOCITY],
             )
         t.balance -= amount
+        t.wire_count += 1
         return self._result(tenant_id, "wire", "sent", amount, reference=self._next_id("cf_wire"))
 
     def emd_release(self, tenant_id: str, amount: float) -> dict:
@@ -113,9 +122,41 @@ class MockBankEngine:
 
     def account(self, tenant_id: str) -> dict:
         t = self._require(tenant_id)
-        return {"tenant_id": tenant_id, "balance": t.balance, "active_faults": list(t.faults)}
+        return {
+            "tenant_id": tenant_id,
+            "balance": t.balance,
+            "opening_balance": _OPENING_BALANCE,
+            "wire_count": t.wire_count,
+            "active_faults": list(t.faults),
+            "ledger_entries": len(t.ledger),
+        }
+
+    def ledger(self, tenant_id: str) -> list[dict]:
+        return list(self._require(tenant_id).ledger)
+
+    def world_state(self, tenant_id: str) -> dict:
+        """Rich domain snapshot: balance movement, the full ledger, and velocity."""
+        t = self._require(tenant_id)
+        settled = sum(e["amount"] for e in t.ledger if e["op"] == "wire" and e["outcome"] == "sent")
+        return {
+            "balance": t.balance,
+            "opening_balance": _OPENING_BALANCE,
+            "settled_out": settled,
+            "wire_count": t.wire_count,
+            "velocity_flag": t.wire_count >= _VELOCITY_THRESHOLD,
+            "active_faults": list(t.faults),
+            "ledger": t.ledger,
+        }
 
     # -- helpers ----------------------------------------------------------
+
+    def _decision(self, amount: float, balance: float) -> dict:
+        """A deterministic credit-decision tier so approvals carry a reason, not just 'yes'."""
+        if amount <= 50_000:
+            return {"tier": "auto_approve", "reason": "within auto-approval limit"}
+        if amount <= balance:
+            return {"tier": "standard", "reason": "covered by available balance"}
+        return {"tier": "manual_review", "reason": "exceeds available balance — review advised"}
 
     def _require(self, tenant_id: str) -> _Tenant:
         if tenant_id not in self._tenants:
@@ -137,6 +178,7 @@ class MockBankEngine:
         reason=None,
         reference=None,
         fault: Fault | None = None,
+        decision: dict | None = None,
     ) -> dict:
         res = {
             "op": op,
@@ -145,7 +187,22 @@ class MockBankEngine:
             "reason": reason,
             "reference": reference,
         }
+        if decision is not None:
+            res["decision"] = decision
         self._log(tenant_id, op, {"outcome": outcome, "amount": amount, "reason": reason})
+        t = self._tenants[tenant_id]
+        t.ledger.append(
+            {
+                "seq": len(t.ledger) + 1,
+                "op": op,
+                "outcome": outcome,
+                "amount": amount,
+                "reason": reason,
+                "reference": reference,
+                "balance_after": t.balance,
+                "ts": utcnow().isoformat(),
+            }
+        )
         if fault is not None:
             res["fault"] = {
                 "type": fault.fault_type,

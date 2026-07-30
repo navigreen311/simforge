@@ -63,3 +63,8 @@ class LocalCREForgeAdapter(ForgeAdapter):
             return self.engine.inject_fault_on_deal(tenant_id, deal_type, fault_type)
         deal = self.engine.create_deal(tenant_id, deal_type)
         return self.engine.process_deal(tenant_id, deal.deal_id)
+
+    async def world_state(self, tenant_id: str) -> dict:
+        base = await super().world_state(tenant_id)
+        base["deal_desk"] = self.engine.world_state(tenant_id)
+        return base

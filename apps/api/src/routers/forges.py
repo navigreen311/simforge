@@ -76,8 +76,14 @@ async def capitalforge_demo(body: DemoBankRequest) -> dict:
         )
     result = await adapter.apply(tenant.tenant_id, body.amount)
     audit = await adapter.get_audit_log(tenant.tenant_id)
+    world = await adapter.world_state(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+    return {
+        "tenant_id": tenant.tenant_id,
+        "result": result,
+        "audit_entries": len(audit),
+        "world": world,
+    }
 
 
 @router.post("/vaf/demo", dependencies=[Depends(require_role("admin"))])
@@ -87,8 +93,14 @@ async def vaf_demo(body: DemoDocRequest) -> dict:
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.generate_and_extract(tenant.tenant_id, body.doc_type, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
+    world = await adapter.world_state(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+    return {
+        "tenant_id": tenant.tenant_id,
+        "result": result,
+        "audit_entries": len(audit),
+        "world": world,
+    }
 
 
 @router.post("/voiceforge/demo", dependencies=[Depends(require_role("admin"))])
@@ -98,8 +110,14 @@ async def voiceforge_demo(body: DemoCallRequest) -> dict:
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.place_and_handle(tenant.tenant_id, body.direction, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
+    world = await adapter.world_state(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+    return {
+        "tenant_id": tenant.tenant_id,
+        "result": result,
+        "audit_entries": len(audit),
+        "world": world,
+    }
 
 
 @router.post("/cre-forge/demo", dependencies=[Depends(require_role("admin"))])
@@ -109,8 +127,14 @@ async def cre_forge_demo(body: DemoDealRequest) -> dict:
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.create_and_process(tenant.tenant_id, body.deal_type, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
+    world = await adapter.world_state(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+    return {
+        "tenant_id": tenant.tenant_id,
+        "result": result,
+        "audit_entries": len(audit),
+        "world": world,
+    }
 
 
 @router.post("/medlink-pro/demo", dependencies=[Depends(require_role("admin"))])
@@ -120,8 +144,14 @@ async def medlink_pro_demo(body: DemoConsoleRequest) -> dict:
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.start_and_run(tenant.tenant_id, body.module, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
+    world = await adapter.world_state(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+    return {
+        "tenant_id": tenant.tenant_id,
+        "result": result,
+        "audit_entries": len(audit),
+        "world": world,
+    }
 
 
 @router.post("/funnelforge/demo", dependencies=[Depends(require_role("admin"))])
@@ -131,5 +161,11 @@ async def funnelforge_demo(body: DemoFlowRequest) -> dict:
     tenant = await adapter.provision_sandbox_tenant("demo")
     result = await adapter.trigger_and_run(tenant.tenant_id, body.module, body.fault)
     audit = await adapter.get_audit_log(tenant.tenant_id)
+    world = await adapter.world_state(tenant.tenant_id)
     await adapter.teardown_sandbox_tenant(tenant.tenant_id)
-    return {"tenant_id": tenant.tenant_id, "result": result, "audit_entries": len(audit)}
+    return {
+        "tenant_id": tenant.tenant_id,
+        "result": result,
+        "audit_entries": len(audit),
+        "world": world,
+    }
