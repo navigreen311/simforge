@@ -50,6 +50,7 @@ from src.routers import (
     scenarios,
     training,
     ventures,
+    webhooks,
 )
 from src.telemetry.logging import configure_logging
 from src.telemetry.metrics import configure_metrics
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(capabilities.router, prefix="/api/capabilities", tags=["capabilities"])
     app.include_router(scenario_bank.router, prefix="/api/scenario-bank", tags=["scenario-bank"])
     app.include_router(locales.router, prefix="/api/locales", tags=["locales"])
+    app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

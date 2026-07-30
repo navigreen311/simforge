@@ -141,6 +141,9 @@ class Settings(BaseSettings):
     linear_api_key: str = Field(default="", alias="LINEAR_API_KEY")
     linear_team_id: str = Field(default="", alias="LINEAR_TEAM_ID")
     linear_api_url: str = Field(default="https://api.linear.app/graphql", alias="LINEAR_API_URL")
+    # Inbound webhook signing secret (§C.11). When set, /api/webhooks/linear enforces the
+    # Linear-Signature HMAC; when empty (dev), signatures are accepted with a warning.
+    linear_webhook_secret: str = Field(default="", alias="LINEAR_WEBHOOK_SECRET")
 
     # Web-search ingestion for the Scenario Bank (ADR-0042). Empty key → the "stub" provider, so the
     # Web ingestion tab honestly reports "not configured" — no fake results and no network in CI.
