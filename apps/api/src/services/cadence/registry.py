@@ -49,6 +49,13 @@ JOBS: tuple[CadenceJob, ...] = (
         "Check the Village schema fingerprint for drift (§16.1).",
         jobs.daily_fingerprint,
     ),
+    CadenceJob(
+        "hourly_approval_escalation",
+        "hourly",
+        {"minute": 5},
+        "Expire approval requests past their TTL — time-bound auto-escalation (§11.5).",
+        jobs.hourly_approval_escalation,
+    ),
 )
 
 JOBS_BY_NAME: dict[str, CadenceJob] = {j.name: j for j in JOBS}

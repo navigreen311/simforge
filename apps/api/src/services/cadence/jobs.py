@@ -63,6 +63,15 @@ async def daily_snapshot(session: AsyncSession | None = None) -> dict:
     return {"job": "daily_snapshot", **result}
 
 
+async def hourly_approval_escalation(session: AsyncSession | None = None) -> dict:
+    """Expire approval requests past their TTL (§11.5 time-bound auto-escalation)."""
+    from src.services.governance.approval import expire_stale_requests
+
+    async with _session(session) as s:
+        expired = await expire_stale_requests(s)
+    return {"job": "hourly_approval_escalation", "expired": expired, "count": len(expired)}
+
+
 async def daily_fingerprint(session: AsyncSession | None = None) -> dict:
     """Check the Village schema fingerprint for drift (§16.1)."""
     from src.services.village.fingerprint import capture_fingerprint
