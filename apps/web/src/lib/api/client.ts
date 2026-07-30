@@ -584,7 +584,29 @@ export const dashboard = {
   certTimeline: (limit = 100) =>
     apiGet<{ events: CertTimelineEvent[] }>(`/api/dashboard/cert-timeline?limit=${limit}`),
   ccbDiff: (runId: string) => apiGet<CcbDiff>(`/api/dashboard/ccb-diff/${runId}`),
+  coverageRecommendations: (minPerCell = 3) =>
+    apiGet<CoverageOptimizerReport>(
+      `/api/coverage/recommendations?min_per_cell=${minPerCell}`,
+    ),
 };
+
+export interface CoverageRecommendation {
+  pack: string;
+  role: string;
+  tier: string;
+  current: number;
+  target: number;
+  deficit: number;
+  priority: number;
+  rationale: string;
+}
+
+export interface CoverageOptimizerReport {
+  min_per_cell: number;
+  total_deficit: number;
+  fully_covered: boolean;
+  recommendations: CoverageRecommendation[];
+}
 
 export interface CoverageHeatmapCell {
   pack: string;

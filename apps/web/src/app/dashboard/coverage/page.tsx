@@ -3,6 +3,7 @@ import {
   dashboard,
   type CertTimelineEvent,
   type CoverageHeatmap,
+  type CoverageOptimizerReport,
   type DeptContextMatrix,
 } from "@/lib/api/client";
 
@@ -23,16 +24,19 @@ export default async function CoveragePage() {
   let heatmap: CoverageHeatmap | null = null;
   let matrix: DeptContextMatrix | null = null;
   let timeline: CertTimelineEvent[] = [];
+  let optimizer: CoverageOptimizerReport | null = null;
   let error: string | null = null;
   try {
-    const [h, m, t] = await Promise.all([
+    const [h, m, t, o] = await Promise.all([
       dashboard.coverageHeatmap(),
       dashboard.deptContextMatrix(),
       dashboard.certTimeline(50),
+      dashboard.coverageRecommendations(),
     ]);
     heatmap = h;
     matrix = m;
     timeline = t.events;
+    optimizer = o;
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load coverage data";
   }
@@ -63,6 +67,66 @@ export default async function CoveragePage() {
         </div>
       ) : (
         <>
+          {/* Optimizer — the actionable worklist, first. */}
+          <section className="mb-10">
+            <h2 className="mb-1 text-lg">Coverage optimizer</h2>
+            <p className="mb-3 text-xs text-ink-400">
+              A ranked authoring worklist: which role/tier cells to add scenarios to first. Priority
+              weights the deficit by tier (a missing crisis path outranks a missing foundational one)
+              and bumps entirely-empty cells.
+            </p>
+            {optimizer && optimizer.fully_covered ? (
+              <div className="rounded-lg border border-success/30 bg-success/10 p-4 text-sm text-success">
+                Every role/tier cell meets the minimum of {optimizer.min_per_cell}. No authoring gaps.
+              </div>
+            ) : optimizer && optimizer.recommendations.length > 0 ? (
+              <>
+                <p className="mb-2 text-xs text-ink-300">
+                  Total scenarios to author to close all gaps:{" "}
+                  <span className="font-mono text-gold-400">{optimizer.total_deficit}</span>
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-ink-500">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-ink-800 text-ink-200">
+                      <tr>
+                        <th className="px-4 py-2 font-medium">#</th>
+                        <th className="px-4 py-2 font-medium">Role</th>
+                        <th className="px-4 py-2 font-medium">Tier</th>
+                        <th className="px-3 py-2 text-center font-medium">Have</th>
+                        <th className="px-3 py-2 text-center font-medium">Add</th>
+                        <th className="px-3 py-2 text-center font-medium">Priority</th>
+                        <th className="px-4 py-2 font-medium">Why</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-ink-600">
+                      {optimizer.recommendations.slice(0, 15).map((r, i) => (
+                        <tr key={`${r.role}-${r.tier}-${i}`}>
+                          <td className="px-4 py-2 text-ink-500">{i + 1}</td>
+                          <td className="px-4 py-2 font-mono text-xs text-ink-100">{r.role}</td>
+                          <td className="px-4 py-2 text-ink-200">{r.tier}</td>
+                          <td className="px-3 py-2 text-center font-mono text-ink-300">
+                            {r.current}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-gold-400">
+                            +{r.deficit}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-ink-300">
+                            {r.priority}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-ink-400">{r.rationale}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <EmptyNote>
+                No scenarios ingested yet, so there&apos;s nothing to optimize. Import a pack first.
+              </EmptyNote>
+            )}
+          </section>
+
           {/* Coverage heatmap — role × tier. */}
           <section className="mb-10">
             <h2 className="mb-1 text-lg">Scenario coverage — role × tier</h2>

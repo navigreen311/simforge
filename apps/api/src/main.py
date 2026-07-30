@@ -25,6 +25,7 @@ from src.routers import (
     certs,
     cohort,
     constitution,
+    coverage,
     dashboard,
     departments,
     drift,
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(scenario_bank.router, prefix="/api/scenario-bank", tags=["scenario-bank"])
     app.include_router(locales.router, prefix="/api/locales", tags=["locales"])
     app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
+    app.include_router(coverage.router, prefix="/api/coverage", tags=["coverage"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
