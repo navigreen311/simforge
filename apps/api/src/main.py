@@ -24,6 +24,7 @@ from src.routers import (
     capabilities,
     certs,
     cohort,
+    cold_start,
     constitution,
     coverage,
     dashboard,
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
         supply_chain.router, prefix="/api/supply-chain", tags=["supply-chain"]
     )
     app.include_router(transfer.router, prefix="/api/transfer", tags=["transfer"])
+    app.include_router(cold_start.router, prefix="/api/cold-start", tags=["cold-start"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

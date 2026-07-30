@@ -652,6 +652,29 @@ export const transfer = {
   opportunities: () => apiGet<TransferReport>("/api/transfer/opportunities"),
 };
 
+export interface ColdStartMilestone {
+  key: string;
+  label: string;
+  done: boolean;
+}
+
+export interface ColdStartPlaybook {
+  venture: string;
+  name: string;
+  pack: string | null;
+  ready: boolean;
+  progress: string;
+  blocking_step: string | null;
+  milestones: ColdStartMilestone[];
+  elapsed_days: number | null;
+  sla_target_days: number;
+  sla_status: string; // met | within | at_risk | breached | unknown
+}
+
+export const coldStart = {
+  all: () => apiGet<{ playbooks: ColdStartPlaybook[]; total: number }>("/api/cold-start/"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>
