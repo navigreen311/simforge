@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     cert_validity_days: int = Field(default=90, alias="CERT_VALIDITY_DAYS")
     # DeptCert: default minimum distinct agents holding relevant AgentCerts (D2/§3.1; Pack-config).
     dept_min_agent_certs: int = Field(default=3, alias="DEPT_MIN_AGENT_CERTS")
+    # Readiness Gate B4: require ≥ blind_mode_pct of a cert battery to be blind runs. Honest seam —
+    # default off so the dev single-run battery still issues; flip on for real cert batteries.
+    cert_enforce_blind_mode: bool = Field(default=False, alias="CERT_ENFORCE_BLIND_MODE")
+    cert_blind_mode_pct: float = Field(default=0.25, alias="CERT_BLIND_MODE_PCT")
     # P2 compliance: enforce OBLIGATION rules as hard failures (default off — honest seam).
     # Obligations are always computed + reported; become P2 auto-fails once flipped on for real.
     compliance_enforce_obligations: bool = Field(
