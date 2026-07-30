@@ -768,6 +768,25 @@ export const ontology = {
   graph: (venture: string) => apiGet<OntologyGraph>(`/api/ontology/${venture}`),
 };
 
+export interface HandoffStep {
+  from: string;
+  to: string;
+  provides: string[];
+  required: string[];
+  consent: boolean;
+}
+
+export interface HandoffTest {
+  id: string;
+  name: string;
+  scenario_id: string | null;
+  chain: HandoffStep[];
+}
+
+export const handoff = {
+  list: () => apiGet<{ handoff_tests: HandoffTest[]; total: number }>("/api/handoff/"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>

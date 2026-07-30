@@ -22,6 +22,7 @@ from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.golden_nomination import GoldenNomination
 from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
+from src.models.handoff_test import HandoffTest
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.ontology import OntologyEntity, OntologyRelation
 from src.models.pack import Pack, ReadinessGate, Scenario
@@ -63,6 +64,7 @@ __all__ = [
     "AutonomyEvent",
     "Constitution",
     "ConstitutionalAmendment",
+    "HandoffTest",
     "ObjectRegistryEntry",
     "LineageEdge",
     "Venture",
