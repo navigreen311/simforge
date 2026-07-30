@@ -66,12 +66,15 @@ async def evaluate_rubric(
     s.p6_doc_quality = perf.p6_doc_quality(ctx)
     s.p8_cost_discipline = perf.p8_cost_discipline(ctx)
 
-    # Cognitive — heuristic (C3–C7)
-    s.c3_fot_pressure_management = cog.c3_fot_pressure_management(ctx.ccb_pre, ctx.ccb_post)
-    s.c4_arc_narrative_coherence = cog.c4_arc_narrative_coherence(ctx.ccb_pre, ctx.ccb_post)
-    s.c5_echo_regret_load = cog.c5_echo_regret_load(ctx.ccb_post)
-    s.c6_hfm_drive_balance = cog.c6_hfm_drive_balance(ctx.ccb_post)
-    s.c7_ame_reputation_trajectory = cog.c7_ame_reputation_trajectory(ctx.ccb_post)
+    # Cognitive — C3–C7 blend captured CCB state with in-session transcript signals (§10.3).
+    from src.services.evaluation.dimensions.in_session import extract_signals
+
+    sig = extract_signals(ctx)
+    s.c3_fot_pressure_management = cog.c3_fot_pressure_management(ctx, sig)
+    s.c4_arc_narrative_coherence = cog.c4_arc_narrative_coherence(ctx, sig)
+    s.c5_echo_regret_load = cog.c5_echo_regret_load(ctx, sig)
+    s.c6_hfm_drive_balance = cog.c6_hfm_drive_balance(ctx, sig)
+    s.c7_ame_reputation_trajectory = cog.c7_ame_reputation_trajectory(ctx, sig)
 
     annotations = _annotations(ctx)
     # Surface compliance findings (failures + unmet-obligation warnings) as turn annotations so the
