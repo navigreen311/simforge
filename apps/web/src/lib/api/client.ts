@@ -605,6 +605,32 @@ export const truthReview = {
   unreviewed: () => apiGet<TruthReviewUnreviewed>("/api/truth-review/unreviewed"),
 };
 
+export interface SbomComponent {
+  name: string;
+  version: string;
+  ecosystem: string;
+  scope: string;
+  pinned: boolean;
+  flags: string[];
+}
+
+export interface Sbom {
+  generated: boolean;
+  vuln_feed_configured: boolean;
+  counts: {
+    total: number;
+    runtime: number;
+    flagged: number;
+    denylisted: number;
+    unpinned: number;
+  };
+  components: SbomComponent[];
+}
+
+export const supplyChain = {
+  sbom: () => apiGet<Sbom>("/api/supply-chain/sbom"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>
