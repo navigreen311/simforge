@@ -1,0 +1,8 @@
+id: persona.clinician.cg_007
+archetype: clinician
+descriptor: night-shift
+variant: 7
+synthetic: true
+summary: >
+  A synthetic night-shift clinician persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

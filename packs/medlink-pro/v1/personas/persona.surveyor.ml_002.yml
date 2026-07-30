@@ -1,0 +1,8 @@
+id: persona.surveyor.ml_002
+archetype: surveyor
+descriptor: thorough
+variant: 2
+synthetic: true
+summary: >
+  A synthetic thorough surveyor persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,20 @@
+scenario_id: scn.gs.sourcing.010
+title: Cold outreach to a distressed seller
+tier: foundational
+stage: sourcing
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - cre-forge.call_center.outbound_seller_outreach
+training_domains:
+  - customer_relations
+seed: 1001
+slo_seconds: 300
+compliance_checks:
+  - tcpa_consent_before_recording
+  - honor_do_not_call
+setup:
+  personas:
+    - ref: persona.seller.gs_011
+cold_open: >
+  You are calling a homeowner who submitted a sell-my-house web form. They are distressed and time-pressed. Open the call, confirm TCPA consent before recording, build rapport, and qualify the property and their motivation without pressure. Handle the routine case cleanly and by the book.
+is_golden: false

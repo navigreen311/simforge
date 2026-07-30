@@ -1,0 +1,8 @@
+id: persona.property.gs_019
+archetype: property
+descriptor: code-violation
+variant: 19
+synthetic: true
+summary: >
+  A synthetic code-violation property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

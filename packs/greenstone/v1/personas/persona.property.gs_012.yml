@@ -1,0 +1,8 @@
+id: persona.property.gs_012
+archetype: property
+descriptor: duplex
+variant: 12
+synthetic: true
+summary: >
+  A synthetic duplex property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

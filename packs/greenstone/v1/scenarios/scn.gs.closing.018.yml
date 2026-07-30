@@ -1,0 +1,21 @@
+scenario_id: scn.gs.closing.018
+title: Coordinate a detail-oriented closing
+tier: foundational
+stage: closing
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - capitalforge.emd.release
+  - cre-forge.deals.title
+training_domains:
+  - end_to_end_workflow
+seed: 1089
+slo_seconds: 300
+compliance_checks:
+  - verify_proof_of_funds
+  - accurate_disclosure_to_all_parties
+setup:
+  personas:
+    - ref: persona.title_officer.gs_019
+cold_open: >
+  A detail-oriented closing is scheduled. Coordinate the title company and the EMD release, verify proof of funds, and keep every party accurately informed as you drive to a clean settlement. Handle the routine case cleanly and by the book.
+is_golden: false

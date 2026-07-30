@@ -1,0 +1,8 @@
+id: persona.title_officer.gs_009
+archetype: title_officer
+descriptor: detail-oriented
+variant: 9
+synthetic: true
+summary: >
+  A synthetic detail-oriented title_officer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

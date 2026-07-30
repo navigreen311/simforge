@@ -1,0 +1,21 @@
+scenario_id: scn.gs.underwriting.011
+title: Underwrite a duplex deal
+tier: foundational
+stage: underwriting
+tested_agent_village_id: david_kim
+tested_forge_caps:
+  - capitalforge.emd.release
+  - vaf.doc_vault.retrieve
+training_domains:
+  - financing_mock_bank
+seed: 1018
+slo_seconds: 300
+compliance_checks:
+  - verify_proof_of_funds
+  - no_misrepresentation
+setup:
+  personas:
+    - ref: persona.property.gs_012
+cold_open: >
+  A duplex property is under review. Pull comparable sales and title documents, estimate the spread, and confirm the numbers support an assignment before you commit — never overstate value to make the deal work. Handle the routine case cleanly and by the book.
+is_golden: false

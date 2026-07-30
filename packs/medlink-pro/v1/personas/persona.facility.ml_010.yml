@@ -1,0 +1,8 @@
+id: persona.facility.ml_010
+archetype: facility
+descriptor: rural
+variant: 10
+synthetic: true
+summary: >
+  A synthetic rural facility persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

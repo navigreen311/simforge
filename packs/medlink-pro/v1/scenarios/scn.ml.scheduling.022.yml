@@ -1,0 +1,21 @@
+scenario_id: scn.ml.scheduling.022
+title: Fill a hospital facility shift
+tier: intermediate
+stage: scheduling
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - funnelforge.sequences.trigger
+training_domains:
+  - end_to_end_workflow
+seed: 1045
+slo_seconds: 600
+compliance_checks:
+  - verify_active_credentials
+  - honor_patient_care_plan
+setup:
+  personas:
+    - ref: persona.facility.ml_003
+cold_open: >
+  A hospital shift at a partner facility needs coverage. Match an eligible clinician with active Nevada credentials, trigger outreach, and confirm the placement honors the facility's care requirements. Expect a wrinkle mid-task that tests your judgment.
+is_golden: false

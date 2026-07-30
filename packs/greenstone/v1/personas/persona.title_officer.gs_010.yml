@@ -1,0 +1,8 @@
+id: persona.title_officer.gs_010
+archetype: title_officer
+descriptor: responsive
+variant: 10
+synthetic: true
+summary: >
+  A synthetic responsive title_officer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.property.gs_017
+archetype: property
+descriptor: vacant
+variant: 17
+synthetic: true
+summary: >
+  A synthetic vacant property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.title_officer.gs_013
+archetype: title_officer
+descriptor: by-the-book
+variant: 13
+synthetic: true
+summary: >
+  A synthetic by-the-book title_officer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

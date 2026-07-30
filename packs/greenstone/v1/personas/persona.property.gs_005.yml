@@ -1,0 +1,8 @@
+id: persona.property.gs_005
+archetype: property
+descriptor: distressed-roof
+variant: 5
+synthetic: true
+summary: >
+  A synthetic distressed-roof property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

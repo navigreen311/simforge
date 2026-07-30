@@ -1,0 +1,8 @@
+id: persona.clinician.cg_009
+archetype: clinician
+descriptor: new-grad
+variant: 9
+synthetic: true
+summary: >
+  A synthetic new-grad clinician persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

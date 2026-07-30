@@ -1,0 +1,8 @@
+id: persona.buyer.gs_004
+archetype: buyer
+descriptor: out-of-state
+variant: 4
+synthetic: true
+summary: >
+  A synthetic out-of-state buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

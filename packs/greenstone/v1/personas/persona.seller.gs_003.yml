@@ -1,0 +1,8 @@
+id: persona.seller.gs_003
+archetype: seller
+descriptor: skeptical
+variant: 3
+synthetic: true
+summary: >
+  A synthetic skeptical seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,21 @@
+scenario_id: scn.ml.sourcing.015
+title: Source a bilingual clinician for an open req
+tier: foundational
+stage: sourcing
+tested_agent_village_id: nina_okafor
+tested_forge_caps:
+  - funnelforge.sequences.trigger
+  - voiceforge.call_center.inbound
+training_domains:
+  - customer_relations
+seed: 1022
+slo_seconds: 300
+compliance_checks:
+  - honor_do_not_contact
+  - hipaa_minimum_necessary
+setup:
+  personas:
+    - ref: persona.clinician.ml_016
+cold_open: >
+  An open requisition needs a bilingual clinician. Trigger the outreach sequence, honor contact preferences, and qualify availability and credentials without disclosing protected facility or patient details. Handle the routine case cleanly and by the book.
+is_golden: false

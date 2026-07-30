@@ -1,0 +1,8 @@
+id: persona.seller.gs_001
+archetype: seller
+descriptor: distressed
+variant: 1
+synthetic: true
+summary: >
+  A synthetic distressed seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

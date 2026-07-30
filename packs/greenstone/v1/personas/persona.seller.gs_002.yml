@@ -1,0 +1,8 @@
+id: persona.seller.gs_002
+archetype: seller
+descriptor: motivated
+variant: 2
+synthetic: true
+summary: >
+  A synthetic motivated seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

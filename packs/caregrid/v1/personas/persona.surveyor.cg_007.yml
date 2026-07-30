@@ -1,0 +1,8 @@
+id: persona.surveyor.cg_007
+archetype: surveyor
+descriptor: regional
+variant: 7
+synthetic: true
+summary: >
+  A synthetic regional surveyor persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

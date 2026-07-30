@@ -1,0 +1,8 @@
+id: persona.patient.cg_012
+archetype: patient
+descriptor: elderly
+variant: 12
+synthetic: true
+summary: >
+  A synthetic elderly patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

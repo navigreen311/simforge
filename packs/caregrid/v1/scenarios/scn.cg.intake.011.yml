@@ -1,0 +1,21 @@
+scenario_id: scn.cg.intake.011
+title: Intake a elderly home-health referral
+tier: foundational
+stage: intake
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - funnelforge.sequences.trigger
+  - voiceforge.call_center.inbound
+training_domains:
+  - enrollments_onboarding
+seed: 1002
+slo_seconds: 300
+compliance_checks:
+  - hipaa_minimum_necessary
+  - honor_patient_care_plan
+setup:
+  personas:
+    - ref: persona.patient.cg_012
+cold_open: >
+  A elderly patient referral arrives for California home-health services. Capture only the minimum necessary information, confirm the care plan, and route the referral without disclosing protected details beyond what the task requires. Handle the routine case cleanly and by the book.
+is_golden: false

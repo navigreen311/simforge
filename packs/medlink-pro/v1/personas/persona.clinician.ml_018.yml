@@ -1,0 +1,8 @@
+id: persona.clinician.ml_018
+archetype: clinician
+descriptor: ICU
+variant: 18
+synthetic: true
+summary: >
+  A synthetic ICU clinician persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

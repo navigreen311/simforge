@@ -1,0 +1,8 @@
+id: persona.clinician.cg_012
+archetype: clinician
+descriptor: LVN-candidate
+variant: 12
+synthetic: true
+summary: >
+  A synthetic LVN-candidate clinician persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

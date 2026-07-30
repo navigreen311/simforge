@@ -1,0 +1,8 @@
+id: persona.buyer.gs_012
+archetype: buyer
+descriptor: fix-and-flip
+variant: 12
+synthetic: true
+summary: >
+  A synthetic fix-and-flip buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

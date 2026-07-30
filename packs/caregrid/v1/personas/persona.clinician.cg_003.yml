@@ -1,0 +1,8 @@
+id: persona.clinician.cg_003
+archetype: clinician
+descriptor: CNA-candidate
+variant: 3
+synthetic: true
+summary: >
+  A synthetic CNA-candidate clinician persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

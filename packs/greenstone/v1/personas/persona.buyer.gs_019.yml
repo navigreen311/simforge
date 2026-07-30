@@ -1,0 +1,8 @@
+id: persona.buyer.gs_019
+archetype: buyer
+descriptor: developer
+variant: 19
+synthetic: true
+summary: >
+  A synthetic developer buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,8 @@
+id: persona.buyer.gs_013
+archetype: buyer
+descriptor: buy-and-hold
+variant: 13
+synthetic: true
+summary: >
+  A synthetic buy-and-hold buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

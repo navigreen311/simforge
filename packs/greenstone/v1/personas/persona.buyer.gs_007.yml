@@ -1,0 +1,8 @@
+id: persona.buyer.gs_007
+archetype: buyer
+descriptor: wholesale
+variant: 7
+synthetic: true
+summary: >
+  A synthetic wholesale buyer persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

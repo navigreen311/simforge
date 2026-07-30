@@ -19,7 +19,9 @@ CAREGRID = REPO_ROOT / "packs" / "caregrid" / "v1"
 def test_greenstone_pack_loads_and_validates() -> None:
     loaded = load_pack(GREENSTONE)
     assert loaded.spec.pack_id == "pack.greenstone.v1"
-    assert len(loaded.scenarios) == 3
+    # Full-scale corpus (Wave 5): assert the floor + that the golden seed still loads.
+    assert len(loaded.scenarios) >= 3
+    assert any(s.spec.scenario_id == "scn.gs.src.001" for s in loaded.scenarios)
     result = validate_pack(loaded)
     assert result.ok, [i.message for i in result.errors]
 
@@ -36,7 +38,7 @@ def test_caregrid_pack_multi_state_ca_validates() -> None:
     assert loaded.spec.owner_venture == "caregrid"
     assert loaded.spec.phi_required is True
     assert "cdph_ca" in loaded.spec.compliance_flags  # California jurisdiction
-    assert len(loaded.scenarios) == 3
+    assert len(loaded.scenarios) >= 3
     result = validate_pack(loaded)
     assert result.ok, [i.message for i in result.errors]
 

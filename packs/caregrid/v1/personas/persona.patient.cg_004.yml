@@ -1,0 +1,8 @@
+id: persona.patient.cg_004
+archetype: patient
+descriptor: chronic-care
+variant: 4
+synthetic: true
+summary: >
+  A synthetic chronic-care patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

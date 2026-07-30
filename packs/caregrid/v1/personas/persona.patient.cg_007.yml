@@ -1,0 +1,8 @@
+id: persona.patient.cg_007
+archetype: patient
+descriptor: diabetic
+variant: 7
+synthetic: true
+summary: >
+  A synthetic diabetic patient persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

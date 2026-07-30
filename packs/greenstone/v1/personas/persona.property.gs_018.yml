@@ -1,0 +1,8 @@
+id: persona.property.gs_018
+archetype: property
+descriptor: fire-damaged
+variant: 18
+synthetic: true
+summary: >
+  A synthetic fire-damaged property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

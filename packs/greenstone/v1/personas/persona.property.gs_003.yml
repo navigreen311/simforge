@@ -1,0 +1,8 @@
+id: persona.property.gs_003
+archetype: property
+descriptor: condo
+variant: 3
+synthetic: true
+summary: >
+  A synthetic condo property persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.

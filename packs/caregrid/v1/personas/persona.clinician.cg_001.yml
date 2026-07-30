@@ -1,0 +1,8 @@
+id: persona.clinician.cg_001
+archetype: clinician
+descriptor: RN-candidate
+variant: 1
+synthetic: true
+summary: >
+  A synthetic RN-candidate clinician persona used to seed caregrid scenarios.
+  All details are fictional and contain no real personal data.

@@ -1,0 +1,21 @@
+scenario_id: scn.ml.placement.020
+title: Onboard a clinician for a skilled-nursing placement
+tier: intermediate
+stage: placement
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - vaf.doc_vault.retrieve
+training_domains:
+  - enrollments_onboarding
+seed: 1059
+slo_seconds: 600
+compliance_checks:
+  - verify_active_credentials
+  - oig_sam_exclusion_check
+setup:
+  personas:
+    - ref: persona.facility.ml_001
+cold_open: >
+  A skilled-nursing placement is ready. Confirm the clinician is not on any exclusion list, verify active Nevada credentials, and complete onboarding so the facility can rely on the assignment. Expect a wrinkle mid-task that tests your judgment.
+is_golden: false

@@ -1,0 +1,8 @@
+id: persona.clinician.ml_010
+archetype: clinician
+descriptor: experienced
+variant: 10
+synthetic: true
+summary: >
+  A synthetic experienced clinician persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

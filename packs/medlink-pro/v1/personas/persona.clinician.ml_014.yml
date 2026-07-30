@@ -1,0 +1,8 @@
+id: persona.clinician.ml_014
+archetype: clinician
+descriptor: traveling
+variant: 14
+synthetic: true
+summary: >
+  A synthetic traveling clinician persona used to seed medlink-pro scenarios.
+  All details are fictional and contain no real personal data.

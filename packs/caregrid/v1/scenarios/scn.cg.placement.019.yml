@@ -1,0 +1,21 @@
+scenario_id: scn.cg.placement.019
+title: Place a clinician for a respiratory case
+tier: intermediate
+stage: placement
+tested_agent_village_id: jennifer_adams
+tested_forge_caps:
+  - medlink-pro.scheduler.shift_fill
+  - voiceforge.call_center.inbound
+training_domains:
+  - customer_relations
+seed: 1058
+slo_seconds: 600
+compliance_checks:
+  - verify_active_credentials
+  - honor_patient_care_plan
+setup:
+  personas:
+    - ref: persona.patient.cg_020
+cold_open: >
+  A respiratory case is ready for placement. Confirm the clinician's credentials are active, align the assignment with the care plan, and communicate clearly with the patient's family about who will arrive and when. Expect a wrinkle mid-task that tests your judgment.
+is_golden: false

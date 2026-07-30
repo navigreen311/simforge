@@ -1,0 +1,8 @@
+id: persona.seller.gs_017
+archetype: seller
+descriptor: tired-landlord
+variant: 17
+synthetic: true
+summary: >
+  A synthetic tired-landlord seller persona used to seed greenstone scenarios.
+  All details are fictional and contain no real personal data.
