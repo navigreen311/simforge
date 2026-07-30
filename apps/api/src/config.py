@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     cert_validity_days: int = Field(default=90, alias="CERT_VALIDITY_DAYS")
     # DeptCert: default minimum distinct agents holding relevant AgentCerts (D2/§3.1; Pack-config).
     dept_min_agent_certs: int = Field(default=3, alias="DEPT_MIN_AGENT_CERTS")
+    # P2 compliance: enforce OBLIGATION rules as hard failures (default off — honest seam).
+    # Obligations are always computed + reported; become P2 auto-fails once flipped on for real.
+    compliance_enforce_obligations: bool = Field(
+        default=False, alias="COMPLIANCE_ENFORCE_OBLIGATIONS"
+    )
 
     # Packs
     packs_root: str = Field(default="./packs", alias="PACKS_ROOT")

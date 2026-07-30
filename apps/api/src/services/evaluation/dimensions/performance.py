@@ -32,8 +32,11 @@ def p1_correctness(ctx: EvalContext) -> float:
 
 
 def p2_compliance(ctx: EvalContext) -> bool:
-    blob = " ".join(ctx.agent_turns).lower()
-    return not any(marker in blob for marker in _VIOLATION_MARKERS)
+    """P2 = the deterministic compliance rules engine's verdict (global prohibition + every declared
+    check). Lazy import avoids a cycle (the engine imports _VIOLATION_MARKERS from this module)."""
+    from src.services.evaluation.compliance import evaluate_compliance
+
+    return evaluate_compliance(ctx).passed
 
 
 def p3_process_fidelity(ctx: EvalContext) -> float:
