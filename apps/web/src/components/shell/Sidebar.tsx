@@ -9,6 +9,7 @@ const SECTIONS: NavSection[] = [
     title: "Certification",
     items: [
       { href: "/dashboard", label: "Overview" },
+      { href: "/dashboard/brief", label: "Stakeholder Brief" },
       { href: "/dashboard/readiness", label: "Readiness Matrix" },
       { href: "/dashboard/runs", label: "Runs" },
       { href: "/dashboard/ventures", label: "Ventures" },

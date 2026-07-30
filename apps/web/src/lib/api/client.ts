@@ -675,6 +675,27 @@ export const coldStart = {
   all: () => apiGet<{ playbooks: ColdStartPlaybook[]; total: number }>("/api/cold-start/"),
 };
 
+export interface StakeholderBrief {
+  headline: string;
+  tone: string; // red | amber | green
+  narrative: string;
+  metrics: {
+    active_certs: number;
+    total_certs: number;
+    open_gaps: Record<string, number>;
+    open_gaps_total: number;
+    ventures_ready: number;
+    ventures_total: number;
+    unsafe_forges: string[];
+    sla_breached_ventures: string[];
+  };
+  recommended_actions: string[];
+}
+
+export const stakeholder = {
+  brief: () => apiGet<StakeholderBrief>("/api/stakeholder/brief"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>
