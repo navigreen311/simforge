@@ -50,6 +50,7 @@ from src.routers import (
     runs,
     scenario_bank,
     scenarios,
+    supply_chain,
     training,
     truth_review,
     ventures,
@@ -132,6 +133,9 @@ def create_app() -> FastAPI:
     app.include_router(parity.router, prefix="/api/parity", tags=["parity"])
     app.include_router(
         truth_review.router, prefix="/api/truth-review", tags=["truth-review"]
+    )
+    app.include_router(
+        supply_chain.router, prefix="/api/supply-chain", tags=["supply-chain"]
     )
 
     @app.get("/metrics", include_in_schema=False)

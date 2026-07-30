@@ -177,6 +177,12 @@ class Settings(BaseSettings):
     # before it can run/certify. Off by default so the unreviewed corpus still runs.
     truth_gate_enforce: bool = Field(default=False, alias="TRUTH_GATE_ENFORCE")
 
+    # Supply-chain governance (v1.2). Comma-separated denylist of package names to flag in the SBOM.
+    # A live vulnerability feed is an external seam; set VULN_FEED_URL to wire one. Empty = the SBOM
+    # honestly reports "no vuln feed configured" rather than inventing CVE data.
+    supply_chain_denylist: str = Field(default="", alias="SUPPLY_CHAIN_DENYLIST")
+    supply_chain_vuln_feed_url: str = Field(default="", alias="VULN_FEED_URL")
+
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 
