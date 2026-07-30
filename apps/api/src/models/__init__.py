@@ -31,6 +31,7 @@ from src.models.safe_mode import SafeModeState
 from src.models.scenario_truth_review import ScenarioTruthReview
 from src.models.scorecard import Scorecard
 from src.models.spec_document import SpecDocument
+from src.models.temporal_scenario import TemporalScenario
 from src.models.training import TrainingProposal
 from src.models.venture import Venture
 from src.models.village_fingerprint import VillageFingerprint
@@ -65,6 +66,7 @@ __all__ = [
     "LineageEdge",
     "Venture",
     "SpecDocument",
+    "TemporalScenario",
     "MetaEvalIntent",
     "GoldenRun",
     "GoldenNomination",

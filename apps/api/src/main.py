@@ -54,6 +54,7 @@ from src.routers import (
     scenarios,
     stakeholder,
     supply_chain,
+    temporal,
     training,
     transfer,
     truth_review,
@@ -147,6 +148,7 @@ def create_app() -> FastAPI:
     app.include_router(
         production_outcome.router, prefix="/api/production-outcomes", tags=["production-outcomes"]
     )
+    app.include_router(temporal.router, prefix="/api/temporal", tags=["temporal"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

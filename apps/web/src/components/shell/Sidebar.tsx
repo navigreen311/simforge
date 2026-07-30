@@ -47,6 +47,7 @@ const SECTIONS: NavSection[] = [
       { href: "/dashboard/correlation", label: "Prod Correlation" },
       { href: "/dashboard/golden", label: "Golden Benchmark" },
       { href: "/dashboard/adversarial", label: "Adversarial" },
+      { href: "/dashboard/temporal", label: "Temporal Realism" },
       { href: "/dashboard/training", label: "Agent Training" },
       { href: "/dashboard/gaps/software", label: "Gaps" },
     ],
