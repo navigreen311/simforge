@@ -119,6 +119,29 @@ class ForgeAdapter(ABC):
         it needs."""
         ...
 
+    async def world_state(self, tenant_id: str) -> dict:
+        """A structured, inspectable snapshot of the sandbox world for a tenant. The default derives
+        it from the audit log (which every adapter keeps), so all Forges are uniformly inspectable;
+        adapters with a richer domain model (e.g. the Mock Bank ledger) override to add detail."""
+        log = await self.get_audit_log(tenant_id)
+        action_counts: dict[str, int] = {}
+        fault_types: dict[str, int] = {}
+        for entry in log:
+            action = str(entry.get("action", "unknown"))
+            action_counts[action] = action_counts.get(action, 0) + 1
+            if action == "inject_fault":
+                ft = str((entry.get("payload") or {}).get("type", "unknown"))
+                fault_types[ft] = fault_types.get(ft, 0) + 1
+        return {
+            "forge": self.forge_name,
+            "version": await self.get_current_version(),
+            "tenant_id": tenant_id,
+            "audit_entries": len(log),
+            "action_counts": action_counts,
+            "injected_faults": fault_types,
+            "timeline": [{"ts": e.get("ts"), "action": e.get("action")} for e in log[-20:]],
+        }
+
 
 class NullForgeAdapter(ForgeAdapter):
     """Placeholder for Forges not yet wired — reports unhealthy, refuses provisioning."""

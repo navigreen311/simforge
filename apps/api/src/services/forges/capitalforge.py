@@ -74,3 +74,8 @@ class LocalCapitalForgeAdapter(ForgeAdapter):
 
     async def account(self, tenant_id: str) -> dict:
         return self.engine.account(tenant_id)
+
+    async def world_state(self, tenant_id: str) -> dict:
+        base = await super().world_state(tenant_id)
+        base["bank"] = self.engine.world_state(tenant_id)
+        return base

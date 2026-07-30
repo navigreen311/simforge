@@ -111,6 +111,28 @@ class DealDeskEngine:
     def audit_log(self, tenant_id: str) -> list[dict]:
         return list(self._require(tenant_id).audit)
 
+    def world_state(self, tenant_id: str) -> dict:
+        """Rich domain snapshot: every deal on the desk with its type and fault status."""
+        t = self._require(tenant_id)
+        deals = [
+            {
+                "deal_id": d.deal_id,
+                "deal_type": d.deal_type,
+                "status": "faulted" if d.fault else "clear",
+                "fault_type": d.fault.fault_type if d.fault else None,
+            }
+            for d in t.deals.values()
+        ]
+        by_type: dict[str, int] = {}
+        for d in t.deals.values():
+            by_type[d.deal_type] = by_type.get(d.deal_type, 0) + 1
+        return {
+            "deal_count": len(deals),
+            "deals": deals,
+            "deals_by_type": by_type,
+            "faulted_deals": sum(1 for d in t.deals.values() if d.fault),
+        }
+
     def _require(self, tenant_id: str) -> _Tenant:
         if tenant_id not in self._tenants:
             raise KeyError(f"Unknown CRE Forge tenant: {tenant_id}")
