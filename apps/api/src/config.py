@@ -95,6 +95,8 @@ class Settings(BaseSettings):
     # Certification (dev relaxes the prod 18-scenario battery minimum)
     cert_min_battery_size: int = Field(default=1, alias="CERT_MIN_BATTERY_SIZE")
     cert_validity_days: int = Field(default=90, alias="CERT_VALIDITY_DAYS")
+    # DeptCert: default minimum distinct agents holding relevant AgentCerts (D2/§3.1; Pack-config).
+    dept_min_agent_certs: int = Field(default=3, alias="DEPT_MIN_AGENT_CERTS")
 
     # Packs
     packs_root: str = Field(default="./packs", alias="PACKS_ROOT")

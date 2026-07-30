@@ -445,9 +445,26 @@ export interface CertQuery {
   search?: string;
 }
 
+export interface DeptCert {
+  id: string;
+  departmentId: string;
+  forgeContext: string;
+  tier: string;
+  status: string;
+  issuedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  revocationReason: string | null;
+  certSnapshotId: string;
+  prerequisiteAgentCertIds: string[];
+  departmentKey: string;
+}
+
 export const certs = {
   agent: (params?: CertQuery) =>
     apiGet<{ items: AgentCert[]; total: number }>(`/api/certs/agent${qs(params)}`),
+  dept: (params?: { department_key?: string; status?: string }) =>
+    apiGet<{ items: DeptCert[]; total: number }>(`/api/certs/dept${qs(params)}`),
 };
 
 // ---- UI-support endpoints (UI P0 audit) ----

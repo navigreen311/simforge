@@ -287,6 +287,11 @@ async def revoke_agent_cert(
         from src.services.governance.revocation import publish_cert_event
 
         await publish_cert_event(agent.villageAgentId, cert.forgeCap, "revoked")
+        # Prerequisite-dependency cascade (§11.3 trigger #3): a dropped AgentCert may push a
+        # DeptCert below its coverage minimum → auto-suspend affected DeptCerts.
+        from src.services.cert.dept_registry import recheck_dept_cert_coverage
+
+        await recheck_dept_cert_coverage(session, agent.departmentId, f"cascade: {actor}")
     return cert
 
 

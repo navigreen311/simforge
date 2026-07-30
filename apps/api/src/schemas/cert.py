@@ -74,6 +74,53 @@ class AgentCertList(BaseModel):
     total: int
 
 
+class IssueDeptCertRequest(BaseModel):
+    department_key: str
+    forge_context: str
+    tier: str = "intermediate"
+    dept_battery_run_ids: list[str]
+    approver_id: str
+    pack_id: str
+    required_forge_caps: list[str] = []
+    prerequisite_min: int | None = None
+
+
+class DeptCertOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    departmentId: str
+    forgeContext: str
+    tier: str
+    status: str
+    issuedAt: datetime
+    expiresAt: datetime
+    revokedAt: datetime | None = None
+    revocationReason: str | None = None
+    certSnapshotId: str
+    prerequisiteAgentCertIds: list[str] = []
+    departmentKey: str = ""  # derived (presentation)
+
+
+class DeptCertList(BaseModel):
+    items: list[DeptCertOut]
+    total: int
+
+
+class IssueDeptCertResponse(BaseModel):
+    cert: DeptCertOut
+    snapshot: CertSnapshotOut
+
+
+class DeptPrereqStatusOut(BaseModel):
+    department_key: str
+    required_min: int
+    required_forge_caps: list[str]
+    covering_agents: list[str]
+    covering_count: int
+    satisfied: bool
+
+
 class VerifyResponse(BaseModel):
     snapshot_id: str
     valid: bool
