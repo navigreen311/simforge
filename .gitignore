@@ -21,9 +21,13 @@ build/
 .next/
 out/
 *.tsbuildinfo
-coverage/
-# ...but the /dashboard/coverage app route is source, not a coverage report.
-!apps/web/src/app/dashboard/coverage/
+# Test-coverage reports only — anchored so it never eats source dirs named "coverage"
+# (e.g. apps/web/src/app/dashboard/coverage, apps/api/src/services/coverage).
+/coverage/
+**/coverage/lcov.info
+**/coverage/lcov-report/
+**/htmlcov/
+.nyc_output/
 
 # Python
 __pycache__/
