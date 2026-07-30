@@ -13,6 +13,7 @@ dependencies = [
     "greenlet>=3.0",
     "redis>=5.0",
     "rq>=1.16",
+    "apscheduler>=3.10,<4",  # in-process cadence scheduler (Part 16 continuous cadence)
     "structlog>=24.1",
     "python-ulid>=2.2",
     "httpx>=0.27",

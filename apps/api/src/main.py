@@ -19,6 +19,7 @@ from src.routers import (
     agents,
     attest,
     budget,
+    cadence,
     capabilities,
     certs,
     cohort,
@@ -56,7 +57,11 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     configure_logging()
     configure_tracing()
     configure_metrics()
+    from src.scheduler import shutdown_scheduler, start_scheduler
+
+    start_scheduler()  # no-op unless SCHEDULER_ENABLED (Part 16 cadence)
     yield
+    shutdown_scheduler()
     await dispose_engine()
 
 
@@ -93,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(forges.router, prefix="/api/forges", tags=["forges"])
     app.include_router(drift.router, prefix="/api/drift", tags=["drift"])
     app.include_router(regression.router, prefix="/api/regression", tags=["regression"])
+    app.include_router(cadence.router, prefix="/api/scheduler", tags=["scheduler"])
     app.include_router(jurisdictions.router, prefix="/api/jurisdictions", tags=["jurisdictions"])
     app.include_router(pdp.router, prefix="/api/pdp", tags=["pdp"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])

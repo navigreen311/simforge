@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     # default off so the dev single-run battery still issues; flip on for real cert batteries.
     cert_enforce_blind_mode: bool = Field(default=False, alias="CERT_ENFORCE_BLIND_MODE")
     cert_blind_mode_pct: float = Field(default=0.25, alias="CERT_BLIND_MODE_PCT")
+
+    # Continuous cadence scheduler (Part 16). Off by default (CI/tests + single-shot runs); flip on
+    # in a long-running deployment to fire the daily/nightly batteries in-process.
+    scheduler_enabled: bool = Field(default=False, alias="SCHEDULER_ENABLED")
     # P2 compliance: enforce OBLIGATION rules as hard failures (default off — honest seam).
     # Obligations are always computed + reported; become P2 auto-fails once flipped on for real.
     compliance_enforce_obligations: bool = Field(
