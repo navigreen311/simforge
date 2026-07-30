@@ -173,6 +173,10 @@ class Settings(BaseSettings):
     parity_sla_threshold: float = Field(default=0.90, alias="PARITY_SLA_THRESHOLD")
     parity_enforce: bool = Field(default=False, alias="PARITY_ENFORCE")
 
+    # Scenario Truth Review Gate (v1.1). When on, a scenario must have an approved truth review
+    # before it can run/certify. Off by default so the unreviewed corpus still runs.
+    truth_gate_enforce: bool = Field(default=False, alias="TRUTH_GATE_ENFORCE")
+
     # Evidence storage (dev = local filesystem)
     evidence_local_path: str = Field(default="./evidence-local", alias="EVIDENCE_LOCAL_PATH")
 
