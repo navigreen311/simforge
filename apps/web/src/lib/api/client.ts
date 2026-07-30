@@ -631,6 +631,27 @@ export const supplyChain = {
   sbom: () => apiGet<Sbom>("/api/supply-chain/sbom"),
 };
 
+export interface TransferOpportunity {
+  forge_cap: string;
+  donor_pack: string;
+  donor_scenarios: number;
+  recipient_pack: string;
+  recipient_scenarios: number;
+  cross_venture: boolean;
+  suggested_transfer: number;
+  rationale: string;
+}
+
+export interface TransferReport {
+  min_scenarios: number;
+  total_opportunities: number;
+  transfers: TransferOpportunity[];
+}
+
+export const transfer = {
+  opportunities: () => apiGet<TransferReport>("/api/transfer/opportunities"),
+};
+
 export const dashboard = {
   summary: () => apiGet<DashboardSummary>("/api/dashboard/summary"),
   integrityWarnings: () =>
