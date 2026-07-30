@@ -25,6 +25,7 @@ APPROVAL_KINDS = (
     "integrated_narrative_run",
     "autonomy_transition",
     "policy_change",
+    "golden_promotion",
 )
 # Quorum rules (§11.5): unanimous (constitutional), two_of_three (non-critical), single.
 QUORUM_RULES = ("unanimous", "two_of_three", "single")

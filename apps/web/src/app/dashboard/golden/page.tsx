@@ -7,6 +7,7 @@ import { VerifiedState, verdictFor } from "@/components/ui/VerifiedState";
 import {
   golden,
   type GoldenBaseline,
+  type GoldenNomination,
   type GoldenRunHistoryEntry,
   type GoldenScenario,
 } from "@/lib/api/client";
@@ -28,16 +29,19 @@ export default async function GoldenPage() {
   let scenarios: GoldenScenario[] = [];
   let baseline: GoldenBaseline | null = null;
   let history: GoldenRunHistoryEntry[] = [];
+  let nominations: GoldenNomination[] = [];
   let error: string | null = null;
   try {
-    const [sc, bl, hist] = await Promise.all([
+    const [sc, bl, hist, noms] = await Promise.all([
       golden.scenarios(),
       golden.baseline(),
       golden.runHistory(),
+      golden.nominations(),
     ]);
     scenarios = sc.scenarios;
     baseline = bl;
     history = hist.runs;
+    nominations = noms.nominations;
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load golden set";
   }
@@ -215,6 +219,71 @@ export default async function GoldenPage() {
               <div className="rounded-lg border border-ink-500 bg-ink-800 p-4 text-sm text-ink-300">
                 No committed baseline found. Generate it with{" "}
                 <code>python scripts/golden-baseline.py</code>.
+              </div>
+            )}
+          </section>
+
+          {/* Gold-set governance (§12.5): nomination + council review + freeze. */}
+          <section className="mb-4">
+            <h2 className="mb-1 text-lg">Gold-set governance</h2>
+            <p className="mb-3 max-w-4xl text-xs text-ink-400">
+              The gold set is immutable, so a scenario joins it only by formal nomination reviewed by
+              the benchmark refresh council (Ivan · Administrator · Acquisitions Principal · a senior
+              engineer). A scenario&apos;s <code>isGolden</code> flag flips only when the review
+              request is approved by quorum — never by hand (§12.5).
+            </p>
+            {nominations.length > 0 ? (
+              <div className="overflow-x-auto rounded-xl border border-ink-500">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-ink-800 text-ink-200">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Scenario</th>
+                      <th className="px-4 py-2 font-medium">Nominated by</th>
+                      <th className="px-4 py-2 font-medium">IRR</th>
+                      <th className="px-4 py-2 font-medium">Status</th>
+                      <th className="px-4 py-2 font-medium">Frozen</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink-600">
+                    {nominations.map((n) => (
+                      <tr key={n.id}>
+                        <td className="px-4 py-2">
+                          <div className="text-ink-50">{titleFor.get(n.scenario_id) ?? n.scenario_id}</div>
+                          <div className="font-mono text-[10px] text-ink-500">{n.scenario_id}</div>
+                        </td>
+                        <td className="px-4 py-2 text-ink-200">{n.nominated_by}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-ink-300">
+                          {n.inter_rater_reliability != null
+                            ? n.inter_rater_reliability.toFixed(2)
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                              n.status === "frozen"
+                                ? "bg-success/15 text-success"
+                                : n.status === "pending"
+                                  ? "bg-warning/15 text-warning"
+                                  : "bg-ink-600 text-ink-200"
+                            }`}
+                          >
+                            {n.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-ink-400">
+                          {n.frozen_at
+                            ? `${new Date(n.frozen_at).toLocaleDateString()} · ${n.frozen_by}`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-ink-500 bg-ink-800 p-4 text-sm text-ink-300">
+                No gold-set nominations yet. Nominations open a council review request via the
+                Approvals workflow before any scenario can be frozen into the bank.
               </div>
             )}
           </section>

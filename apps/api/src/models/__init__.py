@@ -18,6 +18,7 @@ from src.models.department import Department
 from src.models.dress_rehearsal import DressRehearsal
 from src.models.evidence import EvidenceAccess, EvidenceRecord
 from src.models.gap import SoftwareGap, VillageOSGap
+from src.models.golden_nomination import GoldenNomination
 from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.meta_eval_intent import MetaEvalIntent
@@ -62,6 +63,7 @@ __all__ = [
     "SpecDocument",
     "MetaEvalIntent",
     "GoldenRun",
+    "GoldenNomination",
     "AdversarialProbe",
     "ApprovalRequest",
     "ApprovalDecision",
