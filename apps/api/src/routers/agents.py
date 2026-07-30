@@ -285,6 +285,29 @@ async def downgrade_autonomy(
     return AgentSummary.model_validate(agent)
 
 
+@router.post(
+    "/{village_agent_id}/autonomy/evaluate-promotion",
+    dependencies=[Depends(require_role("compliance_analyst"))],
+)
+async def evaluate_promotion_endpoint(
+    village_agent_id: str, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Criteria-based promotion (§11.2): promotes one rung on a clean streak + advanced-crisis pass;
+    L4→L5 opens an Ivan-gated approval request instead of moving the agent."""
+    from src.services.cert.autonomy_triggers import evaluate_promotion
+
+    agent = await _get_agent_or_404(session, village_agent_id)
+    outcome = await evaluate_promotion(session, agent)
+    return {
+        "eligible": outcome.eligible,
+        "current_level": outcome.current_level,
+        "next_level": outcome.next_level,
+        "action": outcome.action,
+        "detail": outcome.detail,
+        "approval_request_id": outcome.approval_request_id,
+    }
+
+
 @router.get(
     "/{village_agent_id}/ccb/latest",
     response_model=CCBResponse,

@@ -110,6 +110,10 @@ async def run_scenario_endpoint(
         await emit_reports(session, run.id)
         # Integrated-narrative runs also accrete a story-level beat (ADR-0035); protected → no-op.
         await apply_narrative_effects(session, run, card)
+        # Autonomy auto-downgrade triggers (§11.2): compliance/cognitive violations demote.
+        from src.services.cert.autonomy_triggers import apply_run_triggers
+
+        await apply_run_triggers(session, run, card)
     return await _summarize(session, run)
 
 
