@@ -43,6 +43,7 @@ from src.routers import (
     meta_eval,
     narrative,
     ontology,
+    operation,
     ops,
     packs,
     parity,
@@ -153,6 +154,7 @@ def create_app() -> FastAPI:
     app.include_router(temporal.router, prefix="/api/temporal", tags=["temporal"])
     app.include_router(ontology.router, prefix="/api/ontology", tags=["ontology"])
     app.include_router(handoff.router, prefix="/api/handoff", tags=["handoff"])
+    app.include_router(operation.router, prefix="/api/operation", tags=["operation-cert"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
