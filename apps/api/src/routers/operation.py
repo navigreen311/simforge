@@ -360,3 +360,86 @@ async def assignability(
         "unit_b_state": res.unit_b_state,
         "reason": res.reason,
     }
+
+
+def _serialize_cert(c: OperationCertification) -> dict:
+    """One operation cert as the UI consumes it — denominator + named-list results + version stamp,
+    never merged with a domain result."""
+    return {
+        "id": c.id,
+        "unit_type": c.unitType,
+        "state": c.state,
+        "assignable": is_assignable(c.state),
+        "forge_id": c.forgeId,
+        "module_id": c.moduleId,
+        "agent_id": c.agentId,
+        "department_id": c.departmentId,
+        "forge_context": c.forgeContext,
+        "venture_context": c.ventureContext,
+        "instruction_version": c.instructionVersion or None,
+        "forge_api_version": c.forgeApiVersion or None,
+        "operation_rubric_version": c.operationRubricVersion,
+        "functions_certified": c.functionsCertified,
+        "functions_in_module": c.functionsInModule,  # DENOMINATOR
+        "max_certified_trust_tier": c.maxCertifiedTrustTier,
+        "operation_rubric_results": c.operationRubricResults or [],  # NAMED LIST
+        "rubric_dimension_spread": c.rubricDimensionSpread,
+        "escalation_path_verified": c.escalationPathVerified,
+        "compliance_coupling_verified": c.complianceCouplingVerified,
+        "expires_at": c.expiresAt.isoformat() if c.expiresAt else None,
+    }
+
+
+@router.get("/certs", dependencies=[Depends(require_role("viewer"))])
+async def list_operation_certs(
+    unit_type: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """All operation certs (both unit types), each carrying its own denominator + named-list results
+    + operation_rubric_version. Shown beside the domain cert, never as one merged score."""
+    stmt = select(OperationCertification).order_by(OperationCertification.createdAt.desc())
+    if unit_type is not None:
+        stmt = stmt.where(OperationCertification.unitType == unit_type)
+    certs = (await session.execute(stmt)).scalars().all()
+    return {
+        "operation_rubric_version": OPERATION_RUBRIC_VERSION,
+        "certs": [_serialize_cert(c) for c in certs],
+        "total": len(certs),
+    }
+
+
+@router.get("/capacity", dependencies=[Depends(require_role("viewer"))])
+async def capacity(session: AsyncSession = Depends(get_session)) -> dict:
+    """The §8 capacity numbers SimForge owns — produced-but-not-certified (never_certified /
+    in_training) and the certified count — plus the Office-owned allocation split, which SimForge
+    does NOT track and reports as null so it's never mistaken for a SimForge number."""
+    agent_certs = (
+        (
+            await session.execute(
+                select(OperationCertification).where(
+                    OperationCertification.unitType == "agent_operation"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_state: dict[str, int] = {}
+    for c in agent_certs:
+        by_state[c.state] = by_state.get(c.state, 0) + 1
+    certified = by_state.get(OperationState.CERTIFIED.value, 0)
+    produced_not_certified = by_state.get(
+        OperationState.NEVER_CERTIFIED.value, 0
+    ) + by_state.get(OperationState.IN_TRAINING.value, 0)
+    return {
+        "simforge_owned": {
+            "certified": certified,
+            "produced_but_not_certified": produced_not_certified,
+            "by_state": by_state,
+        },
+        "office_owned": {
+            "certified_and_free": None,  # allocator state lives with The Office
+            "certified_but_allocated": None,
+            "note": "allocation split is Office-owned; SimForge does not track it",
+        },
+    }
