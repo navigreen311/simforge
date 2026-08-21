@@ -17,6 +17,7 @@ from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
 from src.models.dress_rehearsal import DressRehearsal
 from src.models.evidence import EvidenceAccess, EvidenceRecord
+from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.forge_parity import ForgeParity
 from src.models.gap import SoftwareGap, VillageOSGap
 from src.models.golden_nomination import GoldenNomination
@@ -25,6 +26,7 @@ from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.handoff_test import HandoffTest
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.ontology import OntologyEntity, OntologyRelation
+from src.models.operation_cert import OperationCertification
 from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.production_outcome import ProductionOutcome
 from src.models.registry import LineageEdge, ObjectRegistryEntry
@@ -83,6 +85,8 @@ __all__ = [
     "EvidenceRecord",
     "EvidenceAccess",
     "ForgeParity",
+    "ForgeInstructionSet",
+    "OperationCertification",
     "Waiver",
     "Appeal",
     "DressRehearsal",

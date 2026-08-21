@@ -942,3 +942,75 @@ model BankScenario {
   @@index([tier])
   @@index([sourceType])
 }
+
+// ============================================================================
+// Forge Operation Certification (Rev 2, agent × forge × module) — ADDITIVE, separate from the
+// 8-dimension DOMAIN rubric and its certs (AgentCert/DeptCert), which are untouched.
+// ============================================================================
+
+// The curriculum an operation cert BINDS to: the instruction set for a forge module, authored by
+// The Office; SimForge tests an agent against it. A cert records the instruction_version,
+// forge_api_version, and content_hash it was earned under (change → re-cert; hash mismatch → VOID).
+model ForgeInstructionSet {
+  id                 String   @id @default(cuid())
+  forgeId            String
+  moduleId           String
+  instructionVersion String // semver
+  forgeApiVersion    String // semver
+  authoredBy         String
+  authoredAt         DateTime @default(now())
+  contentHash        String
+  createdAt          DateTime @default(now())
+
+  @@index([forgeId])
+  @@index([moduleId])
+}
+
+// An operation certification at agent × forge × module granularity. One table, two unit types:
+//   Unit A (agent_operation):    agentId × forgeId × moduleId
+//   Unit B (department_context): departmentId × forgeId × forgeContext × ventureContext
+// operationRubricVersion is SEPARATE from and independent of the domain rubric_version (required,
+// not optional). `state` is the distinct 7-state machine — never_certified/failed/stale are never a
+// low score. operationRubricResults is a NAMED LIST (not fixed dimension columns). The DENOMINATOR
+// (functionsCertified of functionsInModule) travels on every Unit A result.
+model OperationCertification {
+  id                     String    @id @default(cuid())
+  unitType               String // agent_operation | department_context
+  state                  String // certified|stale_instructions|stale_forge|in_training|never_certified|failed|revoked
+  forgeId                String
+  instructionVersion     String // semver, earned under
+  forgeApiVersion        String // semver, earned under
+  instructionContentHash String // mismatch at run → VOID
+  operationRubricVersion String // semver, SEPARATE from domain rubric_version — required
+
+  // Unit A (nullable for Unit B rows)
+  agentId               String?
+  moduleId              String?
+  functionsCertified    Int?
+  functionsInModule     Int? // DENOMINATOR
+  maxCertifiedTrustTier String? // auto_execute | propose | suggest
+  perScenarioClass      Json? // { scenario_class: verdict }
+  operationRubricResults Json? // NAMED LIST: [{dimension, verdict, score?, threshold?}]
+  rubricDimensionSpread Float? // collapse check
+  failureModesObserved  Json?
+  versionSensitivity    Json? // {module: [major|minor|patch]} (Rev 2 Q4)
+  expiresAt             DateTime?
+
+  // Unit B (nullable for Unit A rows)
+  departmentId               String?
+  forgeContext               String?
+  ventureContext             String?
+  escalationPathVerified     Boolean?
+  complianceCouplingVerified Boolean?
+
+  createdAt  DateTime  @default(now())
+  reviewedBy String?
+  reviewedAt DateTime?
+
+  @@index([unitType])
+  @@index([state])
+  @@index([forgeId])
+  @@index([agentId])
+  @@index([moduleId])
+  @@index([departmentId])
+}
