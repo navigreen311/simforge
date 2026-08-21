@@ -258,9 +258,7 @@ async def gate_result(
 
 
 @router.get("/agents/{agent_id}", dependencies=[Depends(require_role("viewer"))])
-async def agent_operation_view(
-    agent_id: str, session: AsyncSession = Depends(get_session)
-) -> dict:
+async def agent_operation_view(agent_id: str, session: AsyncSession = Depends(get_session)) -> dict:
     """Per-agent operation view: which modules certified/stale/never, under which versions, with the
     denominator always carried. Never merged with the agent's domain cert."""
     certs = await agent_operation_states(session, agent_id=agent_id)
@@ -408,6 +406,40 @@ async def list_operation_certs(
     }
 
 
+@router.get("/side-by-side", dependencies=[Depends(require_role("viewer"))])
+async def side_by_side_view(session: AsyncSession = Depends(get_session)) -> dict:
+    """The Batch-6 surface: each agent operation cert paired with that agent's DOMAIN cert — two
+    records, two denominators, two version stamps, never merged into one number."""
+    from src.services.operation import views
+
+    return await views.side_by_side(session)
+
+
+@router.get("/coverage", dependencies=[Depends(require_role("viewer"))])
+async def coverage_overview(session: AsyncSession = Depends(get_session)) -> dict:
+    """Coverage across all forges with honest denominators; thin modules flagged (Batch 6)."""
+    from src.services.operation import views
+
+    return await views.coverage(session)
+
+
+@router.get("/dept-context", dependencies=[Depends(require_role("viewer"))])
+async def dept_context_view(session: AsyncSession = Depends(get_session)) -> dict:
+    """Unit-B department-context certs (department × forge × context × venture)."""
+    from src.services.operation import views
+
+    return await views.dept_context(session)
+
+
+@router.get("/capacity-view", dependencies=[Depends(require_role("viewer"))])
+async def capacity_view(session: AsyncSession = Depends(get_session)) -> dict:
+    """The §8 capacity numbers shaped for the UI: per-module Office-owned free/allocated (labeled)
+    vs SimForge-owned produced-but-not-certified, plus totals."""
+    from src.services.operation import views
+
+    return await views.capacity(session)
+
+
 @router.get("/capacity", dependencies=[Depends(require_role("viewer"))])
 async def capacity(session: AsyncSession = Depends(get_session)) -> dict:
     """The §8 capacity numbers SimForge owns — produced-but-not-certified (never_certified /
@@ -428,9 +460,9 @@ async def capacity(session: AsyncSession = Depends(get_session)) -> dict:
     for c in agent_certs:
         by_state[c.state] = by_state.get(c.state, 0) + 1
     certified = by_state.get(OperationState.CERTIFIED.value, 0)
-    produced_not_certified = by_state.get(
-        OperationState.NEVER_CERTIFIED.value, 0
-    ) + by_state.get(OperationState.IN_TRAINING.value, 0)
+    produced_not_certified = by_state.get(OperationState.NEVER_CERTIFIED.value, 0) + by_state.get(
+        OperationState.IN_TRAINING.value, 0
+    )
     return {
         "simforge_owned": {
             "certified": certified,

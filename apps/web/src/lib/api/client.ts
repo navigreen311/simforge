@@ -1964,17 +1964,15 @@ export interface OperationCertQuery {
 }
 
 export const operation = {
-  // Side-by-side domain + operation certs, per agent × capability.
-  certs: (params?: OperationCertQuery) =>
-    apiGet<OperationCertsResponse>(`/api/operation/certs${qs(params)}`),
-  // Per-agent operation view: modules certified/stale/never + Unit-B contexts.
-  agent: (agentVillageId: string) =>
-    apiGet<AgentOperationSummary>(`/api/operation/agent/${agentVillageId}`),
+  // Side-by-side domain + operation certs, per agent × capability (composed backend view).
+  certs: (_params?: OperationCertQuery) =>
+    apiGet<OperationCertsResponse>("/api/operation/side-by-side"),
+  // Per-agent operation view: modules certified/stale/never.
+  agent: (agentId: string) =>
+    apiGet<AgentOperationSummary>(`/api/operation/agents/${agentId}`),
   // Unit B — department-context certs.
-  deptContext: (params?: { department_key?: string; state?: string }) =>
-    apiGet<{ items: DepartmentContextCert[]; total: number }>(
-      `/api/operation/dept-context${qs(params)}`,
-    ),
+  deptContext: () =>
+    apiGet<{ items: DepartmentContextCert[]; total: number }>("/api/operation/dept-context"),
   coverage: () => apiGet<OperationCoverageReport>("/api/operation/coverage"),
-  capacity: () => apiGet<OperationCapacityReport>("/api/operation/capacity"),
+  capacity: () => apiGet<OperationCapacityReport>("/api/operation/capacity-view"),
 };
