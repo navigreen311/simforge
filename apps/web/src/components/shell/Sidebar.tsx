@@ -18,6 +18,7 @@ const SECTIONS: NavSection[] = [
       { href: "/dashboard/scenario-bank", label: "Scenario Bank" },
       { href: "/dashboard/truth-review", label: "Truth Review" },
       { href: "/dashboard/certs", label: "Certifications" },
+      { href: "/dashboard/operation-certs", label: "Operation Certs" },
     ],
   },
   {

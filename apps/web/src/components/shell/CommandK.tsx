@@ -13,6 +13,7 @@ const PAGES: Item[] = [
   ["Runs", "/dashboard/runs"],
   ["Packs", "/dashboard/packs"],
   ["Certifications", "/dashboard/certs"],
+  ["Operation Certs", "/dashboard/operation-certs"],
   ["Agents", "/dashboard/agents"],
   ["Departments", "/dashboard/departments"],
   ["Cohort Analytics", "/dashboard/cohort"],
