@@ -1748,3 +1748,233 @@ export const execution = {
     ),
   ledger: () => apiGet<IntegratedLedger>("/api/execution/ledger"),
 };
+
+// ============================================================================
+// Forge Operation Certification (Batch 4 payload contract)
+// ----------------------------------------------------------------------------
+// A SECOND, independent certification unit: whether an agent can OPERATE the
+// Forge software it does its domain work in. This is NEVER merged with the
+// domain rubric — two rubrics, two records, two version stamps, never one
+// number (spec Ground Rules + Batch 6). These types mirror the Batch 4
+// `forge_operation_results` shape verbatim: a NAMED LIST of rubric dimensions
+// (not fixed columns), the 7-state machine, both unit types, denominators, the
+// separate operation_rubric_version, and rubric_dimension_spread.
+//
+// NOTE ON ENDPOINTS: the exact `/api/operation/...` paths below are the ASSUMED
+// Stream-B contract. Adjust to match the FastAPI routes once Stream B lands;
+// the RESPONSE SHAPES follow the Batch 4 contract and should be stable.
+// ============================================================================
+
+// The 7-state machine (Batch 2). These MUST render as visibly distinct states —
+// never collapsed together, never rendered as a low score. never_certified (no
+// run) ≠ failed (ran, missed threshold) ≠ stale (was certified, curriculum/forge
+// moved). revoked is the content-hash VOID / incident terminal state.
+export type OperationCertState =
+  | "certified"
+  | "stale_instructions"
+  | "stale_forge"
+  | "in_training"
+  | "never_certified"
+  | "failed"
+  | "revoked";
+
+// Trust tier a cert authorizes (Unit A). Higher = more autonomy.
+export type OperationTrustTier = "auto_execute" | "propose" | "suggest";
+
+// Per-dimension verdict. The wire contract (Batch 4) enumerates PASS | FAIL |
+// NOT_RUN; NOT_APPLICABLE is the operation rubric's first-class not-applicable
+// value (a module with no never-do list is NOT_APPLICABLE on never_do_adherence,
+// never 0 — proposal §not_applicable). It is surfaced per-dimension, never as a
+// score of zero.
+export type OperationDimensionVerdict = "PASS" | "FAIL" | "NOT_RUN" | "NOT_APPLICABLE";
+
+// Scenario classes (Batch 3). recovery_after_failure is the Rev-2 addition.
+export type OperationScenarioClass =
+  | "happy_path"
+  | "malformed_input"
+  | "partial_failure"
+  | "silent_failure"
+  | "rate_limited"
+  | "permission_denied"
+  | "never_do_violation"
+  | "escalation_required"
+  | "recovery_after_failure";
+
+// A single rubric dimension result — a NAMED LIST entry, NOT a fixed field, so
+// SimForge can finalize/extend the operation rubric without breaking the
+// contract (Batch 4). Do not hardcode dimension names in consuming code.
+export interface OperationRubricResult {
+  dimension: string; // e.g. "sequence_correctness" — plain-language mapped in the UI
+  verdict: OperationDimensionVerdict;
+  score?: number | null; // 0.0–1.0, higher = better; absent for NOT_RUN / NOT_APPLICABLE
+  threshold?: number | null;
+}
+
+export interface PerScenarioClassResult {
+  scenario_class: OperationScenarioClass;
+  verdict: OperationDimensionVerdict;
+  scenarios_run?: number;
+  scenarios_passed?: number;
+}
+
+// Unit A — agent operation cert (agent × forge × module). Carries its OWN
+// denominator (functions_certified / functions_in_module) on every result and
+// its OWN version stamp (operation_rubric_version), both mandatory.
+export interface AgentOperationCert {
+  agent_village_id: string;
+  agent_name: string;
+  forge_id: string;
+  forge_label: string;
+  module_id: string; // raw id, e.g. "statement_ingest"
+  module_label: string; // plain-language capability name
+  state: OperationCertState;
+  max_certified_trust_tier: OperationTrustTier | null;
+  // DENOMINATOR — mandatory on every result. Render as
+  // "11 of 14 functions in statement_ingest", never "certified on statement_ingest".
+  functions_certified: number;
+  functions_in_module: number;
+  operation_rubric_results: OperationRubricResult[]; // NAMED LIST
+  rubric_dimension_spread: number | null; // collapse check (population variance)
+  per_scenario_class_results: PerScenarioClassResult[];
+  failure_modes_observed: string[];
+  // What the cert was earned under (a change to any of these → re-cert).
+  instruction_version: string;
+  forge_api_version: string;
+  instruction_content_hash: string;
+  operation_rubric_version: string; // SEPARATE from the domain rubric_version
+  expires_at?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+// Unit B — department context cert (department × forge × context × venture).
+export interface DepartmentContextCert {
+  department_id: string;
+  department_key: string;
+  forge_id: string;
+  forge_label: string;
+  forge_context: string;
+  venture_context: string;
+  state: OperationCertState;
+  escalation_path_verified: boolean;
+  compliance_coupling_verified: boolean;
+  instruction_version: string;
+  forge_api_version: string;
+  operation_rubric_version: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+// The DOMAIN cert reference shown ALONGSIDE the operation cert — its own record,
+// its own denominator, its own version stamp. Never merged with the operation
+// numbers. "Domain-certified, operation-uncertified" is a normal common state.
+export interface DomainCertRef {
+  present: boolean;
+  state: string | null; // certified | expired | revoked | never_certified | …
+  tier: string | null;
+  // Domain's OWN denominator (its rubric's dimensions), distinct from the
+  // operation denominator (module functions). Never shared, never averaged.
+  dimensions_passed: number | null;
+  dimensions_total: number | null;
+  rubric_version: string | null; // DOMAIN rubric_version — separate stamp
+  issued_at?: string | null;
+  expires_at?: string | null;
+}
+
+// One agent × capability, with BOTH certs side by side. Two records; the domain
+// cert may be present while the operation cert is absent/never — render calmly.
+export interface AgentCapabilityCerts {
+  agent_village_id: string;
+  agent_name: string;
+  capability_label: string; // plain-language name, NOT a raw id
+  module_id: string;
+  forge_id: string;
+  forge_label: string;
+  domain: DomainCertRef; // record 1
+  operation: AgentOperationCert | null; // record 2 (null = no operation unit yet)
+}
+
+export interface OperationCertsResponse {
+  items: AgentCapabilityCerts[];
+  total: number;
+  operation_rubric_version: string;
+  domain_rubric_version: string;
+}
+
+export interface AgentOperationSummary {
+  agent_village_id: string;
+  agent_name: string;
+  modules: AgentOperationCert[];
+  department_contexts: DepartmentContextCert[];
+}
+
+// Coverage — honest denominators; thin coverage flagged (Batch 6 / spec §10.4).
+export interface OperationModuleCoverage {
+  module_id: string;
+  module_label: string;
+  functions_covered: number;
+  functions_in_module: number; // DENOMINATOR
+  thin: boolean;
+}
+
+export interface OperationForgeCoverage {
+  forge_id: string;
+  forge_label: string;
+  modules_covered: number;
+  modules_in_forge: number; // DENOMINATOR
+  modules_uncovered: string[]; // named, never just a count
+  modules: OperationModuleCoverage[];
+  operation_rubric_version: string;
+}
+
+export interface OperationCoverageReport {
+  forges: OperationForgeCoverage[];
+  thin_coverage_threshold: number;
+}
+
+// The three capacity numbers (spec §8). certified_free + certified_allocated are
+// The Office's allocator concern (Office-owned); produced_not_certified
+// (never_certified + in_training) is what SimForge owns.
+export interface OperationCapacityModule {
+  module_id: string;
+  module_label: string;
+  forge_label: string;
+  certified_free: number; // Office-owned (allocator)
+  certified_allocated: number; // Office-owned
+  produced_not_certified: number; // SimForge-owned
+  never_certified: number; // breakdown of the SimForge-owned bucket
+  in_training: number;
+}
+
+export interface OperationCapacityReport {
+  modules: OperationCapacityModule[];
+  totals: {
+    certified_free: number;
+    certified_allocated: number;
+    produced_not_certified: number;
+  };
+}
+
+export interface OperationCertQuery {
+  agent?: string;
+  forge?: string;
+  module?: string;
+  state?: string;
+  search?: string;
+}
+
+export const operation = {
+  // Side-by-side domain + operation certs, per agent × capability.
+  certs: (params?: OperationCertQuery) =>
+    apiGet<OperationCertsResponse>(`/api/operation/certs${qs(params)}`),
+  // Per-agent operation view: modules certified/stale/never + Unit-B contexts.
+  agent: (agentVillageId: string) =>
+    apiGet<AgentOperationSummary>(`/api/operation/agent/${agentVillageId}`),
+  // Unit B — department-context certs.
+  deptContext: (params?: { department_key?: string; state?: string }) =>
+    apiGet<{ items: DepartmentContextCert[]; total: number }>(
+      `/api/operation/dept-context${qs(params)}`,
+    ),
+  coverage: () => apiGet<OperationCoverageReport>("/api/operation/coverage"),
+  capacity: () => apiGet<OperationCapacityReport>("/api/operation/capacity"),
+};
