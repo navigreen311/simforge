@@ -629,8 +629,8 @@ model Scorecard {
 model SoftwareGap {
   id              String  @id @default(cuid())
   ticketId        String  @unique // "SF-GAP-4821"
-  runId           String
-  run             Run     @relation(fields: [runId], references: [id])
+  runId           String? // nullable: operation-cert VOID incidents are not tied to a scenario Run
+  run             Run?    @relation(fields: [runId], references: [id])
   forge           String // "voiceforge" | "vaf" | "medlink-pro" | "cre-forge" | "funnelforge" | "capitalforge"
   module          String
   severity        String // "P0" | "P1" | "P2"

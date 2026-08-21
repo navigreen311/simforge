@@ -66,6 +66,10 @@ async def test_content_hash_mismatch_voids_to_revoked_and_raises_high_incident(
     )
     assert len(gaps) == 1  # HIGH-severity incident raised via the existing gap mechanism
     assert gaps[0].status == "open"
+    # An operation VOID is not a scenario Run — the gap must carry NO runId FK (real Postgres
+    # enforces it; the hermetic SQLite run does not, so this assertion guards the regression).
+    assert gaps[0].runId is None
+    assert gaps[0].firstSeenRunId == "run-void-1"
 
 
 async def test_matching_hash_does_not_void(db_session: AsyncSession) -> None:

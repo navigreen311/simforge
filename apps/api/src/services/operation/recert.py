@@ -97,7 +97,7 @@ async def raise_high_incident(
         return existing
     gap = SoftwareGap(
         ticketId=tid,
-        runId=run_ref,
+        runId=None,  # an operation-cert VOID is not a scenario Run — no Run FK to satisfy
         forge=forge,
         module=module,
         severity="P0",  # → HIGH-severity incident
