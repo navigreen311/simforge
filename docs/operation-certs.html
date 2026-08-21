@@ -1,0 +1,751 @@
+<title>SimForge · Operation Certification</title>
+<style>
+  :root{
+    --bg:#0f0f13; --panel:#17171d; --panel-2:#1f1f28; --line:#2b2b36; --line-soft:#232430;
+    --ink:#eae8f0; --ink-mid:#a6a2b4; --ink-dim:#6f6c7d;
+    --gold:#d8b552; --gold-dim:#8f7a34;
+    --ok:#4ea86b; --ok-bg:rgba(78,168,107,.13);
+    --fail:#d8564f; --fail-bg:rgba(216,86,79,.13);
+    --stale:#d99a3a; --stale-bg:rgba(217,154,58,.13);
+    --void:#e5484d; --void-bg:rgba(229,72,77,.15);
+    --info:#5a8fd6; --info-bg:rgba(90,143,214,.13);
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Code","SF Mono","JetBrains Mono",Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 500px at 78% -10%,rgba(216,181,82,.05),transparent 60%);}
+  .wrap{max-width:1120px;margin:0 auto;padding:40px 28px 80px}
+  a{color:inherit}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  .tnum{font-variant-numeric:tabular-nums}
+  .mono{font-family:var(--mono)}
+
+  /* masthead */
+  .mast{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;
+    padding-bottom:20px;border-bottom:1px solid var(--line)}
+  .brand{font-family:var(--serif);color:var(--gold);font-size:15px;letter-spacing:.14em;
+    text-transform:uppercase;font-weight:600}
+  .title{font-family:var(--serif);font-size:34px;font-weight:600;letter-spacing:-.01em;margin-top:8px}
+  .sub{color:var(--ink-mid);font-size:14.5px;margin-top:8px;max-width:60ch}
+  .asof{color:var(--ink-dim);font-size:12px;text-align:right;line-height:1.7}
+  .asof b{color:var(--ink-mid);font-weight:500}
+
+  /* principle ribbon */
+  .ribbon{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:22px 0 6px;
+    padding:14px 18px;border:1px solid var(--line);border-left:3px solid var(--gold);
+    background:linear-gradient(90deg,rgba(216,181,82,.06),transparent 70%);border-radius:2px}
+  .ribbon .p{font-family:var(--serif);font-size:16.5px;letter-spacing:.01em}
+  .ribbon .p b{color:var(--gold)}
+  .stamps{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+  .stamp{font-family:var(--mono);font-size:11.5px;padding:5px 10px;border:1px solid var(--line);
+    border-radius:2px;color:var(--ink-mid);background:var(--panel)}
+  .stamp b{color:var(--ink)}
+
+  /* section */
+  .sec{margin-top:40px}
+  .sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .sec-h h2{font-family:var(--serif);font-size:20px;font-weight:600}
+  .sec-h .note{color:var(--ink-dim);font-size:12.5px}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-dim);
+    font-weight:600;margin-bottom:6px}
+
+  /* state count strip */
+  .counts{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  @media(max-width:680px){.counts{grid-template-columns:repeat(2,1fr)}}
+  .count{border:1px solid var(--line);border-radius:3px;background:var(--panel);padding:16px 16px 14px;
+    position:relative;overflow:hidden}
+  .count::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+  .count.ok::before{background:var(--ok)} .count.fail::before{background:var(--fail)}
+  .count.stale::before{background:var(--stale)} .count.void::before{background:var(--void)}
+  .count .n{font-size:30px;font-weight:600;font-family:var(--serif);line-height:1}
+  .count .l{color:var(--ink-mid);font-size:12.5px;margin-top:8px}
+  .count .d{color:var(--ink-dim);font-size:11.5px;margin-top:2px}
+
+  /* side-by-side cards */
+  .card{border:1px solid var(--line);border-radius:4px;background:var(--panel);margin-bottom:18px;overflow:hidden}
+  .card.revoked{border-color:rgba(229,72,77,.45);box-shadow:0 0 0 1px rgba(229,72,77,.18) inset}
+  .card-h{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px;
+    border-bottom:1px solid var(--line-soft);background:var(--panel-2)}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--panel);border:1px solid var(--line);
+    display:grid;place-items:center;font-size:12px;color:var(--gold);font-weight:600;flex:none}
+  .who .nm{font-weight:600;font-size:15px}
+  .who .cap{color:var(--ink-mid);font-size:12.5px}
+  .card-h .stamps{margin-left:auto}
+
+  .panels{display:grid;grid-template-columns:1.35fr 1fr}
+  @media(max-width:720px){.panels{grid-template-columns:1fr}}
+  .panel{padding:18px}
+  .panel + .panel{border-left:1px solid var(--line-soft)}
+  @media(max-width:720px){.panel + .panel{border-left:0;border-top:1px solid var(--line-soft)}}
+  .panel .eyebrow{margin-bottom:10px}
+
+  /* state chip */
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+    padding:5px 11px;border-radius:2px;letter-spacing:.02em}
+  .chip .dot{width:7px;height:7px;border-radius:50%}
+  .chip.certified{background:var(--ok-bg);color:var(--ok)} .chip.certified .dot{background:var(--ok)}
+  .chip.failed{background:var(--fail-bg);color:var(--fail)} .chip.failed .dot{background:var(--fail)}
+  .chip.stale_instructions,.chip.stale_forge{background:var(--stale-bg);color:var(--stale)}
+  .chip.stale_instructions .dot,.chip.stale_forge .dot{background:var(--stale)}
+  .chip.revoked{background:var(--void-bg);color:var(--void);box-shadow:0 0 0 1px rgba(229,72,77,.4)}
+  .chip.revoked .dot{background:var(--void)}
+  .chip.never_certified{background:var(--info-bg);color:var(--info)} .chip.never_certified .dot{background:var(--info)}
+
+  /* denominator */
+  .denom{margin:14px 0 4px;font-family:var(--serif)}
+  .denom .big{font-size:26px;font-weight:600}
+  .denom .of{color:var(--ink-mid);font-size:14px}
+  .denom .mod{font-family:var(--mono);font-size:12px;color:var(--gold-dim)}
+  .meta{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink-mid);font-size:12px;margin-top:8px}
+  .meta b{color:var(--ink);font-weight:500}
+
+  /* dimension rows */
+  .dims{margin-top:16px;display:flex;flex-direction:column;gap:1px;background:var(--line-soft);
+    border:1px solid var(--line-soft);border-radius:3px;overflow:hidden}
+  .dim{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;
+    padding:8px 12px;background:var(--panel)}
+  .dim .nm{font-size:13px}
+  .dim .sc{font-family:var(--mono);font-size:12px;color:var(--ink-mid)}
+  .verd{font-size:10.5px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:2px}
+  .verd.PASS{color:var(--ok);background:var(--ok-bg)}
+  .verd.FAIL{color:var(--fail);background:var(--fail-bg)}
+  .verd.na{color:var(--ink-mid);background:rgba(166,162,180,.12)}
+
+  .scen{display:flex;flex-wrap:wrap;gap:5px;margin-top:14px}
+  .sq{width:9px;height:9px;border-radius:2px}
+  .sq.PASS{background:var(--ok)} .sq.FAIL{background:var(--fail)}
+  .scen .lbl{font-size:11px;color:var(--ink-dim);margin-right:4px}
+
+  .warn{margin-top:14px;display:flex;gap:9px;align-items:flex-start;font-size:12px;
+    color:var(--stale);background:var(--stale-bg);border:1px solid rgba(217,154,58,.3);
+    padding:9px 12px;border-radius:3px}
+  .warn svg{flex:none;margin-top:1px}
+  .fmodes{margin-top:12px;font-size:12px;color:var(--ink-mid)}
+  .fmodes .tag{font-family:var(--mono);font-size:11px;color:var(--fail);background:var(--fail-bg);
+    padding:2px 7px;border-radius:2px;margin-right:6px;display:inline-block;margin-top:4px}
+
+  /* domain panel */
+  .domain-present .kv{display:flex;justify-content:space-between;padding:7px 0;
+    border-bottom:1px solid var(--line-soft);font-size:13px}
+  .domain-present .kv:last-child{border-bottom:0}
+  .domain-present .kv .k{color:var(--ink-mid)}
+  .absent{color:var(--info);background:var(--info-bg);border:1px solid rgba(90,143,214,.3);
+    border-radius:3px;padding:12px 14px;font-size:13px;margin-top:2px}
+  .absent b{color:var(--ink)}
+  .absent .cue{display:block;color:var(--ink-mid);font-size:11.5px;margin-top:5px}
+
+  /* void callout */
+  .void-box{border:1px solid rgba(229,72,77,.4);background:var(--void-bg);border-radius:4px;padding:18px 20px}
+  .void-box h3{color:var(--void);font-family:var(--serif);font-size:17px}
+  .void-box p{color:var(--ink);font-size:13.5px;margin:8px 0 0}
+  .hashes{display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px}
+  .hrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:12px}
+  .hrow .tag{font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:2px;font-family:var(--sans);font-weight:600}
+  .hrow.declared .tag{background:rgba(166,162,180,.14);color:var(--ink-mid)}
+  .hrow.ran .tag{background:var(--void-bg);color:var(--void)}
+  .hrow .h{color:var(--ink-mid)} .hrow.ran .h{color:var(--void)}
+
+  /* tables */
+  .tbl{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+  .tbl th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-dim);
+    font-weight:600;padding:11px 14px;background:var(--panel-2);border-bottom:1px solid var(--line)}
+  .tbl td{padding:11px 14px;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .tbl tr:last-child td{border-bottom:0}
+  .tbl .r{text-align:right}
+  .bar{height:6px;border-radius:3px;background:var(--line-soft);overflow:hidden;min-width:90px}
+  .bar > i{display:block;height:100%;background:var(--gold)}
+  .flag{font-size:10.5px;font-weight:600;color:var(--stale);background:var(--stale-bg);padding:2px 7px;border-radius:2px}
+
+  /* capacity */
+  .cap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media(max-width:680px){.cap-grid{grid-template-columns:1fr}}
+  .cap{border:1px solid var(--line);border-radius:3px;background:var(--panel);padding:16px}
+  .cap .own{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+  .cap.office .own{color:var(--ink-dim)} .cap.sf .own{color:var(--gold-dim)}
+  .cap .n{font-family:var(--serif);font-size:30px;font-weight:600;margin-top:8px;line-height:1}
+  .cap .l{color:var(--ink-mid);font-size:12.5px;margin-top:6px}
+
+  /* dept + incidents rows */
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line);
+    border-radius:3px;background:var(--panel);margin-bottom:10px;font-size:13px}
+  .row .grow{flex:1;min-width:200px}
+  .check{color:var(--ok);font-weight:600}
+  .inc{border-left:3px solid var(--void)}
+  .inc .k{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+  .foot{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-dim);font-size:12px;line-height:1.7}
+  .foot b{color:var(--ink-mid);font-weight:500}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <div class="brand">SimForge</div>
+      <h1 class="title">Forge Operation Certification</h1>
+      <p class="sub">Can an agent actually <em>operate the software</em> it does its work in — at the granularity of
+        agent&nbsp;×&nbsp;forge&nbsp;×&nbsp;module. A certification unit that stands entirely apart from the 8-dimension domain rubric.</p>
+    </div>
+    <div class="asof">
+      <div>Live snapshot · dev environment</div>
+      <div><b>Capital&nbsp;Forge</b> · 1 forge · 3 modules</div>
+      <div id="asof"></div>
+    </div>
+  </header>
+
+  <div class="ribbon">
+    <div class="p">Two rubrics · two records · <b>never one number</b></div>
+    <div class="stamps">
+      <span class="stamp">operation rubric <b>v0.1.0</b></span>
+      <span class="stamp">domain rubric <b>v1.0.0</b></span>
+    </div>
+  </div>
+
+  <section class="sec">
+    <div class="counts" id="counts"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2>Agent × capability</h2>
+      <span class="note">domain cert and operation cert side by side — each with its own denominator and version stamp</span></div>
+    <div id="cards"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2>Content-hash VOID</h2>
+      <span class="note">a run against a tampered instruction set is void — not questionable</span></div>
+    <div id="void"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2>Coverage</h2><span class="note">honest denominators; thin modules flagged</span></div>
+    <div style="overflow-x:auto"><table class="tbl" id="coverage"></table></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2>Capacity</h2><span class="note">what SimForge owns vs. what The Office allocates</span></div>
+    <div class="cap-grid" id="capacity"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2>Department context · Unit B</h2>
+      <span class="note">competence without context is not clearance — an agent needs Unit&nbsp;A <em>and</em> its department's Unit&nbsp;B</span></div>
+    <div id="dept"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2>High-severity incidents</h2><span class="note">Incident Command · surfaced now</span></div>
+    <div id="incidents"></div>
+  </section>
+
+  <div class="foot">
+    <b>Reading this board:</b> <span style="color:var(--info)">never&nbsp;certified</span>, <span style="color:var(--fail)">failed</span>,
+    <span style="color:var(--stale)">stale</span> and <span style="color:var(--void)">revoked</span> are four different things — never a low score of the same thing.
+    A run that never happened is not a run that scored badly. Every result carries its denominator; a domain result and an operation result are never averaged into one figure.<br>
+    Snapshot rendered from live SimForge data. Frontend served statically because the Next.js dev server is unstable on this host; the data, endpoints and lifecycle are all live.
+  </div>
+</div>
+
+<script>
+const DATA = {
+  "items": [
+    {
+      "agent": "Jennifer Adams",
+      "vid": "jennifer_adams",
+      "cap": "Wire Release",
+      "module": "wire_release",
+      "op": {
+        "state": "revoked",
+        "tier": "propose",
+        "fc": 5,
+        "fim": 8,
+        "spread": 0.0,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.9,
+            null
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ]
+        ],
+        "fmodes": [],
+        "instr": "1.0.0",
+        "api": "3.0.0",
+        "void": {
+          "ran": "sha256:wire_release_TAMPERED",
+          "declared": null
+        }
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
+      "agent": "Marcus Reed",
+      "vid": "marcus_reed",
+      "cap": "Reconciliation",
+      "module": "reconciliation",
+      "op": {
+        "state": "stale_instructions",
+        "tier": "auto_execute",
+        "fc": 9,
+        "fim": 9,
+        "spread": 0.0028239999999999997,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.95,
+            null
+          ],
+          [
+            "failure_recognition",
+            "PASS",
+            0.9,
+            null
+          ],
+          [
+            "escalation_discipline",
+            "PASS",
+            0.88,
+            null
+          ],
+          [
+            "never_do_adherence",
+            "PASS",
+            1.0,
+            null
+          ],
+          [
+            "recovery",
+            "PASS",
+            0.85,
+            null
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ],
+          [
+            "rate_limited",
+            "PASS"
+          ],
+          [
+            "silent_failure",
+            "PASS"
+          ],
+          [
+            "malformed_input",
+            "PASS"
+          ],
+          [
+            "partial_failure",
+            "PASS"
+          ],
+          [
+            "permission_denied",
+            "PASS"
+          ],
+          [
+            "never_do_violation",
+            "PASS"
+          ],
+          [
+            "escalation_required",
+            "PASS"
+          ],
+          [
+            "recovery_after_failure",
+            "PASS"
+          ]
+        ],
+        "fmodes": [],
+        "instr": "1.2.0",
+        "api": "3.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
+      "agent": "Taylor Zhang",
+      "vid": "taylor_zhang",
+      "cap": "Statement Ingest",
+      "module": "statement_ingest",
+      "op": {
+        "state": "failed",
+        "tier": null,
+        "fc": 3,
+        "fim": 14,
+        "spread": 0.04092500000000001,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.81,
+            0.8
+          ],
+          [
+            "failure_recognition",
+            "FAIL",
+            0.4,
+            0.8
+          ],
+          [
+            "escalation_discipline",
+            "FAIL",
+            0.3,
+            0.75
+          ],
+          [
+            "never_do_adherence",
+            "na",
+            null,
+            null
+          ],
+          [
+            "recovery",
+            "FAIL",
+            0.35,
+            0.7
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ],
+          [
+            "rate_limited",
+            "FAIL"
+          ],
+          [
+            "silent_failure",
+            "FAIL"
+          ],
+          [
+            "malformed_input",
+            "FAIL"
+          ],
+          [
+            "partial_failure",
+            "FAIL"
+          ],
+          [
+            "permission_denied",
+            "FAIL"
+          ],
+          [
+            "never_do_violation",
+            "FAIL"
+          ],
+          [
+            "escalation_required",
+            "FAIL"
+          ],
+          [
+            "recovery_after_failure",
+            "FAIL"
+          ]
+        ],
+        "fmodes": [
+          "missed_silent_failure",
+          "muscled_through_escalation"
+        ],
+        "instr": "1.2.0",
+        "api": "3.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
+      "agent": "David Kim",
+      "vid": "david_kim",
+      "cap": "Statement Ingest",
+      "module": "statement_ingest",
+      "op": {
+        "state": "certified",
+        "tier": "propose",
+        "fc": 11,
+        "fim": 14,
+        "spread": 0.00291875,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.92,
+            0.8
+          ],
+          [
+            "failure_recognition",
+            "PASS",
+            0.85,
+            0.8
+          ],
+          [
+            "escalation_discipline",
+            "PASS",
+            0.8,
+            0.75
+          ],
+          [
+            "never_do_adherence",
+            "na",
+            null,
+            null
+          ],
+          [
+            "recovery",
+            "PASS",
+            0.78,
+            0.7
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ],
+          [
+            "rate_limited",
+            "PASS"
+          ],
+          [
+            "silent_failure",
+            "PASS"
+          ],
+          [
+            "malformed_input",
+            "PASS"
+          ],
+          [
+            "partial_failure",
+            "PASS"
+          ],
+          [
+            "permission_denied",
+            "PASS"
+          ],
+          [
+            "never_do_violation",
+            "PASS"
+          ],
+          [
+            "escalation_required",
+            "PASS"
+          ],
+          [
+            "recovery_after_failure",
+            "PASS"
+          ]
+        ],
+        "fmodes": [],
+        "instr": "1.2.0",
+        "api": "3.0.0"
+      },
+      "domain": {
+        "present": true,
+        "state": "active",
+        "tier": "foundational",
+        "ver": "1.0.0",
+        "issued": "2026-08-15",
+        "expires": "2026-11-13",
+        "total": 8
+      }
+    }
+  ],
+  "coverage": {
+    "forge": "Capital Forge",
+    "covered": 1,
+    "total": 3,
+    "thr": 0.5,
+    "modules": [
+      [
+        "Reconciliation",
+        0,
+        9,
+        true
+      ],
+      [
+        "Statement Ingest",
+        11,
+        14,
+        false
+      ],
+      [
+        "Wire Release",
+        0,
+        8,
+        true
+      ]
+    ]
+  },
+  "capacity": {
+    "free": 1,
+    "allocated": 0,
+    "produced": 0
+  },
+  "dept": {
+    "key": "Sales",
+    "forge": "Capital Forge",
+    "context": "production",
+    "venture": "greenstone",
+    "state": "certified",
+    "esc": true,
+    "comp": true
+  },
+  "incidents": [
+    {
+      "kind": "certs_revoked",
+      "label": "4 cert(s) revoked",
+      "n": 4,
+      "note": "certs_revoked"
+    },
+    {
+      "kind": "gaps_p0",
+      "label": "4 open P0 software gap(s)",
+      "n": 4,
+      "note": "gaps_p0"
+    }
+  ]
+};
+
+const STATE_LABEL = {certified:"Certified", failed:"Failed", stale_instructions:"Stale · instructions",
+  stale_forge:"Stale · forge", revoked:"Revoked · VOID", never_certified:"Never certified", in_training:"In training"};
+const TIER_LABEL = {auto_execute:"auto-execute", propose:"propose", suggest:"suggest"};
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+document.getElementById('asof').textContent =
+  "as of " + new Date().toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+
+/* state counts */
+const order=[["certified","ok","assignable"],["failed","fail","battery did not pass"],
+  ["stale_instructions","stale","re-cert required"],["revoked","void","content-hash void"]];
+const counts = {};
+DATA.items.forEach(i=>counts[i.op.state]=(counts[i.op.state]||0)+1);
+document.getElementById('counts').innerHTML = order.map(([st,cls,d])=>`
+  <div class="count ${cls}"><div class="n tnum">${counts[st]||0}</div>
+  <div class="l">${esc(STATE_LABEL[st])}</div><div class="d">${d}</div></div>`).join('');
+
+/* cards */
+function initials(n){return n.split(' ').map(w=>w[0]).join('').slice(0,2)}
+function chip(st){return `<span class="chip ${st}"><span class="dot"></span>${esc(STATE_LABEL[st])}</span>`}
+function dimRow([nm,v,sc,th]){
+  const label = nm.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const verd = v==='na'
+    ? `<span class="verd na" title="module has a never-do list handled → not applicable, never a zero">N/A</span>`
+    : `<span class="verd ${v}">${v}</span>`;
+  const score = v==='na' ? `<span class="sc">— not applicable</span>`
+    : `<span class="sc tnum">${sc.toFixed(2)}${th!=null?` / thr ${th.toFixed(2)}`:''}</span>`;
+  return `<div class="dim"><span class="nm">${esc(label)}</span>${score}${verd}</div>`;
+}
+function collapsed(op){return op.state==='certified' && op.dims.filter(d=>d[1]!=='na').length>=2 && op.spread<0.02}
+function opPanel(op){
+  const denom = `<div class="denom"><span class="big tnum">${op.fc}</span> <span class="of">of ${op.fim} functions in</span>
+    <span class="mod">${esc(op.module||'')}</span></div>`;
+  const meta = `<div class="meta">
+    ${op.tier?`<span>trust tier <b>${esc(TIER_LABEL[op.tier]||op.tier)}</b></span>`:`<span>trust tier <b>—</b></span>`}
+    <span>instr <b class="mono">${esc(op.instr)}</b></span>
+    <span>forge api <b class="mono">${esc(op.api)}</b></span>
+    <span>op rubric <b class="mono">v0.1.0</b></span></div>`;
+  const warn = collapsed(op)?`<div class="warn">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5 15 14H1L8 1.5Z" stroke="currentColor" stroke-width="1.3"/><path d="M8 6v4M8 11.5v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <span><b>Low-information PASS.</b> Dimensions barely vary (spread ${op.spread.toFixed(4)}) — the rubric may be measuring one thing five times. Advisory only; does not block.</span></div>`:'';
+  const stale = op.staleNote?`<div class="warn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.2l2 1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><span>${esc(op.staleNote)}</span></div>`:'';
+  const fm = op.fmodes.length?`<div class="fmodes">failure modes observed: ${op.fmodes.map(f=>`<span class="tag">${esc(f)}</span>`).join('')}</div>`:'';
+  const scen = `<div class="scen"><span class="lbl">scenario classes</span>${op.scen.map(([c,v])=>`<span class="sq ${v}" title="${esc(c)}: ${v}"></span>`).join('')}</div>`;
+  return `<div class="panel"><div class="eyebrow">Operation cert</div>${chip(op.state)}
+    ${denom}${meta}<div class="dims">${op.dims.map(dimRow).join('')}</div>${scen}${warn}${stale}${fm}</div>`;
+}
+function domainPanel(d){
+  if(!d.present) return `<div class="panel"><div class="eyebrow">Domain cert</div>
+    <div class="absent"><b>Operation-present, domain-absent.</b>
+    <span class="cue">A normal state — this agent holds no domain cert here. It is not an error, and never merged with the operation score.</span></div></div>`;
+  return `<div class="panel domain-present"><div class="eyebrow">Domain cert</div>
+    <span class="chip certified"><span class="dot"></span>Domain-certified</span>
+    <div class="denom"><span class="of">${d.total} domain dimensions · </span><span class="mod">tier ${esc(d.tier)}</span></div>
+    <div style="margin-top:10px">
+      <div class="kv"><span class="k">state</span><span>${esc(d.state)}</span></div>
+      <div class="kv"><span class="k">domain rubric</span><span class="mono">v${esc(d.ver)}</span></div>
+      <div class="kv"><span class="k">issued</span><span class="tnum">${esc(d.issued)}</span></div>
+      <div class="kv"><span class="k">expires</span><span class="tnum">${esc(d.expires)}</span></div>
+    </div></div>`;
+}
+document.getElementById('cards').innerHTML = DATA.items.map(i=>`
+  <div class="card ${i.op.state==='revoked'?'revoked':''}">
+    <div class="card-h">
+      <div class="avatar">${esc(initials(i.agent))}</div>
+      <div class="who"><div class="nm">${esc(i.agent)} <span class="mono" style="color:var(--ink-dim);font-size:11px">${esc(i.vid)}</span></div>
+        <div class="cap">${esc(i.cap)} · ${esc('Capital Forge')}</div></div>
+      <div class="stamps">
+        <span class="stamp">op <b>v0.1.0</b></span>
+        <span class="stamp">domain <b>${i.domain.present?'v1.0.0':'—'}</b></span>
+      </div>
+    </div>
+    <div class="panels">${opPanel(i.op)}${domainPanel(i.domain)}</div>
+  </div>`).join('');
+
+/* void */
+const v = DATA.items.find(i=>i.op.void);
+if(v){
+  const vo=v.op.void;
+  const declaredRow = vo.declared
+    ? `<div class="hrow declared"><span class="tag">declared by Office</span><span class="h">${esc(vo.declared)}</span></div>`
+    : `<div class="hrow declared"><span class="tag">declared by Office</span><span class="h">— not retained after the run</span></div>`;
+  document.getElementById('void').innerHTML = `<div class="void-box">
+    <h3>${esc(v.cap)} · ${esc(v.agent)} — certification VOID</h3>
+    <p>The battery <b>passed</b>, but the run executed against an instruction set whose content hash did not match what The Office declared.
+    Under the void rule that is not a warning: the cert is <b>revoked</b> and a HIGH-severity incident is raised.</p>
+    <div class="hashes">
+      ${declaredRow}
+      <div class="hrow ran"><span class="tag">actually ran against</span><span class="h">${esc(vo.ran)}</span> <span style="color:var(--void)">✕ mismatch</span></div>
+    </div></div>`;
+} else {
+  document.getElementById('void').innerHTML = `<div class="row" style="color:var(--ink-mid)">No content-hash void in this snapshot — every run matched its declared instruction set.</div>`;
+}
+
+/* coverage */
+const c=DATA.coverage;
+document.getElementById('coverage').innerHTML = `
+  <thead><tr><th>Module</th><th class="r">Functions covered</th><th>Coverage</th><th>Status</th></tr></thead>
+  <tbody>${c.modules.map(([m,cov,fim,thin])=>{const pct=fim?Math.round(cov/fim*100):0;return `
+    <tr><td>${esc(m)}</td>
+      <td class="r tnum">${cov} of ${fim}</td>
+      <td><div class="bar"><i style="width:${pct}%"></i></div></td>
+      <td>${thin?'<span class="flag">thin — below 50%</span>':'<span style="color:var(--ok)">covered</span>'}</td></tr>`}).join('')}
+    <tr><td colspan="4" style="color:var(--ink-mid)"><b>${c.forge}:</b> ${c.covered} of ${c.total} modules covered · uncovered (named): reconciliation, wire_release</td></tr>
+  </tbody>`;
+
+/* capacity */
+const cap=DATA.capacity;
+document.getElementById('capacity').innerHTML = `
+  <div class="cap office"><div class="own">Office-owned · allocator</div><div class="n tnum">${cap.free}</div><div class="l">certified &amp; free</div></div>
+  <div class="cap office"><div class="own">Office-owned</div><div class="n tnum">${cap.allocated}</div><div class="l">certified but allocated</div></div>
+  <div class="cap sf"><div class="own">SimForge-owned</div><div class="n tnum">${cap.produced}</div><div class="l">produced, not yet certified</div></div>`;
+
+/* dept */
+const d=DATA.dept;
+document.getElementById('dept').innerHTML = `<div class="row">
+  <span class="chip certified"><span class="dot"></span>Certified</span>
+  <div class="grow"><b>${esc(d.key)}</b> department · ${esc(d.forge)} · <span class="mono" style="font-size:12px">${esc(d.context)}</span> context · venture ${esc(d.venture)}</div>
+  <span class="check">✓ escalation path verified</span>
+  <span class="check">✓ compliance coupling verified</span>
+  <span class="stamp">op <b>v0.1.0</b></span>
+</div>
+<div style="color:var(--ink-dim);font-size:12.5px;margin-top:2px">David Kim is <b style="color:var(--ok)">assignable</b> on statement_ingest — he holds a current Unit&nbsp;A cert <em>and</em> Sales holds this Unit&nbsp;B context cert. Both are required.</div>`;
+
+/* incidents */
+document.getElementById('incidents').innerHTML = DATA.incidents.map(i=>`
+  <div class="row inc"><span class="chip revoked"><span class="dot"></span>HIGH</span>
+    <div class="grow"><b class="tnum">${i.n}</b> · ${esc(i.label)}<div class="k">${esc(i.kind)} — ${esc(i.note)}</div></div></div>`).join('');
+</script>
