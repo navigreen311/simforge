@@ -12,7 +12,8 @@ class SoftwareGap(IdTimestampMixin, Base):
     __tablename__ = "SoftwareGap"
 
     ticketId: Mapped[str] = mapped_column(String, unique=True)  # "SF-GAP-4821"
-    runId: Mapped[str] = mapped_column(String, ForeignKey("Run.id"))
+    # Nullable: operation-cert VOID incidents (Batch 4/5) are not tied to a scenario Run.
+    runId: Mapped[str | None] = mapped_column(String, ForeignKey("Run.id"), nullable=True)
     forge: Mapped[str] = mapped_column(String)
     module: Mapped[str] = mapped_column(String)
     severity: Mapped[str] = mapped_column(String)  # "P0" | "P1" | "P2"
