@@ -121,21 +121,19 @@ async def build() -> dict:
             "allocated": cap["totals"]["certified_allocated"],
             "produced": cap["totals"]["produced_not_certified"],
         }
-        depts = await views.dept_context(s)
-        d0 = depts["items"][0] if depts["items"] else None
-        dept = (
+        depts_raw = await views.dept_context(s)
+        depts = [
             {
-                "key": d0["department_key"],
-                "forge": d0["forge_label"],
-                "context": d0["forge_context"],
-                "venture": d0["venture_context"],
-                "state": d0["state"],
-                "esc": d0["escalation_path_verified"],
-                "comp": d0["compliance_coupling_verified"],
+                "key": d["department_key"],
+                "forge": d["forge_label"],
+                "context": d["forge_context"],
+                "venture": d["venture_context"],
+                "state": d["state"],
+                "esc": d["escalation_path_verified"],
+                "comp": d["compliance_coupling_verified"],
             }
-            if d0
-            else None
-        )
+            for d in depts_raw["items"]
+        ]
 
         from src.services.incident.report import incident_report  # noqa: E402
 
@@ -151,7 +149,7 @@ async def build() -> dict:
         "items": items,
         "coverage": coverage,
         "capacity": capacity,
-        "dept": dept,
+        "depts": depts,
         "incidents": incidents,
     }
 
