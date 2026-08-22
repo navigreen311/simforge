@@ -156,15 +156,21 @@ async def build() -> dict:
     }
 
 
-def main() -> None:
-    data = asyncio.run(build())
+def write_export(data: dict) -> int:
+    """Inject `data` into the template and write docs/operation-certs.html. Returns byte count."""
     template = TEMPLATE.read_text(encoding="utf-8")
     payload = "const DATA = " + json.dumps(data, indent=2) + ";"
     html = template.replace("const DATA = /*__DATA__*/ null;", payload)
     if "const DATA = /*__DATA__*/ null;" in html or "__DATA__" in html:
         raise SystemExit("placeholder not substituted — template markers changed?")
     OUTPUT.write_text(html, encoding="utf-8")
-    print(f"wrote {OUTPUT} ({len(html):,} bytes) · {len(data['items'])} agent×capability cards")
+    return len(html)
+
+
+def main() -> None:
+    data = asyncio.run(build())
+    n = write_export(data)
+    print(f"wrote {OUTPUT} ({n:,} bytes) · {len(data['items'])} agent×capability cards")
 
 
 if __name__ == "__main__":
