@@ -53,13 +53,13 @@
     font-weight:600;margin-bottom:6px}
 
   /* state count strip */
-  .counts{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  @media(max-width:680px){.counts{grid-template-columns:repeat(2,1fr)}}
+  .counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
   .count{border:1px solid var(--line);border-radius:3px;background:var(--panel);padding:16px 16px 14px;
     position:relative;overflow:hidden}
   .count::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
   .count.ok::before{background:var(--ok)} .count.fail::before{background:var(--fail)}
   .count.stale::before{background:var(--stale)} .count.void::before{background:var(--void)}
+  .count.train::before{background:var(--gold)} .count.info::before{background:var(--info)}
   .count .n{font-size:30px;font-weight:600;font-family:var(--serif);line-height:1}
   .count .l{color:var(--ink-mid);font-size:12.5px;margin-top:8px}
   .count .d{color:var(--ink-dim);font-size:11.5px;margin-top:2px}
@@ -250,6 +250,95 @@
 <script>
 const DATA = {
   "items": [
+    {
+      "agent": "Gardner",
+      "vid": "gardner",
+      "cap": "Wire Release",
+      "module": "wire_release",
+      "op": {
+        "state": "stale_forge",
+        "tier": "propose",
+        "fc": 6,
+        "fim": 8,
+        "spread": 0.004575999999999999,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.9,
+            null
+          ],
+          [
+            "failure_recognition",
+            "PASS",
+            0.84,
+            null
+          ],
+          [
+            "escalation_discipline",
+            "PASS",
+            0.87,
+            null
+          ],
+          [
+            "never_do_adherence",
+            "PASS",
+            1.0,
+            null
+          ],
+          [
+            "recovery",
+            "PASS",
+            0.8,
+            null
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ],
+          [
+            "rate_limited",
+            "PASS"
+          ],
+          [
+            "silent_failure",
+            "PASS"
+          ],
+          [
+            "malformed_input",
+            "PASS"
+          ],
+          [
+            "partial_failure",
+            "PASS"
+          ],
+          [
+            "permission_denied",
+            "PASS"
+          ],
+          [
+            "never_do_violation",
+            "PASS"
+          ],
+          [
+            "escalation_required",
+            "PASS"
+          ],
+          [
+            "recovery_after_failure",
+            "PASS"
+          ]
+        ],
+        "fmodes": [],
+        "instr": "1.1.0",
+        "api": "3.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
     {
       "agent": "Nina Okafor",
       "vid": "nina_okafor",
@@ -674,7 +763,7 @@ const DATA = {
   "coverage": {
     "forge": "Capital Forge",
     "covered": 1,
-    "total": 2,
+    "total": 3,
     "thr": 0.5,
     "modules": [
       [
@@ -688,6 +777,12 @@ const DATA = {
         11,
         14,
         false
+      ],
+      [
+        "Wire Release",
+        0,
+        8,
+        true
       ]
     ]
   },
@@ -751,11 +846,13 @@ document.getElementById('asof').textContent =
 
 /* state counts */
 const order=[["certified","ok","assignable"],["failed","fail","battery did not pass"],
-  ["stale_instructions","stale","re-cert required"],["revoked","void","content-hash void"]];
+  ["stale_instructions","stale","instructions rewritten"],["stale_forge","stale","forge released"],
+  ["in_training","train","learning the module"],["never_certified","info","produced, not tested"],
+  ["revoked","void","content-hash void"]];
 const counts = {};
 DATA.items.forEach(i=>counts[i.op.state]=(counts[i.op.state]||0)+1);
-document.getElementById('counts').innerHTML = order.map(([st,cls,d])=>`
-  <div class="count ${cls}"><div class="n tnum">${counts[st]||0}</div>
+document.getElementById('counts').innerHTML = order.filter(([st])=>counts[st]).map(([st,cls,d])=>`
+  <div class="count ${cls}"><div class="n tnum">${counts[st]}</div>
   <div class="l">${esc(STATE_LABEL[st])}</div><div class="d">${d}</div></div>`).join('');
 
 /* cards */
