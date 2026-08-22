@@ -251,6 +251,150 @@
 const DATA = {
   "items": [
     {
+      "agent": "Nina Okafor",
+      "vid": "nina_okafor",
+      "cap": "Call Flow",
+      "module": "call_flow",
+      "op": {
+        "state": "in_training",
+        "tier": null,
+        "fc": 4,
+        "fim": 10,
+        "spread": 0.0,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.72,
+            null
+          ],
+          [
+            "failure_recognition",
+            "NOT_RUN",
+            null,
+            null
+          ]
+        ],
+        "scen": [],
+        "fmodes": [],
+        "instr": "2.1.0",
+        "api": "4.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
+      "agent": "Priya Patel",
+      "vid": "priya_patel",
+      "cap": "Statement Ingest",
+      "module": "statement_ingest",
+      "op": {
+        "state": "never_certified",
+        "tier": null,
+        "fc": 0,
+        "fim": 14,
+        "spread": 0.0,
+        "dims": [],
+        "scen": [],
+        "fmodes": [],
+        "instr": "1.2.0",
+        "api": "3.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
+      "agent": "Sara Lopez",
+      "vid": "sara_lopez",
+      "cap": "Call Flow",
+      "module": "call_flow",
+      "op": {
+        "state": "certified",
+        "tier": "propose",
+        "fc": 8,
+        "fim": 10,
+        "spread": 0.003215999999999999,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.91,
+            0.8
+          ],
+          [
+            "failure_recognition",
+            "PASS",
+            0.83,
+            0.8
+          ],
+          [
+            "escalation_discipline",
+            "PASS",
+            0.86,
+            0.75
+          ],
+          [
+            "never_do_adherence",
+            "PASS",
+            0.95,
+            null
+          ],
+          [
+            "recovery",
+            "PASS",
+            0.79,
+            0.7
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ],
+          [
+            "rate_limited",
+            "PASS"
+          ],
+          [
+            "silent_failure",
+            "PASS"
+          ],
+          [
+            "malformed_input",
+            "PASS"
+          ],
+          [
+            "partial_failure",
+            "PASS"
+          ],
+          [
+            "permission_denied",
+            "PASS"
+          ],
+          [
+            "never_do_violation",
+            "PASS"
+          ],
+          [
+            "escalation_required",
+            "PASS"
+          ],
+          [
+            "recovery_after_failure",
+            "PASS"
+          ]
+        ],
+        "fmodes": [],
+        "instr": "2.1.0",
+        "api": "4.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
       "agent": "Marcus Reed",
       "vid": "marcus_reed",
       "cap": "Reconciliation",
@@ -548,9 +692,9 @@ const DATA = {
     ]
   },
   "capacity": {
-    "free": 1,
+    "free": 2,
     "allocated": 0,
-    "produced": 0
+    "produced": 2
   },
   "dept": {
     "key": "Sales",
