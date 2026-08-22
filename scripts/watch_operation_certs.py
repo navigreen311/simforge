@@ -61,21 +61,24 @@ def _now() -> str:
 
 
 async def watch(interval: float) -> None:
-    print(f"[watch] operation-cert export → {OUTPUT}")
+    print(f"[watch] operation-cert export -> {OUTPUT}", flush=True)
     n = await _render()
     last = await _fingerprint()
-    print(f"[watch] {_now()} initial render ({n:,} bytes). Watching every {interval:g}s — Ctrl+C to stop.")
+    print(
+        f"[watch] {_now()} initial render ({n:,} bytes). Watching every {interval:g}s - Ctrl+C to stop.",
+        flush=True,
+    )
     while True:
         await asyncio.sleep(interval)
         try:
             fp = await _fingerprint()
         except Exception as exc:  # DB hiccup — keep watching, don't die
-            print(f"[watch] {_now()} db check failed: {exc}")
+            print(f"[watch] {_now()} db check failed: {exc}", flush=True)
             continue
         if fp != last:
             last = fp
             n = await _render()
-            print(f"[watch] {_now()} data changed → re-rendered ({n:,} bytes)")
+            print(f"[watch] {_now()} data changed -> re-rendered ({n:,} bytes)", flush=True)
 
 
 def main() -> None:
@@ -84,7 +87,7 @@ def main() -> None:
     args = ap.parse_args()
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(watch(args.interval))
-    print("\n[watch] stopped.")
+    print("\n[watch] stopped.", flush=True)
 
 
 if __name__ == "__main__":
