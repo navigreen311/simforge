@@ -45,5 +45,12 @@ kept entirely separate from the domain rubric.
   apps/api/.venv/Scripts/python.exe scripts/export_operation_certs.py
   ```
 
-  Template + generator live in [`scripts/`](../scripts) (`operation-certs.template.html`,
-  `export_operation_certs.py`).
+  Or leave a **watcher** running — it re-renders automatically whenever the operation-cert data
+  changes, however you seed it (script, API, or manual insert):
+
+  ```
+  apps/api/.venv/Scripts/python.exe scripts/watch_operation_certs.py   # Ctrl+C to stop
+  ```
+
+  Template + generator + watcher live in [`scripts/`](../scripts) (`operation-certs.template.html`,
+  `export_operation_certs.py`, `watch_operation_certs.py`).
