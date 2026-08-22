@@ -696,15 +696,35 @@ const DATA = {
     "allocated": 0,
     "produced": 2
   },
-  "dept": {
-    "key": "Sales",
-    "forge": "Capital Forge",
-    "context": "production",
-    "venture": "greenstone",
-    "state": "certified",
-    "esc": true,
-    "comp": true
-  },
+  "depts": [
+    {
+      "key": "Sales",
+      "forge": "Capital Forge",
+      "context": "production",
+      "venture": "greenstone",
+      "state": "certified",
+      "esc": true,
+      "comp": true
+    },
+    {
+      "key": "CustomerSuccess",
+      "forge": "Voiceforge",
+      "context": "production",
+      "venture": "medlink-pro",
+      "state": "certified",
+      "esc": true,
+      "comp": true
+    },
+    {
+      "key": "Compliance",
+      "forge": "Capital Forge",
+      "context": "production",
+      "venture": "greenstone",
+      "state": "certified",
+      "esc": true,
+      "comp": true
+    }
+  ],
   "incidents": [
     {
       "kind": "certs_revoked",
@@ -835,15 +855,17 @@ document.getElementById('capacity').innerHTML = `
   <div class="cap sf"><div class="own">SimForge-owned</div><div class="n tnum">${cap.produced}</div><div class="l">produced, not yet certified</div></div>`;
 
 /* dept */
-const d=DATA.dept;
-document.getElementById('dept').innerHTML = `<div class="row">
-  <span class="chip certified"><span class="dot"></span>Certified</span>
-  <div class="grow"><b>${esc(d.key)}</b> department · ${esc(d.forge)} · <span class="mono" style="font-size:12px">${esc(d.context)}</span> context · venture ${esc(d.venture)}</div>
-  <span class="check">✓ escalation path verified</span>
-  <span class="check">✓ compliance coupling verified</span>
-  <span class="stamp">op <b>v0.1.0</b></span>
-</div>
-<div style="color:var(--ink-dim);font-size:12.5px;margin-top:2px">David Kim is <b style="color:var(--ok)">assignable</b> on statement_ingest — he holds a current Unit&nbsp;A cert <em>and</em> Sales holds this Unit&nbsp;B context cert. Both are required.</div>`;
+const depts = DATA.depts || [];
+document.getElementById('dept').innerHTML = (depts.length
+  ? depts.map(d=>`<div class="row">
+      <span class="chip ${d.state}"><span class="dot"></span>${esc(STATE_LABEL[d.state]||d.state)}</span>
+      <div class="grow"><b>${esc(d.key)}</b> department · ${esc(d.forge)} · <span class="mono" style="font-size:12px">${esc(d.context)}</span> context · venture ${esc(d.venture)}</div>
+      ${d.esc?'<span class="check">✓ escalation path verified</span>':''}
+      ${d.comp?'<span class="check">✓ compliance coupling verified</span>':''}
+      <span class="stamp">op <b>v0.1.0</b></span>
+    </div>`).join('')
+  : `<div class="row" style="color:var(--ink-mid)">No department-context (Unit B) certs yet.</div>`)
+  + `<div style="color:var(--ink-dim);font-size:12.5px;margin-top:2px">An agent is assignable only with a current Unit&nbsp;A <em>and</em> its department's Unit&nbsp;B for that forge and venture — <b>both required</b>. Competence without context is not clearance.</div>`;
 
 /* incidents */
 document.getElementById('incidents').innerHTML = DATA.incidents.map(i=>`
