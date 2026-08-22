@@ -251,43 +251,6 @@
 const DATA = {
   "items": [
     {
-      "agent": "Jennifer Adams",
-      "vid": "jennifer_adams",
-      "cap": "Wire Release",
-      "module": "wire_release",
-      "op": {
-        "state": "revoked",
-        "tier": "propose",
-        "fc": 5,
-        "fim": 8,
-        "spread": 0.0,
-        "dims": [
-          [
-            "sequence_correctness",
-            "PASS",
-            0.9,
-            null
-          ]
-        ],
-        "scen": [
-          [
-            "happy_path",
-            "PASS"
-          ]
-        ],
-        "fmodes": [],
-        "instr": "1.0.0",
-        "api": "3.0.0",
-        "void": {
-          "ran": "sha256:wire_release_TAMPERED",
-          "declared": null
-        }
-      },
-      "domain": {
-        "present": false
-      }
-    },
-    {
       "agent": "Marcus Reed",
       "vid": "marcus_reed",
       "cap": "Reconciliation",
@@ -567,7 +530,7 @@ const DATA = {
   "coverage": {
     "forge": "Capital Forge",
     "covered": 1,
-    "total": 3,
+    "total": 2,
     "thr": 0.5,
     "modules": [
       [
@@ -581,12 +544,6 @@ const DATA = {
         11,
         14,
         false
-      ],
-      [
-        "Wire Release",
-        0,
-        8,
-        true
       ]
     ]
   },
@@ -613,8 +570,8 @@ const DATA = {
     },
     {
       "kind": "gaps_p0",
-      "label": "4 open P0 software gap(s)",
-      "n": 4,
+      "label": "3 open P0 software gap(s)",
+      "n": 3,
       "note": "gaps_p0"
     }
   ]
