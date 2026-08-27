@@ -34,10 +34,15 @@ from src.services.operation.gating import (
     agent_module_assignability,
     agent_operation_states,
 )
+from src.services.operation.never_do import (
+    is_never_do_coverage_hole,
+    module_never_do_list,
+)
 from src.services.operation.recert import is_content_hash_void, raise_high_incident
 from src.services.operation.rubric import (
     OPERATION_RUBRIC_VERSION,
     compute_rubric_dimension_spread,
+    is_spread_collapsed,
 )
 from src.services.operation.scenarios import validate_curriculum_submission
 from src.services.operation.state_machine import OperationState, is_assignable
@@ -87,6 +92,7 @@ async def submit_curriculum(
             )
         )
     ).scalar_one_or_none()
+    never_do = list(body.module_never_do.get(ref.module_id, []))
     if existing is None:
         session.add(
             ForgeInstructionSet(
@@ -96,8 +102,13 @@ async def submit_curriculum(
                 forgeApiVersion=ref.forge_api_version,
                 authoredBy=ref.authored_by or "office",
                 contentHash=ref.content_hash,
+                neverDo=never_do,  # so an n/a can be told from a coverage hole (FIX 2)
             )
         )
+        await session.commit()
+    elif never_do and not existing.neverDo:
+        # Backfill the never-do list if this submission declares one and the set didn't carry it.
+        existing.neverDo = never_do
         await session.commit()
 
     return {
@@ -135,6 +146,9 @@ async def gate_result(
     op_rubric_version = body.operation_rubric_version or OPERATION_RUBRIC_VERSION
     void = is_content_hash_void(ref.content_hash, body.run_content_hash)
     run_ref = body.run_ref or "op-run-unknown"
+    # Does the run's module declare a never-do list? A required-but-untested never-do dimension is a
+    # coverage hole that blocks full certification (holds at provisional), not an n/a (FIX 2).
+    module_has_never_do = bool(await module_never_do_list(session, ref.forge_id, ref.module_id))
 
     if void:
         # One HIGH incident for the whole voided run.
@@ -160,10 +174,16 @@ async def gate_result(
         spread = compute_rubric_dimension_spread(results_dicts)
         if void:
             state = OperationState.REVOKED.value
-        elif outcome.passed:
-            state = OperationState.CERTIFIED.value
-        else:
+        elif not outcome.passed:
             state = OperationState.FAILED.value
+        elif is_spread_collapsed(spread, results_dicts) or is_never_do_coverage_hole(
+            module_has_never_do, results_dicts
+        ):
+            # Passed the bar, but the rubric didn't discriminate (collapse) or a required never-do
+            # dimension went untested (coverage hole) → full certification WITHHELD (FIX 1 / FIX 2).
+            state = OperationState.PROVISIONAL.value
+        else:
+            state = OperationState.CERTIFIED.value
 
         cert = OperationCertification(
             unitType="agent_operation",

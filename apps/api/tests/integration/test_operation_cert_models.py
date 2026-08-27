@@ -112,9 +112,12 @@ async def test_unit_b_department_context_persists(db_session: AsyncSession) -> N
     assert row.functionsInModule is None
 
 
-async def test_seven_states_are_distinct_and_round_trip(db_session: AsyncSession) -> None:
-    assert len(OPERATION_STATES) == 7
-    assert len(set(OPERATION_STATES)) == 7
+async def test_operation_states_are_distinct_and_round_trip(db_session: AsyncSession) -> None:
+    # 8 states after the Rev-2 audit added `provisional` (a passed-but-withheld hold, distinct from
+    # both certified and failed). Each persists as itself — never collapsed, never a low score.
+    assert len(OPERATION_STATES) == 8
+    assert len(set(OPERATION_STATES)) == 8
+    assert "provisional" in OPERATION_STATES
     for state in OPERATION_STATES:
         db_session.add(
             OperationCertification(

@@ -90,6 +90,9 @@
   .chip.failed{background:var(--fail-bg);color:var(--fail)} .chip.failed .dot{background:var(--fail)}
   .chip.stale_instructions,.chip.stale_forge{background:var(--stale-bg);color:var(--stale)}
   .chip.stale_instructions .dot,.chip.stale_forge .dot{background:var(--stale)}
+  .chip.provisional{background:rgba(163,113,247,.15);color:#b98cff;border:1px dashed rgba(163,113,247,.5)}
+  .chip.provisional .dot{background:#a371f7}
+  .count.prov::before{background:#a371f7}
   .chip.revoked{background:var(--void-bg);color:var(--void);box-shadow:0 0 0 1px rgba(229,72,77,.4)}
   .chip.revoked .dot{background:var(--void)}
   .chip.never_certified{background:var(--info-bg);color:var(--info)} .chip.never_certified .dot{background:var(--info)}
@@ -250,8 +253,9 @@
 <script>
 const DATA = /*__DATA__*/ null;
 
-const STATE_LABEL = {certified:"Certified", failed:"Failed", stale_instructions:"Stale · instructions",
-  stale_forge:"Stale · forge", revoked:"Revoked · VOID", never_certified:"Never certified", in_training:"In training"};
+const STATE_LABEL = {certified:"Certified", provisional:"Provisional", failed:"Failed",
+  stale_instructions:"Stale · instructions", stale_forge:"Stale · forge", revoked:"Revoked · VOID",
+  never_certified:"Never certified", in_training:"In training"};
 const TIER_LABEL = {auto_execute:"auto-execute", propose:"propose", suggest:"suggest"};
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -259,7 +263,8 @@ document.getElementById('asof').textContent =
   "as of " + new Date().toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 
 /* state counts */
-const order=[["certified","ok","assignable"],["failed","fail","battery did not pass"],
+const order=[["certified","ok","assignable"],["provisional","prov","passed but withheld"],
+  ["failed","fail","battery did not pass"],
   ["stale_instructions","stale","instructions rewritten"],["stale_forge","stale","forge released"],
   ["in_training","train","learning the module"],["never_certified","info","produced, not tested"],
   ["revoked","void","content-hash void"]];
@@ -349,13 +354,14 @@ if(v){
 /* coverage */
 const c=DATA.coverage;
 document.getElementById('coverage').innerHTML = `
-  <thead><tr><th>Module</th><th class="r">Functions covered</th><th>Coverage</th><th>Status</th></tr></thead>
-  <tbody>${c.modules.map(([m,cov,fim,thin])=>{const pct=fim?Math.round(cov/fim*100):0;return `
+  <thead><tr><th>Module</th><th class="r">Functions in module</th><th class="r">Certified agents</th><th class="r">Best single-agent</th><th>Status</th></tr></thead>
+  <tbody>${c.modules.map(([m,best,fim,thin,agents])=>{const pct=fim?Math.round(best/fim*100):0;return `
     <tr><td>${esc(m)}</td>
-      <td class="r tnum">${cov} of ${fim}</td>
-      <td><div class="bar"><i style="width:${pct}%"></i></div></td>
+      <td class="r tnum">${fim}</td>
+      <td class="r tnum">${agents}</td>
+      <td class="r tnum">${best} of ${fim}<div class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></div></td>
       <td>${thin?'<span class="flag">thin — below 50%</span>':'<span style="color:var(--ok)">covered</span>'}</td></tr>`}).join('')}
-    <tr><td colspan="4" style="color:var(--ink-mid)"><b>${c.forge}:</b> ${c.covered} of ${c.total} modules covered · uncovered (named): reconciliation, wire_release</td></tr>
+    <tr><td colspan="5" style="color:var(--ink-mid)"><b>${c.forge}:</b> ${c.covered} of ${c.total} modules covered. ${esc(c.note||'')}</td></tr>
   </tbody>`;
 
 /* capacity */

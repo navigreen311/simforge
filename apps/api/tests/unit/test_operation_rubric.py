@@ -106,11 +106,13 @@ def test_spread_zero_with_fewer_than_two_scores() -> None:
     ) == 0.0
 
 
-def test_seven_states_distinct() -> None:
-    assert len(OPERATION_STATES) == 7
-    assert len(set(OPERATION_STATES)) == 7
+def test_operation_states_distinct() -> None:
+    # `provisional` added by the Rev-2 audit — a passed-but-withheld hold, distinct from certified.
+    assert len(OPERATION_STATES) == 8
+    assert len(set(OPERATION_STATES)) == 8
     assert set(OPERATION_STATES) == {
         "certified",
+        "provisional",
         "stale_instructions",
         "stale_forge",
         "in_training",
@@ -118,6 +120,11 @@ def test_seven_states_distinct() -> None:
         "failed",
         "revoked",
     }
+
+
+def test_provisional_is_not_assignable() -> None:
+    # Passed the bar but withheld → not assignable, same as stale/failed. Only true certified is.
+    assert is_assignable("provisional") is False
 
 
 def test_only_certified_is_assignable() -> None:

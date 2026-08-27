@@ -159,7 +159,7 @@ function CoverageSection({ data }: { data: OperationCoverageReport | null }) {
     <section className="mb-12">
       <SectionHeading
         title="Operation coverage"
-        blurb="Honest denominators — how much of each Forge is actually exercised. Thin coverage is flagged, not hidden. A module tested only on the happy path is demonstrated, not certified."
+        blurb="Module-level coverage — distinct from the per-agent denominator on each card above. 'Best single-agent' is the most any one agent has certified (a lower bound on the module's union), NOT the module's own coverage and NOT one agent's number. Thin coverage is flagged, not hidden."
       />
       {data.forges.length === 0 ? (
         <EmptyState
@@ -190,7 +190,12 @@ function CoverageSection({ data }: { data: OperationCoverageReport | null }) {
                   <thead className="bg-ink-900/40 text-ink-200">
                     <tr>
                       <th className="px-5 py-2 font-medium">Module</th>
-                      <th className="px-4 py-2 font-medium">Functions covered</th>
+                      <th className="px-4 py-2 font-medium">Functions in module</th>
+                      <th className="px-4 py-2 font-medium">Certified agents</th>
+                      <th className="px-4 py-2 font-medium">
+                        Best single-agent
+                        <div className="text-[10px] font-normal text-ink-500">union lower bound</div>
+                      </th>
                       <th className="px-4 py-2 font-medium">Coverage</th>
                     </tr>
                   </thead>
@@ -204,7 +209,11 @@ function CoverageSection({ data }: { data: OperationCoverageReport | null }) {
                           </span>
                         </td>
                         <td className="px-4 py-2 font-mono text-gold-400">
-                          {m.functions_covered} of {m.functions_in_module}
+                          {m.functions_in_module}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-ink-100">{m.certified_agents}</td>
+                        <td className="px-4 py-2 font-mono text-ink-200">
+                          {m.best_single_agent_functions} of {m.functions_in_module}
                         </td>
                         <td className="px-4 py-2">
                           {m.thin ? (
@@ -231,6 +240,9 @@ function CoverageSection({ data }: { data: OperationCoverageReport | null }) {
               )}
             </div>
           ))}
+          <p className="rounded-lg border border-ink-600 bg-ink-900/40 px-4 py-2 text-xs text-ink-400">
+            {data.coverage_note}
+          </p>
         </div>
       )}
     </section>
@@ -246,7 +258,7 @@ function CapacitySection({ data }: { data: OperationCapacityReport | null }) {
     <section className="mb-12">
       <SectionHeading
         title="Operation capacity"
-        blurb="How many agents can drive each module. SimForge owns 'produced-but-not-certified' (never_certified + in_training). The certified pools are The Office's allocator concern — labelled as Office-owned."
+        blurb="How many agents can drive each module. SimForge owns 'produced-but-not-certified' (never_certified + in_training + provisional). A provisional cert passed the bar but is WITHHELD — it is NOT in the certified·free pool. The certified pools are The Office's allocator concern — labelled Office-owned."
       />
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -309,7 +321,8 @@ function CapacitySection({ data }: { data: OperationCapacityReport | null }) {
                   <td className="px-3 py-2 text-center font-mono text-info">
                     {m.produced_not_certified}
                     <div className="text-[10px] text-ink-500">
-                      {m.never_certified} never · {m.in_training} training
+                      {m.never_certified} never · {m.in_training} training ·{" "}
+                      <span className="text-accent">{m.provisional} provisional</span>
                     </div>
                   </td>
                 </tr>

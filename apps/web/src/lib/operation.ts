@@ -27,6 +27,17 @@ export const OPERATION_STATE_META: Record<OperationCertState, StateMeta> = {
     dot: "bg-success",
     blurb: "Earned against the current instruction set and operation rubric.",
   },
+  provisional: {
+    label: "Provisional",
+    // Distinct from certified (green) and failed (red): passed the bar but held. A slate/violet
+    // hue with a dashed border reads as "not final" without implying failure or a low score.
+    chip: "bg-accent/15 text-accent border border-dashed border-accent/50",
+    dot: "bg-accent",
+    blurb:
+      "Passed the threshold, but the rubric dimensions collapsed (measured too similarly to " +
+      "trust) or a required never-do dimension went untested — full certification withheld until " +
+      "real signal separates them. Not assignable.",
+  },
   in_training: {
     label: "In training",
     chip: "bg-gold-500/15 text-gold-300 border border-gold-600/40",
@@ -91,6 +102,13 @@ export const VERDICT_META: Record<OperationDimensionVerdict, VerdictMeta> = {
   NOT_APPLICABLE: { label: "n/a", chip: "bg-ink-600 text-ink-200" },
 };
 
+// The payload contract carries verdicts in mixed case (e.g. `not_applicable` lowercase). Look them
+// up case-insensitively and fall back to a neutral chip so an unknown verdict never crashes render.
+export function verdictMeta(verdict: string): VerdictMeta {
+  const key = String(verdict).toUpperCase() as OperationDimensionVerdict;
+  return VERDICT_META[key] ?? { label: String(verdict), chip: "bg-ink-600 text-ink-200" };
+}
+
 // Plain-language names for the operation rubric dimensions (proposal §5 dims).
 const DIMENSION_LABEL: Record<string, string> = {
   sequence_correctness: "Correct operation order",
@@ -125,14 +143,18 @@ export function scenarioClassLabel(cls: OperationScenarioClass): string {
 // "measuring one thing five times". Non-blocking; shown beside the PASS.
 export const COLLAPSE_SPREAD_THRESHOLD = 0.02;
 
-/** A certified result whose dimensions collapsed → low-information warning. */
+/**
+ * A passed result whose dimensions collapsed → low-information warning. Fires for `provisional`
+ * (the state a collapse now HOLDS the cert at) as well as `certified` — the warning explains WHY a
+ * cert is provisional. Non-blocking; advisory only.
+ */
 export function isSpreadCollapsed(
   state: OperationCertState,
   spread: number | null,
   numericDimCount: number,
 ): boolean {
   return (
-    state === "certified" &&
+    (state === "certified" || state === "provisional") &&
     spread !== null &&
     numericDimCount >= 2 &&
     spread < COLLAPSE_SPREAD_THRESHOLD
