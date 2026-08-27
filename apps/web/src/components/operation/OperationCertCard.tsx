@@ -5,7 +5,7 @@ import {
   OPERATION_STATE_META,
   scenarioClassLabel,
   trustTierLabel,
-  VERDICT_META,
+  verdictMeta,
 } from "@/lib/operation";
 import { StateChip } from "@/components/operation/StateChip";
 
@@ -204,9 +204,9 @@ function OperationPanel({
                     </span>
                   )}
                   <span
-                    className={`rounded px-1.5 py-0.5 font-semibold ${VERDICT_META[r.verdict].chip}`}
+                    className={`rounded px-1.5 py-0.5 font-semibold ${verdictMeta(r.verdict).chip}`}
                   >
-                    {VERDICT_META[r.verdict].label}
+                    {verdictMeta(r.verdict).label}
                   </span>
                 </span>
               </li>
@@ -221,8 +221,8 @@ function OperationPanel({
           {op.per_scenario_class_results.map((s) => (
             <span
               key={s.scenario_class}
-              className={`rounded px-1.5 py-0.5 text-[10px] ${VERDICT_META[s.verdict].chip}`}
-              title={`${scenarioClassLabel(s.scenario_class)}: ${VERDICT_META[s.verdict].label}`}
+              className={`rounded px-1.5 py-0.5 text-[10px] ${verdictMeta(s.verdict).chip}`}
+              title={`${scenarioClassLabel(s.scenario_class)}: ${verdictMeta(s.verdict).label}`}
             >
               {scenarioClassLabel(s.scenario_class)}
             </span>

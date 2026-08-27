@@ -91,6 +91,13 @@ export const VERDICT_META: Record<OperationDimensionVerdict, VerdictMeta> = {
   NOT_APPLICABLE: { label: "n/a", chip: "bg-ink-600 text-ink-200" },
 };
 
+// The payload contract carries verdicts in mixed case (e.g. `not_applicable` lowercase). Look them
+// up case-insensitively and fall back to a neutral chip so an unknown verdict never crashes render.
+export function verdictMeta(verdict: string): VerdictMeta {
+  const key = String(verdict).toUpperCase() as OperationDimensionVerdict;
+  return VERDICT_META[key] ?? { label: String(verdict), chip: "bg-ink-600 text-ink-200" };
+}
+
 // Plain-language names for the operation rubric dimensions (proposal §5 dims).
 const DIMENSION_LABEL: Record<string, string> = {
   sequence_correctness: "Correct operation order",
