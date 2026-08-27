@@ -24,6 +24,12 @@ VERDICT_FAIL = "FAIL"
 VERDICT_NOT_RUN = "NOT_RUN"
 VERDICT_NOT_APPLICABLE = "not_applicable"
 
+# Collapse threshold for rubric_dimension_spread — a SEPARATE knob from the per-dimension pass
+# threshold. A passing result whose spread is below this is "measuring one thing five times": the
+# rubric did not discriminate, so full certification is WITHHELD (state → provisional) until the
+# dimensions actually separate. Mirrors the frontend COLLAPSE_SPREAD_THRESHOLD; keep in sync.
+COLLAPSE_SPREAD_THRESHOLD = 0.02
+
 
 @dataclass(frozen=True)
 class OperationDimension:
@@ -130,3 +136,18 @@ def compute_rubric_dimension_spread(results: list[dict]) -> float:
         return 0.0
     mean = sum(scores) / n
     return sum((s - mean) ** 2 for s in scores) / n
+
+
+def _numeric_dim_count(results: list[dict]) -> int:
+    """How many dimensions carry a real (PASS/FAIL) verdict — the ones that could discriminate.
+    not_applicable / not-run dimensions are excluded (they carry no score)."""
+    return sum(1 for r in results if r.get("verdict") in (VERDICT_PASS, VERDICT_FAIL))
+
+
+def is_spread_collapsed(spread: float | None, results: list[dict]) -> bool:
+    """A passing result whose dimensions collapsed (≥2 scored dims, spread below the collapse
+    threshold). Non-blocking as a warning, but per the Rev-2 audit it HOLDS the state at provisional
+    rather than certified — full certification is withheld until real signal separates the dims."""
+    if spread is None:
+        return False
+    return _numeric_dim_count(results) >= 2 and spread < COLLAPSE_SPREAD_THRESHOLD

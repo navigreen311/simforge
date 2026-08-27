@@ -94,7 +94,13 @@ async def test_coverage_and_capacity_and_dept_shapes(
     cov = (await client.get("/api/operation/coverage")).json()
     forge = next(f for f in cov["forges"] if f["forge_id"] == "capital-forge")
     mod = next(m for m in forge["modules"] if m["module_id"] == "statement_ingest")
-    assert mod["functions_covered"] == 11 and mod["functions_in_module"] == 14
+    # FIX 3 — module coverage is NOT one agent's denominator: it reports the module denominator,
+    # certified-agent count, and the best single agent as an explicit union lower bound.
+    assert mod["functions_in_module"] == 14
+    assert mod["certified_agents"] == 1
+    assert mod["best_single_agent_functions"] == 11
+    assert "functions_covered" not in mod  # the conflated field is gone
+    assert "coverage_note" in cov
 
     cap = (await client.get("/api/operation/capacity-view")).json()
     assert cap["totals"]["certified_free"] == 1

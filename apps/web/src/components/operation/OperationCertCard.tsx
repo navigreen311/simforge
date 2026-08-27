@@ -1,4 +1,9 @@
-import type { AgentCapabilityCerts, AgentOperationCert } from "@/lib/api/client";
+import type {
+  AgentCapabilityCerts,
+  AgentOperationCert,
+  NeverDoStatus,
+  OperationDimensionVerdict,
+} from "@/lib/api/client";
 import {
   dimensionLabel,
   isSpreadCollapsed,
@@ -70,6 +75,45 @@ function VersionBadge({ label, version }: { label: string; version: string | nul
   );
 }
 
+// FIX 2 — the never_do_adherence verdict, disambiguated. A raw "n/a" hides two opposite facts:
+//  none     → genuinely not applicable (module has no never-do rules) → muted "n/a" with the reason.
+//  untested → module HAS never-do rules but the scenario wasn't run → a red "NOT TESTED" coverage
+//             failure, never shown as an n/a.
+//  tested   → the dimension was exercised → its real PASS/FAIL verdict.
+function NeverDoVerdict({
+  status,
+  verdict,
+}: {
+  status: NeverDoStatus;
+  verdict: OperationDimensionVerdict;
+}) {
+  if (status === "untested") {
+    return (
+      <span
+        className="rounded bg-danger/20 px-1.5 py-0.5 font-semibold text-danger"
+        title="Module has never-do rules but no never_do_violation scenario was run — a coverage hole, not an n/a."
+      >
+        NOT TESTED
+      </span>
+    );
+  }
+  if (status === "none") {
+    return (
+      <span
+        className="rounded bg-ink-600 px-1.5 py-0.5 font-semibold text-ink-200"
+        title="This module declares no never-do rules, so the dimension is genuinely not applicable — never a zero."
+      >
+        n/a — no never-do rules
+      </span>
+    );
+  }
+  return (
+    <span className={`rounded px-1.5 py-0.5 font-semibold ${verdictMeta(verdict).chip}`}>
+      {verdictMeta(verdict).label}
+    </span>
+  );
+}
+
 // Record 1 — DOMAIN cert. Its own denominator (rubric dimensions) + its own
 // version stamp (domain rubric_version). Independent of the operation record.
 function DomainPanel({ domain }: { domain: AgentCapabilityCerts["domain"] }) {
@@ -113,7 +157,13 @@ function DomainPanel({ domain }: { domain: AgentCapabilityCerts["domain"] }) {
           )}
         </>
       ) : (
-        <div className="text-sm text-ink-300">No domain certification on record.</div>
+        // FIX 5 — absent domain cert is a VALID incomplete-for-assignment state, not an error.
+        <div className="rounded border border-ink-600 bg-ink-800/60 px-2.5 py-2 text-sm text-ink-300">
+          <span className="text-ink-200">No domain certification yet.</span> An agent needs{" "}
+          <strong className="text-ink-100">both</strong> a current domain cert and a current
+          operation cert to be assignable — this agent has operation only. Not an error; it is
+          simply not yet cleared for shifts here.
+        </div>
       )}
     </Panel>
   );
@@ -153,6 +203,7 @@ function OperationPanel({
     (r) => r.verdict === "PASS" || r.verdict === "FAIL",
   ).length;
   const collapsed = isSpreadCollapsed(op.state, op.rubric_dimension_spread, numericDims);
+  const neverDoHole = op.never_do_status === "untested"; // list exists but the dimension was n/a
 
   return (
     <Panel
@@ -163,26 +214,47 @@ function OperationPanel({
     >
       <div className="flex flex-wrap items-center gap-2">
         <StateChip state={op.state} />
+        {/* FIX 4 — trust tier only surfaces on a true certified cert (the API sends null otherwise). */}
         <span className="text-xs text-ink-300">
           trust tier: {trustTierLabel(op.max_certified_trust_tier)}
         </span>
       </div>
 
-      {/* DENOMINATOR — always "N of M functions in {module}", never bare. */}
+      {/* DENOMINATOR — always "N of M functions certified FOR THIS AGENT", never the module's. */}
       <div className="text-sm text-ink-100">
         <span className="font-mono text-gold-400">
           {op.functions_certified} of {op.functions_in_module}
         </span>{" "}
-        functions in <span className="font-mono text-ink-200">{op.module_id}</span>
+        functions certified for {op.agent_name} in{" "}
+        <span className="font-mono text-ink-200">{op.module_id}</span>
       </div>
 
-      {/* Low-information collapse warning beside the PASS (non-blocking). */}
-      {collapsed && (
-        <div className="rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-warning">
-          ⚠ Low-information PASS — rubric dimensions collapsed (spread{" "}
-          <span className="font-mono">{op.rubric_dimension_spread?.toFixed(3)}</span>). The five
-          dimensions returned near-identical results, so this may be measuring one thing five
-          times. Advisory only; does not change the verdict.
+      {/* FIX 1 — collapse: for a provisional cert this explains the HOLD; for certified it is a
+          non-blocking low-information note beside the pass. */}
+      {collapsed &&
+        (op.state === "provisional" ? (
+          <div className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-[11px] text-accent">
+            ⚠ Full certification withheld (provisional). The rubric dimensions collapsed (spread{" "}
+            <span className="font-mono">{op.rubric_dimension_spread?.toFixed(3)}</span>) — the
+            dimensions returned near-identical results, so the rubric didn&apos;t discriminate. This
+            is <strong>not a low score</strong>; certification is held until real signal separates
+            the dimensions. Not assignable.
+          </div>
+        ) : (
+          <div className="rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-warning">
+            ⚠ Low-information PASS — rubric dimensions collapsed (spread{" "}
+            <span className="font-mono">{op.rubric_dimension_spread?.toFixed(3)}</span>). Advisory
+            only; does not change the verdict.
+          </div>
+        ))}
+
+      {/* FIX 2 — a required never-do dimension went untested: a COVERAGE HOLE, not an n/a. */}
+      {neverDoHole && (
+        <div className="rounded border border-danger/50 bg-danger/10 px-2 py-1 text-[11px] text-danger">
+          ⚠ Coverage hole — this module <strong>has never-do rules</strong>, but no{" "}
+          <span className="font-mono">never_do_violation</span> scenario was run. The never-do
+          dimension is <strong>NOT TESTED</strong> (not &ldquo;n/a&rdquo;). It cannot be fully
+          certified until that dimension is exercised.
         </div>
       )}
 
@@ -203,11 +275,15 @@ function OperationPanel({
                       {r.threshold != null ? ` / ${r.threshold.toFixed(2)}` : ""}
                     </span>
                   )}
-                  <span
-                    className={`rounded px-1.5 py-0.5 font-semibold ${verdictMeta(r.verdict).chip}`}
-                  >
-                    {verdictMeta(r.verdict).label}
-                  </span>
+                  {r.dimension === "never_do_adherence" ? (
+                    <NeverDoVerdict status={op.never_do_status} verdict={r.verdict} />
+                  ) : (
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-semibold ${verdictMeta(r.verdict).chip}`}
+                    >
+                      {verdictMeta(r.verdict).label}
+                    </span>
+                  )}
                 </span>
               </li>
             ))}

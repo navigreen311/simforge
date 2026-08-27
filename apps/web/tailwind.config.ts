@@ -34,6 +34,9 @@ const config: Config = {
         warning: "#D29922",
         danger: "#F85149",
         info: "#58A6FF",
+        // Violet — the `provisional` state hue: distinct from certified (green), failed (red),
+        // stale (amber), never_certified (blue) and in_training (gold). "Held, not final."
+        accent: "#A371F7",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],

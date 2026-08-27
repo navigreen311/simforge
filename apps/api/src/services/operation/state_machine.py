@@ -1,4 +1,4 @@
-"""The 7-state operation-cert state machine (Batch 2).
+"""The operation-cert state machine (Batch 2; `provisional` added by the Rev-2 audit).
 
 The states are DISTINCT and must never be collapsed into one another or reported as a "low score":
 a run that never happened (never_certified) is NOT a run that scored badly (failed), and neither is
@@ -15,6 +15,10 @@ from enum import StrEnum
 class OperationState(StrEnum):
     # Earned and current — the ONLY assignable state.
     CERTIFIED = "certified"
+    # Passed the threshold BUT the rubric didn't discriminate (dimensions collapsed) or a required
+    # never-do dimension went untested → full certification WITHHELD. Not assignable. Distinct from
+    # `certified` (real signal) and from `failed` (did not pass). Governance hold, not a low score.
+    PROVISIONAL = "provisional"
     # Instructions rewritten since the cert was earned → not assignable, re-cert required.
     STALE_INSTRUCTIONS = "stale_instructions"
     # Forge released a version affecting this module → not assignable, re-cert required.
@@ -38,7 +42,12 @@ OPERATION_STATES: tuple[str, ...] = tuple(s.value for s in OperationState)
 LEGAL_TRANSITIONS: dict[OperationState, frozenset[OperationState]] = {
     OperationState.NEVER_CERTIFIED: frozenset({OperationState.IN_TRAINING}),
     OperationState.IN_TRAINING: frozenset(
-        {OperationState.CERTIFIED, OperationState.FAILED}
+        {OperationState.CERTIFIED, OperationState.PROVISIONAL, OperationState.FAILED}
+    ),
+    # A provisional cert is resolved by a fresh battery: it becomes certified once the dimensions
+    # actually separate (real signal), or moves back through in_training; it can also be voided.
+    OperationState.PROVISIONAL: frozenset(
+        {OperationState.CERTIFIED, OperationState.IN_TRAINING, OperationState.REVOKED}
     ),
     OperationState.CERTIFIED: frozenset(
         {

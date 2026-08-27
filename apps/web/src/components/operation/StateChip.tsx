@@ -23,6 +23,7 @@ const LEGEND_ORDER: OperationCertState[] = [
   "never_certified",
   "in_training",
   "certified",
+  "provisional",
   "failed",
   "stale_instructions",
   "stale_forge",

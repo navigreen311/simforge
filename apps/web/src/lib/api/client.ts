@@ -1771,12 +1771,21 @@ export const execution = {
 // moved). revoked is the content-hash VOID / incident terminal state.
 export type OperationCertState =
   | "certified"
+  // Passed the threshold but full certification WITHHELD — the rubric dimensions collapsed (no
+  // discrimination) or a required never-do dimension went untested. Not assignable (Rev-2 audit).
+  | "provisional"
   | "stale_instructions"
   | "stale_forge"
   | "in_training"
   | "never_certified"
   | "failed"
   | "revoked";
+
+// Never-do coverage classification for an operation result (Rev-2 audit FIX 2).
+//  none     — module declares NO never-do list → never_do_adherence is genuinely n/a (no penalty).
+//  tested   — list exists and the never_do_violation dimension was actually exercised.
+//  untested — list exists but the dimension is n/a / not-run → a COVERAGE HOLE, not an n/a.
+export type NeverDoStatus = "none" | "tested" | "untested";
 
 // Trust tier a cert authorizes (Unit A). Higher = more autonomy.
 export type OperationTrustTier = "auto_execute" | "propose" | "suggest";
@@ -1829,6 +1838,8 @@ export interface AgentOperationCert {
   module_label: string; // plain-language capability name
   state: OperationCertState;
   max_certified_trust_tier: OperationTrustTier | null;
+  // Never-do coverage: none (genuine n/a) | tested | untested (coverage hole). FIX 2.
+  never_do_status: NeverDoStatus;
   // DENOMINATOR — mandatory on every result. Render as
   // "11 of 14 functions in statement_ingest", never "certified on statement_ingest".
   functions_certified: number;
@@ -1912,8 +1923,11 @@ export interface AgentOperationSummary {
 export interface OperationModuleCoverage {
   module_id: string;
   module_label: string;
-  functions_covered: number;
-  functions_in_module: number; // DENOMINATOR
+  functions_in_module: number; // DENOMINATOR (module functions)
+  certified_agents: number; // how many agents hold a current cert for the module
+  // The highest one agent reached — an explicit LOWER BOUND on the cross-agent union, NOT the
+  // module's own coverage and NOT any single agent's certified denominator (FIX 3).
+  best_single_agent_functions: number;
   thin: boolean;
 }
 
@@ -1930,6 +1944,7 @@ export interface OperationForgeCoverage {
 export interface OperationCoverageReport {
   forges: OperationForgeCoverage[];
   thin_coverage_threshold: number;
+  coverage_note: string; // explains why the module number is not a per-function union (FIX 3)
 }
 
 // The three capacity numbers (spec §8). certified_free + certified_allocated are
@@ -1941,7 +1956,8 @@ export interface OperationCapacityModule {
   forge_label: string;
   certified_free: number; // Office-owned (allocator)
   certified_allocated: number; // Office-owned
-  produced_not_certified: number; // SimForge-owned
+  produced_not_certified: number; // SimForge-owned (never_certified + in_training + provisional)
+  provisional: number; // withheld — passed but not fully certified; NOT in certified·free (FIX 1)
   never_certified: number; // breakdown of the SimForge-owned bucket
   in_training: number;
 }
@@ -1952,6 +1968,7 @@ export interface OperationCapacityReport {
     certified_free: number;
     certified_allocated: number;
     produced_not_certified: number;
+    provisional: number;
   };
 }
 

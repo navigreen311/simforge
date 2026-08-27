@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -29,5 +29,9 @@ class ForgeInstructionSet(Base):
     authoredBy: Mapped[str] = mapped_column(String)
     authoredAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     contentHash: Mapped[str] = mapped_column(String)  # the cert binds to this hash
+    # The module's never-do list (from the instruction set). An EMPTY list means the module declares
+    # NO never-do rules → never_do_adherence is genuinely not_applicable. A NON-empty list means the
+    # never_do_violation dimension MUST be tested; an untested one is a coverage hole, not an n/a.
+    neverDo: Mapped[list] = mapped_column(JSON, default=list)
 
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

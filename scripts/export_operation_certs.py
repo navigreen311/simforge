@@ -111,8 +111,16 @@ async def build() -> dict:
             "covered": forge.get("modules_covered", 0),
             "total": forge.get("modules_in_forge", 0),
             "thr": cov["thin_coverage_threshold"],
+            "note": cov.get("coverage_note", ""),
+            # [label, best-single-agent (union lower bound), denominator, thin, certified-agents]
             "modules": [
-                [m["module_label"], m["functions_covered"], m["functions_in_module"], m["thin"]]
+                [
+                    m["module_label"],
+                    m["best_single_agent_functions"],
+                    m["functions_in_module"],
+                    m["thin"],
+                    m["certified_agents"],
+                ]
                 for m in forge.get("modules", [])
             ],
         }

@@ -960,6 +960,9 @@ model ForgeInstructionSet {
   authoredBy         String
   authoredAt         DateTime @default(now())
   contentHash        String
+  // The module's never-do list. Empty = no never-do rules (never_do_adherence is genuinely n/a);
+  // non-empty = the never_do_violation dimension must be tested (an untested one is a coverage hole).
+  neverDo            Json     @default("[]")
   createdAt          DateTime @default(now())
 
   @@index([forgeId])

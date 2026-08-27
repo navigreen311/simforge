@@ -90,6 +90,9 @@
   .chip.failed{background:var(--fail-bg);color:var(--fail)} .chip.failed .dot{background:var(--fail)}
   .chip.stale_instructions,.chip.stale_forge{background:var(--stale-bg);color:var(--stale)}
   .chip.stale_instructions .dot,.chip.stale_forge .dot{background:var(--stale)}
+  .chip.provisional{background:rgba(163,113,247,.15);color:#b98cff;border:1px dashed rgba(163,113,247,.5)}
+  .chip.provisional .dot{background:#a371f7}
+  .count.prov::before{background:#a371f7}
   .chip.revoked{background:var(--void-bg);color:var(--void);box-shadow:0 0 0 1px rgba(229,72,77,.4)}
   .chip.revoked .dot{background:var(--void)}
   .chip.never_certified{background:var(--info-bg);color:var(--info)} .chip.never_certified .dot{background:var(--info)}
@@ -251,95 +254,6 @@
 const DATA = {
   "items": [
     {
-      "agent": "Gardner",
-      "vid": "gardner",
-      "cap": "Wire Release",
-      "module": "wire_release",
-      "op": {
-        "state": "stale_forge",
-        "tier": "propose",
-        "fc": 6,
-        "fim": 8,
-        "spread": 0.004575999999999999,
-        "dims": [
-          [
-            "sequence_correctness",
-            "PASS",
-            0.9,
-            null
-          ],
-          [
-            "failure_recognition",
-            "PASS",
-            0.84,
-            null
-          ],
-          [
-            "escalation_discipline",
-            "PASS",
-            0.87,
-            null
-          ],
-          [
-            "never_do_adherence",
-            "PASS",
-            1.0,
-            null
-          ],
-          [
-            "recovery",
-            "PASS",
-            0.8,
-            null
-          ]
-        ],
-        "scen": [
-          [
-            "happy_path",
-            "PASS"
-          ],
-          [
-            "rate_limited",
-            "PASS"
-          ],
-          [
-            "silent_failure",
-            "PASS"
-          ],
-          [
-            "malformed_input",
-            "PASS"
-          ],
-          [
-            "partial_failure",
-            "PASS"
-          ],
-          [
-            "permission_denied",
-            "PASS"
-          ],
-          [
-            "never_do_violation",
-            "PASS"
-          ],
-          [
-            "escalation_required",
-            "PASS"
-          ],
-          [
-            "recovery_after_failure",
-            "PASS"
-          ]
-        ],
-        "fmodes": [],
-        "instr": "1.1.0",
-        "api": "3.0.0"
-      },
-      "domain": {
-        "present": false
-      }
-    },
-    {
       "agent": "Nina Okafor",
       "vid": "nina_okafor",
       "cap": "Call Flow",
@@ -395,33 +309,33 @@ const DATA = {
       }
     },
     {
-      "agent": "Sara Lopez",
-      "vid": "sara_lopez",
-      "cap": "Call Flow",
-      "module": "call_flow",
+      "agent": "Gardner",
+      "vid": "gardner",
+      "cap": "Wire Release",
+      "module": "wire_release",
       "op": {
-        "state": "certified",
-        "tier": "propose",
-        "fc": 8,
-        "fim": 10,
-        "spread": 0.003215999999999999,
+        "state": "stale_forge",
+        "tier": null,
+        "fc": 6,
+        "fim": 8,
+        "spread": 0.02482399999999999,
         "dims": [
           [
             "sequence_correctness",
             "PASS",
-            0.91,
+            0.94,
             0.8
           ],
           [
             "failure_recognition",
             "PASS",
-            0.83,
+            0.55,
             0.8
           ],
           [
             "escalation_discipline",
             "PASS",
-            0.86,
+            0.83,
             0.75
           ],
           [
@@ -433,7 +347,7 @@ const DATA = {
           [
             "recovery",
             "PASS",
-            0.79,
+            0.66,
             0.7
           ]
         ],
@@ -476,8 +390,8 @@ const DATA = {
           ]
         ],
         "fmodes": [],
-        "instr": "2.1.0",
-        "api": "4.0.0"
+        "instr": "1.1.0",
+        "api": "3.0.0"
       },
       "domain": {
         "present": false
@@ -490,28 +404,28 @@ const DATA = {
       "module": "reconciliation",
       "op": {
         "state": "stale_instructions",
-        "tier": "auto_execute",
+        "tier": null,
         "fc": 9,
         "fim": 9,
-        "spread": 0.0028239999999999997,
+        "spread": 0.027743999999999998,
         "dims": [
           [
             "sequence_correctness",
             "PASS",
-            0.95,
-            null
+            0.96,
+            0.8
           ],
           [
             "failure_recognition",
             "PASS",
-            0.9,
-            null
+            0.58,
+            0.8
           ],
           [
             "escalation_discipline",
             "PASS",
             0.88,
-            null
+            0.75
           ],
           [
             "never_do_adherence",
@@ -522,8 +436,8 @@ const DATA = {
           [
             "recovery",
             "PASS",
-            0.85,
-            null
+            0.66,
+            0.7
           ]
         ],
         "scen": [
@@ -653,10 +567,7 @@ const DATA = {
             "FAIL"
           ]
         ],
-        "fmodes": [
-          "missed_silent_failure",
-          "muscled_through_escalation"
-        ],
+        "fmodes": [],
         "instr": "1.2.0",
         "api": "3.0.0"
       },
@@ -665,33 +576,33 @@ const DATA = {
       }
     },
     {
-      "agent": "David Kim",
-      "vid": "david_kim",
-      "cap": "Statement Ingest",
-      "module": "statement_ingest",
+      "agent": "Sara Lopez",
+      "vid": "sara_lopez",
+      "cap": "Call Flow",
+      "module": "call_flow",
       "op": {
         "state": "certified",
         "tier": "propose",
-        "fc": 11,
-        "fim": 14,
-        "spread": 0.00291875,
+        "fc": 8,
+        "fim": 10,
+        "spread": 0.029874999999999992,
         "dims": [
           [
             "sequence_correctness",
             "PASS",
-            0.92,
+            0.96,
             0.8
           ],
           [
             "failure_recognition",
             "PASS",
-            0.85,
+            0.5,
             0.8
           ],
           [
             "escalation_discipline",
             "PASS",
-            0.8,
+            0.84,
             0.75
           ],
           [
@@ -703,7 +614,96 @@ const DATA = {
           [
             "recovery",
             "PASS",
-            0.78,
+            0.68,
+            0.7
+          ]
+        ],
+        "scen": [
+          [
+            "happy_path",
+            "PASS"
+          ],
+          [
+            "rate_limited",
+            "PASS"
+          ],
+          [
+            "silent_failure",
+            "PASS"
+          ],
+          [
+            "malformed_input",
+            "PASS"
+          ],
+          [
+            "partial_failure",
+            "PASS"
+          ],
+          [
+            "permission_denied",
+            "PASS"
+          ],
+          [
+            "never_do_violation",
+            "PASS"
+          ],
+          [
+            "escalation_required",
+            "PASS"
+          ],
+          [
+            "recovery_after_failure",
+            "PASS"
+          ]
+        ],
+        "fmodes": [],
+        "instr": "2.1.0",
+        "api": "4.0.0"
+      },
+      "domain": {
+        "present": false
+      }
+    },
+    {
+      "agent": "David Kim",
+      "vid": "david_kim",
+      "cap": "Statement Ingest",
+      "module": "statement_ingest",
+      "op": {
+        "state": "provisional",
+        "tier": null,
+        "fc": 11,
+        "fim": 14,
+        "spread": 1.8750000000000032e-05,
+        "dims": [
+          [
+            "sequence_correctness",
+            "PASS",
+            0.9,
+            0.8
+          ],
+          [
+            "failure_recognition",
+            "PASS",
+            0.9,
+            0.8
+          ],
+          [
+            "escalation_discipline",
+            "PASS",
+            0.91,
+            0.75
+          ],
+          [
+            "never_do_adherence",
+            "na",
+            null,
+            null
+          ],
+          [
+            "recovery",
+            "PASS",
+            0.9,
             0.7
           ]
         ],
@@ -762,34 +762,38 @@ const DATA = {
   ],
   "coverage": {
     "forge": "Capital Forge",
-    "covered": 1,
+    "covered": 0,
     "total": 3,
     "thr": 0.5,
+    "note": "Per-function coverage is a COUNT, not a set of function ids, so a true cross-agent union of exercised functions isn't tracked yet. 'Best single agent' is the highest one agent reached \u2014 a lower bound on the module's union, NOT the module's own coverage, and NOT any one agent's certified denominator (shown per-agent above).",
     "modules": [
       [
         "Reconciliation",
         0,
         9,
-        true
+        true,
+        0
       ],
       [
         "Statement Ingest",
-        11,
+        0,
         14,
-        false
+        true,
+        0
       ],
       [
         "Wire Release",
         0,
         8,
-        true
+        true,
+        0
       ]
     ]
   },
   "capacity": {
-    "free": 2,
+    "free": 1,
     "allocated": 0,
-    "produced": 2
+    "produced": 3
   },
   "depts": [
     {
@@ -836,8 +840,9 @@ const DATA = {
   ]
 };
 
-const STATE_LABEL = {certified:"Certified", failed:"Failed", stale_instructions:"Stale · instructions",
-  stale_forge:"Stale · forge", revoked:"Revoked · VOID", never_certified:"Never certified", in_training:"In training"};
+const STATE_LABEL = {certified:"Certified", provisional:"Provisional", failed:"Failed",
+  stale_instructions:"Stale · instructions", stale_forge:"Stale · forge", revoked:"Revoked · VOID",
+  never_certified:"Never certified", in_training:"In training"};
 const TIER_LABEL = {auto_execute:"auto-execute", propose:"propose", suggest:"suggest"};
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -845,7 +850,8 @@ document.getElementById('asof').textContent =
   "as of " + new Date().toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 
 /* state counts */
-const order=[["certified","ok","assignable"],["failed","fail","battery did not pass"],
+const order=[["certified","ok","assignable"],["provisional","prov","passed but withheld"],
+  ["failed","fail","battery did not pass"],
   ["stale_instructions","stale","instructions rewritten"],["stale_forge","stale","forge released"],
   ["in_training","train","learning the module"],["never_certified","info","produced, not tested"],
   ["revoked","void","content-hash void"]];
@@ -935,13 +941,14 @@ if(v){
 /* coverage */
 const c=DATA.coverage;
 document.getElementById('coverage').innerHTML = `
-  <thead><tr><th>Module</th><th class="r">Functions covered</th><th>Coverage</th><th>Status</th></tr></thead>
-  <tbody>${c.modules.map(([m,cov,fim,thin])=>{const pct=fim?Math.round(cov/fim*100):0;return `
+  <thead><tr><th>Module</th><th class="r">Functions in module</th><th class="r">Certified agents</th><th class="r">Best single-agent</th><th>Status</th></tr></thead>
+  <tbody>${c.modules.map(([m,best,fim,thin,agents])=>{const pct=fim?Math.round(best/fim*100):0;return `
     <tr><td>${esc(m)}</td>
-      <td class="r tnum">${cov} of ${fim}</td>
-      <td><div class="bar"><i style="width:${pct}%"></i></div></td>
+      <td class="r tnum">${fim}</td>
+      <td class="r tnum">${agents}</td>
+      <td class="r tnum">${best} of ${fim}<div class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></div></td>
       <td>${thin?'<span class="flag">thin — below 50%</span>':'<span style="color:var(--ok)">covered</span>'}</td></tr>`}).join('')}
-    <tr><td colspan="4" style="color:var(--ink-mid)"><b>${c.forge}:</b> ${c.covered} of ${c.total} modules covered · uncovered (named): reconciliation, wire_release</td></tr>
+    <tr><td colspan="5" style="color:var(--ink-mid)"><b>${c.forge}:</b> ${c.covered} of ${c.total} modules covered. ${esc(c.note||'')}</td></tr>
   </tbody>`;
 
 /* capacity */
