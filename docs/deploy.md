@@ -18,7 +18,14 @@
 - `ci.yml` — validator + api (hermetic SQLite) + web jobs on every PR/push.
 - `pack-validator.yml` — validates `packs/` on change.
 - `contract-tests.yml` — village_bridge + Forge-adapter contracts (v1.1).
-- `deploy-staging.yml` (auto on main) / `deploy-prod.yml` (manual, gated approval).
+
+**There is no deploy workflow.** `deploy-staging.yml` and `deploy-prod.yml` were deleted on
+2026-09-04 (ADR-0045). Both were scaffolds whose only step was `echo`, and `deploy-staging`
+had been passing green on every push to `main` for months, beside `ci ✓` and
+indistinguishable from it, while deploying nothing. **SimForge has never been deployed
+anywhere.** No workflow is an honest report of that; a green one is not, and a permanently
+red one trains readers to ignore red. What they intended to do is written below instead,
+where it is a plan rather than a job that passes.
 
 ## Prod deploy (how to)
 ```bash
@@ -27,8 +34,28 @@ cd infra/terraform && terraform init && terraform plan && terraform apply
 # 2. Migrations (zero-downtime)
 pnpm --filter @simforge/db migrate:deploy
 # 3. Release: build+push images to ECR, blue/green deploy, gradual traffic shift 0→10→100%
-#    (via deploy-prod.yml, manual approval). Rollback = shift traffic back to the previous target group.
+#    Rollback = shift traffic back to the previous target group.
 ```
+
+**None of the above has been run.** The terraform in `infra/terraform` has never been
+applied, which means it has never been evaluated either — unapplied terraform is a
+proposal. Step 3 has no automation behind it since ADR-0045; it is a description of the
+pipeline somebody would write.
+
+### The intent the deleted workflows carried
+
+Kept because it is the only record of what was planned, and it is worth having when
+somebody builds the real thing:
+
+- **staging** (was: auto on push to `main`) — build and push images to ECR,
+  `prisma migrate deploy`, deploy to Fly/ECS, run `scripts/smoke-test.sh`, then post-deploy
+  contract verification.
+- **prod** (was: `workflow_dispatch`, gated approval) — alembic/prisma migrate
+  (zero-downtime), blue/green deploy, gradual traffic shift 0→10→100, post-deploy
+  verification, rollback on failure.
+
+Note that `scripts/smoke-test.sh` and the full compose stack below already exist, so a real
+staging pipeline is closer than the absence of a workflow suggests.
 
 ## Seam configuration (ADR-0030)
 Every external integration is a **seam** that ships in stub/local mode and activates on config. Flip
