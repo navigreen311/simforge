@@ -36,6 +36,13 @@ kept entirely separate from the domain rubric.
   window**: how a battery that never finishes resolves. It used to resolve to nothing at all —
   no row, no verdict, no error — leaving the previous certification in place. It now resolves to
   `TIMEOUT`, which never resolves to a pass and is never recorded as a failure.
+- **[adr/ADR-0046-office-bridge-adapter.md](adr/ADR-0046-office-bridge-adapter.md)** — the
+  **Office bridge**: `GET /office/_modules` and `POST /office/{module_id}`. `gate_result` is
+  bound; `run_scenario_pack` deliberately is not, because SimForge has no pack-level unit of
+  execution and a handler that ran one scenario would be a plausible 200.
+- **[adr/ADR-0045-deploy-pipeline-is-a-scaffold.md](adr/ADR-0045-deploy-pipeline-is-a-scaffold.md)**
+  — `deploy-staging.yml` has been green on every push to main for months while running only
+  `echo`. Nothing here has ever been deployed.
 - **[contracts/office-simforge-contract.json](contracts/office-simforge-contract.json)** — the
   vocabulary The Office and SimForge share, asserted from both sides. The canonical copy lives in
   The Office; `contract_version` is what says the two copies are the same generation.
