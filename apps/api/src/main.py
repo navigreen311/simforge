@@ -42,6 +42,7 @@ from src.routers import (
     locales,
     meta_eval,
     narrative,
+    office,
     ontology,
     operation,
     ops,
@@ -155,6 +156,18 @@ def create_app() -> FastAPI:
     app.include_router(ontology.router, prefix="/api/ontology", tags=["ontology"])
     app.include_router(handoff.router, prefix="/api/handoff", tags=["handoff"])
     app.include_router(operation.router, prefix="/api/operation", tags=["operation-cert"])
+
+    # The Office bridge — mounted ONLY when a tenant credential is configured.
+    #
+    # An adapter that answered `_modules` while holding no credential to check would tell
+    # The Office that SimForge is bridged when it is not, and Gate 0 would pass on a Forge
+    # nobody can authenticate to. Absent configuration means absent surface: The Office
+    # reads a 404 as "adapter serves no manifest", which is the truth.
+    #
+    # No `/api` prefix. `forge_registry.base_url` points at this mount directly, because
+    # The Office builds a module URL as `{base_url}/{module_id}` with nothing in between.
+    if settings.office_tenant_token:
+        app.include_router(office.router, prefix="/office", tags=["office-bridge"])
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

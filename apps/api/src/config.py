@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     clerk_issuer: str = Field(default="", alias="CLERK_ISSUER")
     clerk_audience: str = Field(default="", alias="CLERK_AUDIENCE")
 
+    # The Office bridge (ADR-0046). A tenant credential, NOT a user token, and checked
+    # independently of AUTH_MODE: under `dev-bypass` every principal is a full-access
+    # admin, so an adapter that leaned on AUTH_MODE would serve the agent-facing surface
+    # to any caller on the local default. Empty = not onboarded, and the router is not
+    # mounted at all, because an adapter answering `_modules` while holding no credential
+    # to check would tell The Office this Forge is bridged when it is not.
+    office_tenant_token: str = Field(default="", alias="OFFICE_TENANT_TOKEN")
+
     # LLM providers (ADR-0008). Agent-runtime + judge providers routed independently.
     # stub|ollama|anthropic|auto. `auto` = ollama-if-OLLAMA_BASE_URL-reachable-else-stub (ADR-0023):
     # safe everywhere — real Ollama locally, deterministic StubProvider in CI. Default stays stub so
