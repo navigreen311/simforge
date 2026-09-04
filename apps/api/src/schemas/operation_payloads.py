@@ -169,3 +169,63 @@ class ForgeOperationResults(BaseModel):
     agent_operation_certs: list[AgentOperationCertResult] = Field(default_factory=list)
     department_context_certs: list[DepartmentContextCertResult] = Field(default_factory=list)
     capability_matrix_delta: list[dict] = Field(default_factory=list)
+
+
+# =================================================================================================
+# Run window — a battery in flight, and the verdict a run that never finished resolves to
+# =================================================================================================
+
+
+class OperationRunStartRequest(BaseModel):
+    """Hand-over: a battery is starting. Idempotent on `run_ref`.
+
+    Without this call SimForge holds no record of a run between the curriculum and the
+    gate result, so a battery that hangs produces nothing at all — no row, no verdict, no
+    error — and TIMEOUT is unreachable. `unit` is declared HERE rather than inferred at
+    the end because The Office reads one verdict per `run_ref`, and a run whose unit is
+    only known once it finishes cannot be asked about while it is hanging.
+    """
+
+    run_ref: str
+    unit: str  # "A" (agent x forge x module) | "B" (department x forge)
+    forge_id: str
+    instruction_content_hash: str  # the basis this run executes against
+    rubric_kind: str = "operation"  # operation | domain — never a merged score
+    rubric_version: str | None = None  # defaults to the current operation rubric version
+    module_id: str | None = None
+    agent_id: str | None = None
+    department_id: str | None = None
+    scenario_count: int = 0
+    coverage_denominator: int = 0
+    #: The window this run is judged against, fixed at start. A run is never re-judged
+    #: against a default that changed while it was running.
+    window_minutes: int | None = None
+
+
+class OperationRunStarted(BaseModel):
+    run_ref: str
+    unit: str
+    started_at: datetime
+    window_minutes: int
+    #: True when this ref was already open — the clock was NOT restarted. A retried
+    #: hand-over must not extend the window of a run that is already hanging.
+    already_open: bool
+
+
+class TimedOutRun(BaseModel):
+    run_ref: str
+    unit: str
+    forge_id: str
+    module_id: str | None = None
+    agent_id: str | None = None
+    department_id: str | None = None
+    verdict: str  # always TIMEOUT
+    minutes_open: float
+    window_minutes: int
+    #: Deliberately absent: score. A timed-out run carries none — zero would be a claim
+    #: about the agent rather than about the run.
+
+
+class TimeoutSweepResult(BaseModel):
+    swept_at: datetime
+    timed_out: list[TimedOutRun] = Field(default_factory=list)

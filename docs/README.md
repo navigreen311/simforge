@@ -32,6 +32,13 @@ kept entirely separate from the domain rubric.
 
 - **[operation-rubric-proposal.md](operation-rubric-proposal.md)** — the approved operation rubric
   (5 dimensions, first-class `not_applicable`, each mapped to a scenario class).
+- **[adr/ADR-0044-operation-run-window.md](adr/ADR-0044-operation-run-window.md)** — the **run
+  window**: how a battery that never finishes resolves. It used to resolve to nothing at all —
+  no row, no verdict, no error — leaving the previous certification in place. It now resolves to
+  `TIMEOUT`, which never resolves to a pass and is never recorded as a failure.
+- **[contracts/office-simforge-contract.json](contracts/office-simforge-contract.json)** — the
+  vocabulary The Office and SimForge share, asserted from both sides. The canonical copy lives in
+  The Office; `contract_version` is what says the two copies are the same generation.
 - **[operation-certs.html](operation-certs.html)** — a **static export of the operation-certs
   dashboard**. A single self-contained file (inlined CSS/JS, no server, no external assets): open it
   directly in a browser to see the board — agents across all states (certified / failed / stale /

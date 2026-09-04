@@ -22,6 +22,7 @@ from src.db import get_session
 from src.deps import require_role
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
+from src.models.operation_run import OperationRun
 from src.schemas.operation_payloads import (
     AgentOperationCertResult,
     DepartmentContextCertResult,
@@ -29,6 +30,10 @@ from src.schemas.operation_payloads import (
     ForgeOperationResults,
     GateResultRequest,
     OperationRubricResultItem,
+    OperationRunStarted,
+    OperationRunStartRequest,
+    TimedOutRun,
+    TimeoutSweepResult,
 )
 from src.services.operation.gating import (
     agent_module_assignability,
@@ -44,8 +49,16 @@ from src.services.operation.rubric import (
     compute_rubric_dimension_spread,
     is_spread_collapsed,
 )
+from src.services.operation.run_registry import (
+    close_run,
+    gate_result_for,
+    open_run,
+    sweep_timed_out_runs,
+)
+from src.services.operation.run_window import DEFAULT_RUN_WINDOW_MINUTES
 from src.services.operation.scenarios import validate_curriculum_submission
 from src.services.operation.state_machine import OperationState, is_assignable
+from src.utils.time import utcnow
 
 router = APIRouter()
 
@@ -259,6 +272,18 @@ async def gate_result(
             )
         )
 
+    # Close the run this result answers, if one was opened for it. Nothing is created
+    # here: a gate-result for a run SimForge never saw start is still recorded as certs,
+    # it simply has no window to close. Opening one now would start a clock at the moment
+    # the run ENDED, which is worse than no clock at all.
+    if body.run_ref:
+        await close_run(
+            session,
+            run_ref=body.run_ref,
+            agent_states=[r.state for r in agent_results],
+            department_states=[r.state for r in dept_results],
+        )
+
     await session.commit()
 
     return ForgeOperationResults(
@@ -269,6 +294,136 @@ async def gate_result(
         agent_operation_certs=agent_results,
         department_context_certs=dept_results,
         capability_matrix_delta=[],
+    )
+
+
+# =================================================================================================
+# Run window — a battery in flight, and the verdict a run that never finished resolves to
+# =================================================================================================
+
+
+@router.post("/run/start", dependencies=[Depends(require_role("compliance_analyst"))])
+async def start_operation_run(
+    body: OperationRunStartRequest, session: AsyncSession = Depends(get_session)
+) -> OperationRunStarted:
+    """Record that an operation battery has started.
+
+    THE GAP THIS CLOSES. Until this call existed SimForge held no record of a run between
+    the curriculum hand-over and the gate result, so a battery that hung produced nothing
+    at all — no row, no verdict, no error — and the previous certification stayed in
+    place. The Office maps TIMEOUT to `in_training` precisely so a hung run can never
+    certify, and that mapping was unreachable because nothing observed the run.
+
+    Idempotent: re-posting an open `run_ref` returns the existing row with its clock
+    untouched. A retried hand-over must never extend the window of a run that is already
+    hanging, which is the one case where restarting the clock hides the fault.
+    """
+    if body.unit not in ("A", "B"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "unknown_unit",
+                # Not defaulted: The Office reads ONE verdict per run_ref and needs to
+                # know which unit it is for. Guessing here would mis-file a certification.
+                "detail": (
+                    "unit must be 'A' (agent x forge x module) or 'B' "
+                    f"(department x forge), got {body.unit!r}"
+                ),
+            },
+        )
+
+    existing = (
+        await session.execute(select(OperationRun).where(OperationRun.runRef == body.run_ref))
+    ).scalar_one_or_none()
+
+    run = await open_run(
+        session,
+        run_ref=body.run_ref,
+        unit=body.unit,
+        forge_id=body.forge_id,
+        instruction_content_hash=body.instruction_content_hash,
+        rubric_kind=body.rubric_kind,
+        rubric_version=body.rubric_version or OPERATION_RUBRIC_VERSION,
+        module_id=body.module_id,
+        agent_id=body.agent_id,
+        department_id=body.department_id,
+        scenario_count=body.scenario_count,
+        coverage_denominator=body.coverage_denominator,
+        window_minutes=body.window_minutes or DEFAULT_RUN_WINDOW_MINUTES,
+    )
+    await session.commit()
+
+    return OperationRunStarted(
+        run_ref=run.runRef,
+        unit=run.unit,
+        started_at=run.startedAt,
+        window_minutes=run.windowMinutes,
+        already_open=existing is not None,
+    )
+
+
+@router.get("/gate-result/{run_ref}", dependencies=[Depends(require_role("viewer"))])
+async def read_gate_result(run_ref: str, session: AsyncSession = Depends(get_session)) -> dict:
+    """The verdict of a run, in the shape The Office's response manifest declares.
+
+    A run still open past its window reads TIMEOUT here even if the sweep has not stamped
+    it yet — the answer a caller gets must not depend on how recently a background job
+    ran. TIMEOUT resolves to `in_training` on their side and never to a pass.
+
+    An unknown ref is a 404, not a `NOT_RUN` body: NOT_RUN requires a `unit` and a
+    `rubric_version`, and SimForge has neither for a run it never received. Answering
+    with invented ones would be a shape-valid response built out of guesses.
+    """
+    body = await gate_result_for(session, run_ref)
+    if body is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "unknown_run_ref",
+                "detail": (
+                    f"SimForge has no record of run_ref {run_ref!r}. It was never opened via "
+                    "POST /operation/run/start, so there is no window and no verdict to report."
+                ),
+            },
+        )
+    return body
+
+
+@router.post("/runs/sweep-timeouts", dependencies=[Depends(require_role("compliance_analyst"))])
+async def sweep_run_timeouts(session: AsyncSession = Depends(get_session)) -> TimeoutSweepResult:
+    """Stamp every open run past its own window as TIMEOUT.
+
+    This is the half SimForge can do. The other half is The Office's deadline on
+    unanswered submissions, and the two are not redundant: a worker that has died cannot
+    report that it has died, so the case where SimForge is the thing that failed is
+    exactly the case where this sweep is not running.
+
+    A timed-out run is never recorded as `failed` and never carries a score. It was cut
+    off, which proves nothing about the agent — calling it a failure both defames the
+    agent and pollutes the metric that is supposed to show real failures.
+    """
+    # One `now` for the sweep and for the report, so `minutes_open` is measured against the
+    # same instant the verdict was decided at rather than a few milliseconds later.
+    now = utcnow()
+    swept = await sweep_timed_out_runs(session, now=now)
+    await session.commit()
+
+    return TimeoutSweepResult(
+        swept_at=now,
+        timed_out=[
+            TimedOutRun(
+                run_ref=r.runRef,
+                unit=r.unit,
+                forge_id=r.forgeId,
+                module_id=r.moduleId,
+                agent_id=r.agentId,
+                department_id=r.departmentId,
+                verdict=r.verdict or "TIMEOUT",
+                minutes_open=(now - r.startedAt).total_seconds() / 60.0,
+                window_minutes=r.windowMinutes,
+            )
+            for r in swept
+        ],
     )
 
 
