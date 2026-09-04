@@ -976,6 +976,59 @@ model ForgeInstructionSet {
 // not optional). `state` is the distinct 7-state machine — never_certified/failed/stale are never a
 // low score. operationRubricResults is a NAMED LIST (not fixed dimension columns). The DENOMINATOR
 // (functionsCertified of functionsInModule) travels on every Unit A result.
+/// An operation battery IN FLIGHT. Before this table SimForge held no record of a run
+/// between curriculum hand-over and gate-result, so a hung battery produced no row, no
+/// verdict and no error - and the Office's TIMEOUT -> in_training mapping was unreachable.
+/// An open row (endedAt IS NULL) past its window is what makes a hung run observable.
+model OperationRun {
+  id String @id @default(cuid())
+
+  /// Correlates to the Office curriculum submission. Unique: the Office reads a verdict
+  /// BY this ref, and two runs sharing one ref make the answer ambiguous.
+  runRef String @unique
+  unit   String // "A" (agent x forge x module) | "B" (department x forge)
+
+  forgeId      String
+  moduleId     String?
+  agentId      String?
+  departmentId String?
+
+  instructionContentHash String // the basis; a verdict whose basis is unknown cannot be recomputed
+  rubricKind             String // operation | domain - never a merged score
+  rubricVersion          String
+
+  startedAt DateTime  @default(now())
+  /// NULL = still open. This column, and only this column, is what "did not finish" means.
+  endedAt   DateTime?
+  /// Stored per-run so a run is judged against the window it STARTED under; changing the
+  /// default must not retroactively time out runs that were inside their own window.
+  windowMinutes Int @default(180)
+
+  /// Set on finish (from the cert state) or by the timeout sweep. NULL while legitimately
+  /// in progress - an unfinished run has no verdict.
+  verdict    String?
+  /// When the sweep resolved this run to TIMEOUT. Distinct from endedAt, which means the
+  /// run produced a result; a timed-out run never did.
+  timedOutAt DateTime?
+
+  /// A timed-out run carries NO score - zero would be a claim about the agent, not the run.
+  score               Float?
+  threshold           Float?
+  certifiedTier       String?
+  scenarioCount       Int     @default(0)
+  coverageDenominator Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([unit])
+  @@index([forgeId])
+  @@index([moduleId])
+  @@index([agentId])
+  @@index([departmentId])
+  @@index([endedAt])
+  @@index([verdict])
+}
+
 model OperationCertification {
   id                     String    @id @default(cuid())
   unitType               String // agent_operation | department_context

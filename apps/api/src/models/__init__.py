@@ -27,6 +27,7 @@ from src.models.handoff_test import HandoffTest
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.ontology import OntologyEntity, OntologyRelation
 from src.models.operation_cert import OperationCertification
+from src.models.operation_run import OperationRun
 from src.models.pack import Pack, ReadinessGate, Scenario
 from src.models.production_outcome import ProductionOutcome
 from src.models.registry import LineageEdge, ObjectRegistryEntry
@@ -87,6 +88,7 @@ __all__ = [
     "ForgeParity",
     "ForgeInstructionSet",
     "OperationCertification",
+    "OperationRun",
     "Waiver",
     "Appeal",
     "DressRehearsal",

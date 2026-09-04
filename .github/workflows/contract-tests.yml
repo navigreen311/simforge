@@ -1,7 +1,7 @@
 name: contract-tests
 on:
   pull_request:
-    paths: ["apps/api/**", "packages/validator/**"]
+    paths: ["apps/api/**", "packages/validator/**", "docs/contracts/**"]
 jobs:
   contract:
     runs-on: ubuntu-latest
