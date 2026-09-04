@@ -45,13 +45,23 @@ Worth separating from the finding, because the picture is not uniformly bad:
 |---|---|
 | `apps/api/Dockerfile` | **Real.** 39 lines, multi-stage, non-root (uid 10001), healthchecked. ADR-0030. |
 | Built in CI | No. Nothing builds it. |
-| `docker-compose.yml` | postgres, redis, ollama. **No api service.** |
+| `infra/compose/docker-compose.full.yml` | **Real, and it has an `api` service** that builds that Dockerfile, plus postgres 17, redis, prometheus, tempo and grafana. |
+| `scripts/smoke-test.sh` | **Real.** 59 lines — liveness, readiness, seam-config, `/metrics`, forges. |
+| `docker-compose.yml` (repo root) | postgres, redis, ollama. Dev datastores only, no api — this is the one that misleads. |
 | `infra/k8s/` | Empty directory. |
 | `infra/terraform/` | `ecs.tf`, `rds.tf`, `redis.tf`, `s3.tf`, `iam.tf` — never applied. |
 | Deployed anywhere, ever | **No.** |
 
-So the image is buildable and the app is runnable. What is absent is any pipeline that does
-either, and any environment to do it to.
+So the picture is not uniformly bad, and one line of it is better than it first looked.
+**An earlier draft of this ADR said "no compose api service", which was wrong** — it was
+read from the root `docker-compose.yml` without checking `infra/compose/`, and
+`docs/deploy.md` documents the full stack plainly. Corrected here rather than quietly,
+because an ADR that overstates the damage is the same defect in the other direction as a
+workflow that overstates the health.
+
+What is true: the image is buildable, the app is runnable from one compose file, and a
+smoke test exists. What is absent is any **pipeline** that runs any of it, and any
+environment to run it against.
 
 ## Decision
 
@@ -86,6 +96,10 @@ for SimForge. Nothing here commits to that.
 
 **Whether the terraform is right.** It has never been applied, so it has never been
 evaluated. Unapplied terraform is a proposal.
+
+**How much of a staging pipeline is actually left.** Given the compose stack and the smoke
+test, less than "nothing deploys" implies. That is worth someone's estimate and is not
+this ADR's to give.
 
 ## How this was found
 
