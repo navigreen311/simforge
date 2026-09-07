@@ -24,6 +24,7 @@ from src.models.operation_run import OperationRun
 from src.routers import office
 from src.services.operation.gate_verdict import GateVerdict
 from src.services.operation.run_registry import open_run
+from src.services.operation.scenarios import ALL_SCENARIO_CLASSES
 from src.utils.time import utcnow
 
 TOKEN = "office-tenant-token-for-tests"
@@ -74,15 +75,22 @@ async def bridged(
 # --- the manifest ---------------------------------------------------------------------------
 
 
-async def test_the_manifest_lists_gate_result(bridged: AsyncClient) -> None:
+async def test_the_manifest_lists_three_modules(bridged: AsyncClient) -> None:
     res = await bridged.get("/office/_modules", headers=AUTH)
     assert res.status_code == 200
     body = res.json()
 
     assert body["forge"] == "simforge"
-    assert [m["module_id"] for m in body["modules"]] == ["gate_result"]
-    assert body["modules"][0]["is_mutating"] is False
-    assert body["modules"][0]["idempotency_support"] == "natural"
+    shapes = {m["module_id"]: m for m in body["modules"]}
+    assert sorted(shapes) == ["gate_result", "run_start", "submit_curriculum"]
+
+    # The read.
+    assert shapes["gate_result"]["is_mutating"] is False
+    # The two writers, declared as writers.
+    assert shapes["submit_curriculum"]["is_mutating"] is True
+    assert shapes["run_start"]["is_mutating"] is True
+    # All three retry onto the same state without a key.
+    assert {m["idempotency_support"] for m in body["modules"]} == {"natural"}
 
 
 async def test_run_scenario_pack_is_not_dispatched(bridged: AsyncClient) -> None:
@@ -122,6 +130,182 @@ def test_no_module_id_shadows_an_adapter_endpoint() -> None:
     """`_` is reserved: a module named `_modules` would shadow the manifest, and the first
     symptom would be a conformance check reporting the wrong thing."""
     assert not any(name.startswith("_") for name in office.MODULES)
+
+
+# --- submit_curriculum ---------------------------------------------------------------------
+
+#: Derived from the engine, not retyped. The first version of this fixture invented eight
+#: plausible-looking class names and the validator rejected all of them - correctly, and it
+#: is the same reason the manifest iterates the dispatch map: a list maintained beside the
+#: real one drifts, and here it was wrong on the day it was written.
+_CLASSES = tuple(c for c in ALL_SCENARIO_CLASSES if c != "never_do_violation")
+
+CURRICULUM = {
+    "instruction_set_ref": {
+        "forge_id": "capital-forge",
+        "module_id": "statement_ingest",
+        "instruction_version": "1.0.0",
+        "forge_api_version": "3.0.0",
+        "content_hash": "sha256:bridge-curriculum",
+        "authored_by": "office",
+    },
+    "certification_units_requested": [
+        {"unit_type": "agent_operation", "forge_id": "capital-forge",
+         "agent_id": "a-1", "module_id": "statement_ingest"},
+    ],
+    "operation_scenarios": [
+        {"scenario_class": cls, "module_id": "statement_ingest",
+         "instruction_section": "s1", "expected_behavior": "b", "expected_escalation": "e"}
+        for cls in _CLASSES
+    ] + [
+        {"scenario_class": "never_do_violation", "module_id": "statement_ingest",
+         "instruction_section": "s1", "expected_behavior": "refuse",
+         "expected_escalation": "e", "never_do_entry": "never post to the ledger"},
+    ],
+    "coverage_declaration": {
+        "modules_in_forge": 1, "modules_covered": 1, "modules_uncovered": [],
+        "functions_in_module": 4, "functions_covered": 4,
+    },
+    "module_never_do": {"statement_ingest": ["never post to the ledger"]},
+}
+
+
+async def test_a_curriculum_can_be_submitted_over_the_bridge(bridged: AsyncClient) -> None:
+    """The Office hands over a curriculum with the TENANT credential, not an agent grant.
+
+    This module answers no question about an agent. The Office submits on behalf of a
+    venture, before any agent is certified and often before the agents exist, so there is
+    no `office_agent_id` whose grant could authorize it.
+    """
+    res = await bridged.post(
+        "/office/submit_curriculum",
+        json=CURRICULUM,
+        headers={**AUTH, **OFFICE_HEADERS},
+    )
+    assert res.status_code == 200
+    assert res.json()["accepted"] is True
+    assert res.headers.get("X-Forge-Request-Id")
+
+
+async def test_submit_curriculum_is_idempotent_on_the_content_hash(
+    bridged: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Why `natural` rather than `key`.
+
+    The upsert is keyed on (forgeId, moduleId, contentHash), so a retry lands on the same
+    instruction set rather than accumulating a second one.
+    """
+    from src.models.forge_instruction_set import ForgeInstructionSet
+
+    for _ in range(3):
+        res = await bridged.post("/office/submit_curriculum", json=CURRICULUM, headers=AUTH)
+        assert res.status_code == 200
+
+    rows = (
+        (
+            await db_session.execute(
+                select(ForgeInstructionSet).where(
+                    ForgeInstructionSet.contentHash == "sha256:bridge-curriculum"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1, "a retry created a second instruction set"
+
+
+async def test_a_rejected_curriculum_comes_back_as_a_422_not_a_200(
+    bridged: AsyncClient,
+) -> None:
+    """A curriculum that fails the Batch-3 rules must not read as accepted.
+
+    The Office's executor records a non-2xx as a real outcome in the ledger, so a
+    rejection reaching it as a 422 is correct. A 200 carrying `accepted: false` would be
+    a plausible success - the shape this adapter exists to avoid.
+    """
+    thin = {**CURRICULUM, "operation_scenarios": CURRICULUM["operation_scenarios"][:1]}
+    res = await bridged.post("/office/submit_curriculum", json=thin, headers=AUTH)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"] == "curriculum_rejected"
+
+
+async def test_a_malformed_curriculum_names_the_field(bridged: AsyncClient) -> None:
+    """The endpoint signature is the schema; the adapter does not restate it.
+
+    A second declaration of the same shape would disagree with the first the moment one
+    changed, so the payload is parsed with the model the endpoint already declares and
+    Pydantic own errors are passed through.
+    """
+    res = await bridged.post("/office/submit_curriculum", json={"nonsense": 1}, headers=AUTH)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"] == "submit_curriculum_payload_invalid"
+    assert res.json()["detail"]["violations"], "no field was named"
+
+
+# --- run_start ------------------------------------------------------------------------------
+
+
+async def test_a_run_can_be_opened_over_the_bridge(bridged: AsyncClient) -> None:
+    """Without this, the run window is unreachable from outside.
+
+    Binding `gate_result` and not this one would leave The Office able to ask for a
+    verdict on a run it had no way to open.
+    """
+    res = await bridged.post("/office/run_start", json=START, headers={**AUTH, **OFFICE_HEADERS})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["run_ref"] == "op-bridge-1"
+    assert body["already_open"] is False
+    assert body["window_minutes"] == 180
+
+
+async def test_run_start_does_not_restart_the_clock_on_a_re_post(
+    bridged: AsyncClient,
+) -> None:
+    """Why `natural` is honest here rather than a default.
+
+    An at-most-once module needs a key precisely because a second call would do damage. A
+    second call here cannot: `open_run` returns the existing row with its clock untouched.
+    Extending the window of a run that is already hanging is the one thing that would hide
+    a timeout, and refusing it is why this is safe to retry (ADR-0044).
+    """
+    first = (await bridged.post("/office/run_start", json=START, headers=AUTH)).json()
+    second = (await bridged.post("/office/run_start", json=START, headers=AUTH)).json()
+
+    assert first["already_open"] is False
+    assert second["already_open"] is True
+    assert second["started_at"] == first["started_at"], "the clock was restarted"
+
+
+async def test_run_start_still_refuses_an_unknown_unit(bridged: AsyncClient) -> None:
+    """The endpoint own guard is reached through the bridge, not bypassed by it."""
+    res = await bridged.post("/office/run_start", json={**START, "unit": "C"}, headers=AUTH)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"] == "unknown_unit"
+
+
+async def test_the_two_writers_may_write(bridged: AsyncClient, db_session: AsyncSession) -> None:
+    """The other half of the `is_mutating` guard.
+
+    The `after_flush` listener is installed only for a module declared `is_mutating=False`
+    - a declared writer is allowed to write, and these two both flush and commit. Without
+    this assertion, a guard that refused every write would look identical to a correct one
+    until somebody bound a writer.
+    """
+    assert (await bridged.post("/office/run_start", json=START, headers=AUTH)).status_code == 200
+    assert (
+        await bridged.post("/office/submit_curriculum", json=CURRICULUM, headers=AUTH)
+    ).status_code == 200
+
+    run = (
+        await db_session.execute(select(OperationRun).where(OperationRun.runRef == "op-bridge-1"))
+    ).scalar_one_or_none()
+    assert run is not None, "run_start is declared a writer and its write did not survive"
 
 
 # --- the credential -------------------------------------------------------------------------

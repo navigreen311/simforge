@@ -40,6 +40,11 @@ kept entirely separate from the domain rubric.
   **Office bridge**: `GET /office/_modules` and `POST /office/{module_id}`. `gate_result` is
   bound; `run_scenario_pack` deliberately is not, because SimForge has no pack-level unit of
   execution and a handler that ran one scenario would be a plausible 200.
+- **[adr/ADR-0047-two-more-modules-on-the-office-bridge.md](adr/ADR-0047-two-more-modules-on-the-office-bridge.md)**
+  — `submit_curriculum` and `run_start` bound alongside it. Why they cannot sit behind
+  `require_role` (under `dev-bypass` it holds every role and never reads the header), and why
+  `submit_curriculum` is reached with the **tenant credential rather than an agent grant** —
+  The Office submits on behalf of a venture, not as an agent.
 - **[adr/ADR-0045-deploy-pipeline-is-a-scaffold.md](adr/ADR-0045-deploy-pipeline-is-a-scaffold.md)**
   — `deploy-staging.yml` has been green on every push to main for months while running only
   `echo`. Nothing here has ever been deployed.
