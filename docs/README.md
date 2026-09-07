@@ -48,6 +48,11 @@ kept entirely separate from the domain rubric.
 - **[adr/ADR-0045-deploy-pipeline-is-a-scaffold.md](adr/ADR-0045-deploy-pipeline-is-a-scaffold.md)**
   — `deploy-staging.yml` has been green on every push to main for months while running only
   `echo`. Nothing here has ever been deployed.
+- **[adr/ADR-0049-a-declared-not-applicable-for-scenario-classes.md](adr/ADR-0049-a-declared-not-applicable-for-scenario-classes.md)**
+  — **proposed, not built.** The curriculum validator asks every module for the same scenario
+  classes, and modules differ in kind. Three instances, including one module whose honest
+  content for a mandatory class is *this does not apply here*. Proposes a declared
+  `not_applicable` with a required reason — the concept the rubric already has one layer up.
 - **[contracts/office-simforge-contract.json](contracts/office-simforge-contract.json)** — the
   vocabulary The Office and SimForge share, asserted from both sides. The canonical copy lives in
   The Office; `contract_version` is what says the two copies are the same generation.
