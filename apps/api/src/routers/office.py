@@ -37,7 +37,12 @@ WHY `run_scenario_pack` IS ABSENT
 =================================
 
     The Burkham Pack declares `modules_expected: [run_scenario_pack, gate_result]`.
-    Only `gate_result` is bound, deliberately, and V32 will FAIL on the other name.
+    `gate_result` is bound and `run_scenario_pack` is deliberately not, so V32 FAILs on
+    that name. `submit_curriculum` and `run_start` are bound alongside them and are not
+    on the Pack at all — a module the Forge dispatches and the registry has not heard of
+    is reported by `verify_forge_modules` as DRIFT, and it is reported so somebody
+    decides, because a Forge does not get to enlarge its own agent-facing surface by
+    answering.
 
     SimForge has no pack-level unit of execution. `run_scenario` takes ONE
     `scenario_id`; a Pack is a filter on runs or a scenario's parent, and nothing
@@ -61,11 +66,17 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.db import get_session
+from src.routers.operation import start_operation_run, submit_curriculum
+from src.schemas.operation_payloads import (
+    ForgeOperationCurriculum,
+    OperationRunStartRequest,
+)
 from src.services.operation.run_registry import gate_result_for
 
 logger = logging.getLogger(__name__)
@@ -153,6 +164,71 @@ async def _gate_result(session: AsyncSession, payload: dict[str, Any]) -> dict[s
     return body
 
 
+def _validated(model: type, payload: dict[str, Any], module_id: str):
+    """Parse a brokered payload into the model the endpoint already declares.
+
+    The endpoint's own signature is the schema. Re-stating it here would be a second
+    declaration of the same shape, and the two would disagree the first time one changed —
+    the defect `forge_module_registry` rows have twice, one table over.
+    """
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,  # unprocessable content
+            detail={
+                "error": f"{module_id}_payload_invalid",
+                # Pydantic's own errors, which name the field and the rule. A summary
+                # would be a worse message that somebody has to maintain.
+                "violations": exc.errors(include_url=False),
+            },
+        ) from exc
+
+
+async def _submit_curriculum(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+    """The Office hands over a curriculum. `POST /api/operation/curriculum`.
+
+    REACHED WITH THE TENANT CREDENTIAL, NOT AN AGENT GRANT
+    ======================================================
+
+        Every other module on this adapter answers a question about one agent. This one
+        does not: **The Office submits a curriculum on behalf of a VENTURE**, before any
+        agent is certified to do anything, and often before the agents exist. There is no
+        `office_agent_id` whose grant could authorize it, and inventing one would put a
+        fictional agent in the ledger for an act a human and a venture performed.
+
+        So the credential that reaches it is the tenant credential — which is what
+        authenticates this whole surface anyway. `X-Office-Venture` is the identity that
+        matters for this call, and it is recorded in the log line like every other header.
+
+        The consequence worth stating: **an agent grant is not what gates this.** The
+        Office decides who may submit a curriculum on its own side; SimForge checks that
+        the caller holds the tenant credential and then validates the curriculum itself,
+        which is the check that actually protects anything here (Batch-3 rules, 422 on
+        any violation).
+
+    Calls the endpoint function rather than re-implementing it, for the same reason CRE
+    Forge's adapter calls its service layer: a second implementation of the validation
+    and the instruction-set upsert is a second thing to keep correct.
+    """
+    body = _validated(ForgeOperationCurriculum, payload, "submit_curriculum")
+    return await submit_curriculum(body=body, session=session)
+
+
+async def _run_start(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+    """A battery is starting. `POST /api/operation/run/start`.
+
+    Without this reaching The Office, the run window is unreachable from the outside: the
+    row that makes a hung battery observable is written here, and ADR-0044 exists because
+    there was no such row. Binding `gate_result` and not this one would have left The
+    Office able to ask for a verdict on a run it had no way to open.
+    """
+    body = _validated(OperationRunStartRequest, payload, "run_start")
+    started = await start_operation_run(body=body, session=session)
+    # `mode="json"` because `started_at` is a datetime and the response crosses HTTP.
+    return started.model_dump(mode="json")
+
+
 #: module_id -> spec. A dict rather than a chain of ifs because The Office's registry is
 #: also a table: a module SimForge does not implement should 404 with the module named,
 #: not fall through to something that half works.
@@ -166,6 +242,31 @@ MODULES: dict[str, ModuleSpec] = {
         is_mutating=False,
         # The same run_ref returns the same verdict, so a retry lands on the same answer
         # without a key. `natural`, not `key`.
+        idempotency_support="natural",
+    ),
+    "submit_curriculum": ModuleSpec(
+        _submit_curriculum,
+        # Writes: upserts the bound `ForgeInstructionSet`.
+        is_mutating=True,
+        # `natural`, and it is earned rather than defaulted. The upsert is keyed on
+        # (forgeId, moduleId, contentHash), so re-posting the same curriculum lands on the
+        # same row and does not accumulate a second instruction set. A different
+        # content_hash is a different instruction set and SHOULD produce a new row — that
+        # is not a retry, it is a new submission.
+        idempotency_support="natural",
+    ),
+    "run_start": ModuleSpec(
+        _run_start,
+        # Writes: opens the `OperationRun` row.
+        is_mutating=True,
+        # `natural`, and this one is the clearest case on the adapter. `open_run` is
+        # idempotent on `run_ref` and returns the existing row with its clock UNTOUCHED —
+        # a re-post answers `already_open: true` rather than restarting the window. That
+        # refusal is what makes `natural` honest here: an at-most-once module would need a
+        # key precisely because a second call would do damage, and a second call here
+        # cannot, by construction. Extending the window of a run that is already hanging is
+        # the one thing that would hide a timeout, and `open_run` exists partly to refuse
+        # it (ADR-0044).
         idempotency_support="natural",
     ),
 }
