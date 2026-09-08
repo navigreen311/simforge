@@ -39,17 +39,45 @@ WHY `run_scenario_pack` IS ABSENT
     The Burkham Pack declares `modules_expected: [run_scenario_pack, gate_result]`.
     `gate_result` is bound and `run_scenario_pack` is deliberately not, so V32 FAILs on
     that name. `submit_curriculum` and `run_start` are bound alongside them and are not
-    on the Pack at all — a module the Forge dispatches and the registry has not heard of
-    is reported by `verify_forge_modules` as DRIFT, and it is reported so somebody
-    decides, because a Forge does not get to enlarge its own agent-facing surface by
-    answering.
+    on the Pack at all.
 
-    SimForge has no pack-level unit of execution. `run_scenario` takes ONE
-    `scenario_id`; a Pack is a filter on runs or a scenario's parent, and nothing
-    iterates a Pack's scenarios into runs. The only handler that could be written today
-    would run one scenario and report having run a pack — a plausible 200, invisible to
-    the check above, and the same failure that took `lender_match` and `build_packet` off
-    that Pack.
+    **They get no registry row, permanently**, and The Office ruled on that on
+    2026-09-07 (its `docs/decisions.md` entry 18). A registry row exists so a grant can
+    be issued; neither of these is an agent act — the hand-over runs at Gate 8 before
+    any agent for the venture exists, which is why it travels on the tenant credential —
+    so a row would only make them look grantable. Their reasons are recorded in that
+    repo's `broker.forge_modules.NOT_AGENT_FACING`, and `verify_forge_modules` now
+    reports them as **NOT AGENT-FACING** rather than DRIFT: it was reporting the right
+    verdict for the wrong reason, saying "unknown to the registry" when the truth was
+    "deliberately not in it", and two permanent DRIFT lines are how a report becomes
+    something people skim.
+
+    None of that weakens the rule beside it: a Forge still does not get to enlarge its
+    own agent-facing surface by answering.
+
+    Nothing iterates a Pack's scenarios into runs. `run_scenario` takes ONE
+    `scenario_id`, and a Pack is a filter on runs or a scenario's parent. The only
+    handler that could be written today would run one scenario and report having run a
+    pack — a plausible 200, invisible to the check above, and the same failure that took
+    `lender_match` and `build_packet` off that Pack.
+
+    **Corrected 2026-09-07.** This block previously opened "SimForge has no pack-level
+    unit of execution", which is false. `OperationRun` is one, and its own docstring says
+    so: *"an operation battery is a curriculum-level unit that spans many scenarios and
+    crosses the Office boundary"*. It carries `runRef`, `unit`, `verdict`, `score`,
+    `scenarioCount` and `coverageDenominator`, and `POST /api/operation/run/start` opens
+    it. What is missing is not execution.
+
+    The real gap is that the two systems mean different things by "scenario". The
+    Office's is prose with a role — `scenario_id`, `role`, `domain`, `summary`,
+    `compliance_flags_exercised`, `expected_escalation`. This repo's is a hashed YAML
+    file bound to a pack, targeting a named Village agent with declared capabilities and
+    a seed. **They share `scenario_id` and nothing else**, and `testedAgentVillageId`,
+    `seed` and `yamlPath` have no source on the Office side. Bridging that means deciding
+    what a domain scenario is in executable terms, which is a design decision and not
+    plumbing. See `theoffice/docs/decisions.md` entry 5, corrected the same day.
+
+    **The refusal to bind is unaffected** — it was never about whether the unit existed.
 
     A true FAIL naming the gap beats a green check over a handler that overclaims. The
     reasoning is `theoffice/docs/decisions.md`, entry 5; ADR-0044 is the run window this
