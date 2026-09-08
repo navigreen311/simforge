@@ -1,7 +1,9 @@
 # ADR-0049 — A declared `not_applicable`, with a reason, per class per module
 
-**Status:** Proposed. **Nothing built.**
-**Date:** 2026-09-07
+**Status:** **Accepted 2026-09-08 — built.** ~~Proposed. Nothing built.~~
+**Date:** 2026-09-07 · **Accepted:** 2026-09-08
+**Built by:** P-02 (the primitive) and P-03 (the enforcement), parallel build Wave 1/2
+**Resolution:** see *Decision* at the end — the analysis above is left exactly as written
 **Alongside:** ADR-0048 (the never-do trap)
 **Touches:** `services/operation/scenarios.py` (the curriculum validator), the
 `OperationScenarioSubmission` schema
@@ -218,6 +220,138 @@ asterisk that stops meaning anything.
 
 ## Not built
 
-This ADR records the pattern and the proposal. **No code.** The schema change crosses the
+> **Superseded 2026-09-08. It is built.** The paragraph below is left standing rather than
+> deleted, so that the change is visible to a reader who arrives at this ADR through a link
+> that called it a proposal.
+
+~~This ADR records the pattern and the proposal. **No code.** The schema change crosses the
 Office/SimForge contract, and the certification-level ruling is a governance decision, not
-an implementation detail.
+an implementation detail.~~
+
+The two blockers named there both cleared, and it is worth saying how, because neither
+cleared by someone deciding it did not matter:
+
+- **The schema change crossed the contract, and the contract was written first.** It is
+  `docs/scenario-contract.md` in `theoffice`, frozen for the build, and its amendment A1.1
+  rules the wire shape — a map on the curriculum, not a scenario row. The change did not
+  become smaller; it became a thing two packages could each build against without talking.
+- **The certification-level ruling is still a governance decision, and it has not been
+  made.** What was built is the half that does not require it. See below.
+
+---
+
+## Decision — accepted, and what was actually built
+
+Recorded 2026-09-08 by P-03, which owns the validator. **Two packages, and the split
+matters:** P-02 built a primitive that classifies and refuses nothing; P-03 made the
+validator act on it. Neither could have been reviewed as one diff, because the mechanism
+and the ruling it enables are different kinds of claim.
+
+### What P-02 built — `services/operation/never_do.py`, plus the schema
+
+- `NotApplicableDeclaration(module_id, scenario_class, why)`, frozen, **refusing an empty
+  or whitespace `why` at construction** — the `NoFramework(why)` discipline, applied at the
+  same moment: a declaration without a sentence cannot reach a validator, a cert or a
+  report, because it never becomes an object.
+- `index_declarations` (module → class → declaration, refusing one class declared twice)
+  and `declarations_from_map`, the single place the wire map becomes objects — so the
+  required-reason rule is the same rule whether a declaration arrived over the wire or was
+  built in process.
+- `classify_scenario_class` → `CLASS_SUPPLIED` / `CLASS_DECLARED_NOT_APPLICABLE` /
+  `CLASS_ABSENT`. **Three states, which is the fourth outcome this ADR asked for minus the
+  fourth** — a reasonless declaration never becomes a state, because it is refused before
+  it can be classified.
+- `not_applicable_class_result`, which returns `VERDICT_NOT_APPLICABLE` and **no `score`
+  key at all** — not `0.0`, not `None`-with-a-key. Property 3, enforced by the shape of the
+  dictionary rather than by a convention someone has to remember.
+- `coverage_status`, the general form of `never_do_status`, with `STATUS_NONE` /
+  `STATUS_TESTED` / `STATUS_UNTESTED` **preserved exactly** — the never-do case is now one
+  instance of the general mechanism, and every existing caller is unable to tell that the
+  file changed.
+- `ForgeOperationCurriculum.module_not_applicable: dict[str, dict[str, str]]`, with the
+  reason required at the schema, so a reasonless declaration is a 422 before the validator
+  is reached.
+
+### What P-03 enforced — `services/operation/scenarios.py`, `routers/operation.py`
+
+- **A mandatory class may be declared absent, with a reason, and the submission is
+  accepted.** `escalation_required` always; `recovery_after_failure` when the rubric
+  carries `recovery`, which the default rubric does — so it is mandatory for every module
+  in practice, and "conditional" here does not mean "usually not".
+- **A class that is neither supplied nor declared is still refused.** Property 1, and the
+  reason this is not a relaxation. Every acceptance test in
+  `tests/unit/test_curriculum_admits_declared_absence.py` is paired with a refusal test, so
+  that a future change which makes both pass is visible as the deletion it would be.
+- Four refusals about the declaration itself: a blank reason (re-refused here so that
+  callers which do not come through the schema are covered too), a class that is not one of
+  the nine (§1 — an unknown class is a rejection by design), a declaration for a module
+  nobody submitted, and **a class both supplied and declared absent**. The last is two
+  contradictory statements about one slot, and nothing downstream could say which the cert
+  should carry.
+- The declared reasons are echoed to the submitter as `module_declared_absences`.
+
+### The ruling this ADR left open, and the half of it that is now made
+
+**`classify_certification_level` gains a third value. `certified` is not widened.**
+
+    all nine SUPPLIED                            -> certified
+    the rest declared not_applicable, w/ a reason -> certified_with_declared_absence
+    anything neither supplied nor declared        -> demonstrated
+
+The ADR asked whether such a module can reach `certified`, or whether a third level is
+honest. **The third level is what was built, and it deliberately does not answer the first
+question.** A module that cannot exercise a class has not been shown to handle it, so
+granting `certified` on the strength of a declaration would be the pass-over-a-situation-
+that-cannot-occur this ADR refuses elsewhere. The cap is therefore **not lifted**.
+
+What changed is that it is no longer *silent*, which was the complaint. These two were one
+word and only one of them needs anybody to act:
+
+    demonstrated because the curriculum is incomplete and somebody should finish it
+    demonstrated because a required class describes behaviour this module does not have
+
+**Whether a declared-absence module should be certifiable remains open and is Ivan's.**
+Making the cap legible is what turns that into a question somebody can answer with data
+instead of from memory — which is the order this project keeps finding to be the right one.
+
+**A property worth stating, because adding a value to a vocabulary is how the
+office-vocabulary contract's mismatch #1 happened:** every existing consumer compares
+against `certified`, and the new value is not it, so anything that has not been taught the
+new word treats such a module as not-certified. **The new level can never silently upgrade
+anything.** It is also not in `docs/contracts/office-simforge-contract.json` — that file's
+`certification_states` are the `OperationCert` state machine, a different vocabulary from
+these submission-time labels, and neither copy of the contract needed to move.
+
+### Held-out classes are struck from the declarations before the level is computed
+
+Not in the original proposal, and found while building it. `never_do_violation` and
+`silent_failure` are SimForge's to author and The Office may not submit them (contract
+§1.1). If a declaration counted for those two, **a submitter could declare away the exact
+classes that test refusal and concealment** and reach a certified-shaped level without
+either being examined by anyone. Striking them also leaves the §1.1 ceiling exactly where
+it was: an Office submission can supply at most seven of nine and therefore still cannot
+reach either certified level on its own.
+
+### Still open, and deliberately so
+
+1. **Whether a declared absence should be certifiable.** Above. Governance, not code.
+2. **Where the cap is surfaced beyond the submission response.** This ADR says naming it as
+   required is the point and that the surfacing is not designed here. It still is not: the
+   reasons now travel out of the validator and are echoed to the submitter, and **nothing
+   renders them in a coverage view or a cert row.** That is the smallest honest version, and
+   it is not the whole of what this section asks for.
+3. **`module_levels` is echoed to The Office and nothing there reads it** — grepped
+   2026-09-08 across `theoffice`, zero hits for `module_levels` or `demonstrated` outside
+   its virtualenv. So the level, including the new one, is currently a signal with no
+   consumer. That is an argument for item 2 rather than against item 1, and it is recorded
+   here so that whoever builds the surfacing knows the label alone was never going to do it.
+4. **Never-do's own declaration still carries no reason.** `STATUS_NONE` is reached by an
+   absent or empty `module_never_do` — a declaration by empty collection, which is exactly
+   the shape this ADR argues is not enough. P-02 left it that way on purpose so that no
+   existing caller could tell the file had changed, and recorded the inconsistency rather
+   than closing it. It is still open.
+5. **ADR-0048's ruling.** The never-do trap is the sibling of this ADR and is not resolved
+   by it. Held pending a governance decision on a related question: today the validator
+   *accepts* a submitted `never_do_violation` scenario as evidence, which means the
+   certified party can supply its own refusal test. That is `blocking.md` B4's family and is
+   escalated, not decided.
