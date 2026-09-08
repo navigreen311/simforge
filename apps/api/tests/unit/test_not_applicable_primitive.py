@@ -3,8 +3,8 @@
 Two things are under test and the second is the one that matters more:
 
   1. A declared not_applicable REQUIRES a prose reason. One without a reason is refused — at the
-     dataclass and at the wire-map parser, because a rule enforced in one of the places a
-     declaration can be born is a rule with a way round it.
+     dataclass, at the wire-map parser, and at the Pydantic schema. All three, because a rule
+     enforced in one of the three places a declaration can be born is a rule with two ways round it.
 
   2. The generalisation did not change never-do. `never_do_status` and `is_never_do_coverage_hole`
      were re-expressed on top of the general `coverage_status`, and `STATUS_NONE` (a declared
@@ -26,7 +26,14 @@ import dataclasses
 import itertools
 
 import pytest
+from pydantic import ValidationError
 
+from src.schemas.operation_payloads import (
+    CertificationUnitRequest,
+    CoverageDeclaration,
+    ForgeOperationCurriculum,
+    InstructionSetRef,
+)
 from src.services.operation.never_do import (
     CLASS_ABSENT,
     CLASS_DECLARED_NOT_APPLICABLE,
@@ -360,3 +367,69 @@ def test_dimension_verdict_reads_the_named_dimension_only() -> None:
     assert dimension_verdict(results, "never_do_adherence") == VERDICT_FAIL
     assert dimension_verdict(results, "sequence_correctness") == VERDICT_PASS
     assert dimension_verdict(results, "not_a_dimension") is None
+
+
+# =================================================================================================
+# 7. The schema: the wire refuses a reasonless declaration before the validator runs
+# =================================================================================================
+
+
+def _curriculum(module_not_applicable: dict[str, dict[str, str]]) -> ForgeOperationCurriculum:
+    return ForgeOperationCurriculum(
+        instruction_set_ref=InstructionSetRef(
+            forge_id="capitalforge",
+            module_id="portfolio_health",
+            instruction_version="1.0.0",
+            forge_api_version="1.0.0",
+            content_hash="abc123",
+        ),
+        certification_units_requested=[
+            CertificationUnitRequest(unit_type="agent_operation", forge_id="capitalforge")
+        ],
+        operation_scenarios=[],
+        coverage_declaration=CoverageDeclaration(
+            modules_in_forge=11,
+            modules_covered=1,
+            functions_in_module=1,
+            functions_covered=1,
+        ),
+        module_not_applicable=module_not_applicable,
+    )
+
+
+def test_the_curriculum_accepts_a_reasoned_declaration() -> None:
+    curriculum = _curriculum({"portfolio_health": {"escalation_required": PORTFOLIO_HEALTH_WHY}})
+    assert (
+        curriculum.module_not_applicable["portfolio_health"]["escalation_required"]
+        == PORTFOLIO_HEALTH_WHY
+    )
+
+
+@pytest.mark.parametrize("why", ["", "   ", "\n"])
+def test_the_curriculum_refuses_a_declaration_with_no_reason(why: str) -> None:
+    """A 422 at the schema, before `validate_curriculum_submission` is ever reached — the same
+    layer every other required field on this payload is refused at (contract §6)."""
+    with pytest.raises(ValidationError) as exc:
+        _curriculum({"portfolio_health": {"escalation_required": why}})
+    assert "portfolio_health" in str(exc.value)
+    assert "escalation_required" in str(exc.value)
+
+
+def test_the_curriculum_defaults_to_no_declarations() -> None:
+    """Every existing submitter omits the field entirely and must keep working unchanged."""
+    curriculum = _curriculum({})
+    assert curriculum.module_not_applicable == {}
+
+
+def test_the_curriculum_round_trips_declarations_into_the_primitive() -> None:
+    """The wire map and the primitive are the same object seen twice — the seam P-03 uses."""
+    curriculum = _curriculum({"portfolio_health": {"escalation_required": PORTFOLIO_HEALTH_WHY}})
+    parsed = declarations_from_map(curriculum.module_not_applicable)
+    assert (
+        classify_scenario_class(
+            "escalation_required",
+            supplied_classes=[s.scenario_class for s in curriculum.operation_scenarios],
+            declarations=parsed["portfolio_health"],
+        )
+        == CLASS_DECLARED_NOT_APPLICABLE
+    )

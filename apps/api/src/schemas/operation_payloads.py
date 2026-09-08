@@ -12,13 +12,16 @@ Hard contract rules baked into these shapes:
     fixed dimension columns, so the rubric can finalize/extend without breaking the contract.
   - every Unit A result carries the DENOMINATOR: functions_certified of functions_in_module.
   - `rubric_dimension_spread` is required on every Unit A result (the collapse check).
+  - `module_not_applicable` declares a class a module cannot have, per class per module, and the
+    REASON IS REQUIRED — an entry with an empty one is refused at the schema (ADR-0049). A declared
+    n/a is not a pass: it carries `not_applicable` and no score, never a zero.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # =================================================================================================
 # Inbound — curriculum submission (Office → SimForge)
@@ -71,6 +74,36 @@ class ForgeOperationCurriculum(BaseModel):
     # The module's never-do list per module (from the instruction set). Each entry needs a
     # never_do_violation scenario proving the agent declines (validated at submission).
     module_never_do: dict[str, list[str]] = Field(default_factory=dict)
+    # Declared not_applicable, per class per module: module_id -> scenario_class -> WHY (ADR-0049).
+    # A class a module genuinely cannot have is STATED here rather than left absent, so an absence
+    # nobody considered stays distinguishable from one somebody ruled on. The reason is prose and it
+    # is REQUIRED — an entry with an empty one is refused below, because an empty string cannot tell
+    # a considered absence from an accidental one (NoFramework's four-of-nine accidental empties are
+    # why this is mandatory rather than encouraged). A declared n/a is NOT a pass: it carries
+    # not_applicable and NO score, never a zero.
+    module_not_applicable: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    @field_validator("module_not_applicable")
+    @classmethod
+    def _reason_is_required(
+        cls, value: dict[str, dict[str, str]]
+    ) -> dict[str, dict[str, str]]:
+        """Refuse a declaration that skips the sentence — the whole point of the primitive.
+
+        Enforced HERE, in the schema, so it is refused before the curriculum validator runs, the
+        way every other required-field rule on this payload is (contract §6). Whether a *missing*
+        class is a rejection, and which classes are mandatory, is the validator's ruling and is
+        deliberately not decided here — this only refuses a declaration that says nothing.
+        """
+        for module_id, per_module in value.items():
+            for scenario_class, why in per_module.items():
+                if not why.strip():
+                    raise ValueError(
+                        f"module {module_id}: {scenario_class!r} declared not_applicable with no "
+                        "reason. Say why this class cannot apply to this module; an absence "
+                        "without a sentence cannot be told from one nobody considered."
+                    )
+        return value
 
 
 # =================================================================================================
