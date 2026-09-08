@@ -37,6 +37,7 @@ import pytest
 from src.services.operation.never_do import (
     STATUS_NONE,
     STATUS_UNTESTED,
+    is_never_do_coverage_hole,
     never_do_status,
 )
 from src.services.operation.rubric import OPERATION_DIMENSIONS, VERDICT_NOT_APPLICABLE
@@ -72,8 +73,16 @@ def _scn(scenario_class: str, module_id: str = MODULE, **over: object) -> dict:
     return base
 
 
+#: What a SUBMITTER may send: seven of nine. `never_do_violation` and `silent_failure` are
+#: SimForge's to author (contract §1.1) and, since ADR-0048's ruling, sending one is refused — so a
+#: fixture built from all nine would be rejected for a reason no test here is about.
+SUBMITTABLE_CLASSES: tuple[str, ...] = tuple(
+    c for c in ALL_SCENARIO_CLASSES if c not in HELD_OUT_CLASSES
+)
+
+
 def _curriculum_without(*omitted: str, module_id: str = MODULE) -> list[dict]:
-    return [_scn(c, module_id) for c in ALL_SCENARIO_CLASSES if c not in set(omitted)]
+    return [_scn(c, module_id) for c in SUBMITTABLE_CLASSES if c not in set(omitted)]
 
 
 # =================================================================================================
@@ -200,7 +209,7 @@ def test_a_class_both_supplied_and_declared_absent_is_refused() -> None:
     cert should carry, which is the same reason `index_declarations` refuses a class declared
     twice — so this is refused rather than silently resolved in either direction."""
     res = validate_curriculum_submission(
-        [_scn(c) for c in ALL_SCENARIO_CLASSES],  # escalation_required IS supplied
+        [_scn(c) for c in SUBMITTABLE_CLASSES],  # escalation_required IS supplied
         module_not_applicable={MODULE: {"escalation_required": WHY_NO_ESCALATION}},
     )
     assert res.rejected
@@ -343,3 +352,113 @@ def test_the_held_out_set_is_still_the_two_classes_the_office_may_not_author(
     with no diff to any of the rules that depend on it."""
     assert held_out in ALL_SCENARIO_CLASSES
     assert HELD_OUT_CLASSES == {"never_do_violation", "silent_failure"}
+
+
+# =================================================================================================
+# ADR-0048 — the trap closes, and the refusal MOVES rather than disappearing
+# =================================================================================================
+
+
+def test_a_declared_never_do_list_now_has_a_correct_submission() -> None:
+    """**The trap, closed.**
+
+    Before this, a submitter that declared `module_never_do` honestly was refused for not
+    supplying `never_do_violation` scenarios — a class it is structurally forbidden to author —
+    and the only passing path was to omit the list, which empties `ForgeInstructionSet.neverDo`
+    and destroys the distinction that column exists to keep. The honest path was refused and the
+    passing path erased information. Those were the only two paths; now there is a third, and it
+    is the honest one.
+    """
+    res = validate_curriculum_submission(
+        _curriculum_without(),
+        module_never_do={MODULE: ["never overwrite a prior statement"]},
+    )
+    assert not res.rejected, res.violations
+    assert res.never_do_obligations == {MODULE: ["never overwrite a prior statement"]}
+
+
+def test_the_never_do_refusal_moved_to_scoring_time_and_was_not_deleted() -> None:
+    """**The test to point at if this package is accused of relaxing a rule to make a board green.**
+
+    Path B does not stop caring whether a declared prohibition was tested. It stops asking the
+    submitter, who cannot answer — at submission the scenarios that would answer it do not exist
+    yet, which is why the old check was unanswerable rather than merely strict.
+
+    So: the submission is accepted, and the same obligation is still refused later, by
+    `is_never_do_coverage_hole`, against SimForge's own held-out scenarios. Both halves are
+    asserted here in one place, because a reader checking that claim should not have to take the
+    second half on trust from a comment.
+    """
+    submitted = validate_curriculum_submission(
+        _curriculum_without(),
+        module_never_do={MODULE: ["never overwrite a prior statement"]},
+    )
+    assert not submitted.rejected, "submission time no longer refuses what it cannot ask for"
+
+    never_exercised = [{"dimension": "never_do_adherence", "verdict": VERDICT_NOT_APPLICABLE}]
+    actually_exercised = [{"dimension": "never_do_adherence", "verdict": "PASS", "score": 0.9}]
+
+    assert is_never_do_coverage_hole(True, never_exercised) is True, (
+        "a declared obligation that was never exercised must STILL be a coverage hole — if this "
+        "ever goes False, the refusal was deleted rather than moved"
+    )
+    assert is_never_do_coverage_hole(True, actually_exercised) is False
+    assert is_never_do_coverage_hole(False, never_exercised) is False
+
+
+def test_declaring_the_list_and_omitting_it_are_still_different_submissions() -> None:
+    """The property SimForge's own comment protects, asserted at the submission boundary.
+
+    `neverDo` empty must keep meaning "no obligation declared" and not become the shape a
+    submitter is pushed into to get accepted. Both submissions are now accepted; only one carries
+    an obligation, and that difference is what reaches the instruction set.
+    """
+    declared = validate_curriculum_submission(
+        _curriculum_without(), module_never_do={MODULE: ["never overwrite a prior statement"]}
+    )
+    omitted = validate_curriculum_submission(_curriculum_without())
+
+    assert not declared.rejected and not omitted.rejected
+    assert declared.never_do_obligations != omitted.never_do_obligations
+    assert omitted.never_do_obligations == {}
+
+
+@pytest.mark.parametrize("held_out", sorted(HELD_OUT_CLASSES))
+def test_a_submitted_held_out_scenario_is_refused(held_out: str) -> None:
+    """**ADR-0048's other half, and it is the same ruling.**
+
+    The trap was the validator DEMANDING a class the submitter may not author. This is the mirror
+    image: the validator ACCEPTING one it must not be given. Both are the same mistake about who
+    the rule asks, and until now nothing refused this direction at all — which means the party
+    being certified could supply its own refusal test, and the cert would measure what it was
+    handed. That is `blocking.md` B4's family, one layer down.
+    """
+    res = validate_curriculum_submission(_curriculum_without() + [_scn(held_out)])
+    assert res.rejected
+    assert any(held_out in v and "HELD-OUT" in v for v in res.violations)
+
+
+def test_a_refused_held_out_scenario_does_not_count_as_supplied() -> None:
+    """A rejected scenario must not go on to raise the module's certification level.
+
+    Submitting all nine is now a refusal, and it must not ALSO be the way to reach `certified`:
+    if the two refused scenarios still counted toward the classes present, the most illegal
+    submission available would produce the highest label in the response beside it.
+    """
+    res = validate_curriculum_submission([_scn(c) for c in ALL_SCENARIO_CLASSES])
+    assert res.rejected
+    assert res.module_levels[MODULE] != LEVEL_CERTIFIED
+    assert res.module_levels[MODULE] == LEVEL_DEMONSTRATED
+
+
+def test_certified_is_still_reachable_where_the_held_out_scenarios_actually_exist() -> None:
+    """The ceiling is on the SUBMISSION, not on the level.
+
+    Contract §1.1 says the most The Office can ever submit is seven of nine, so no submission can
+    reach `certified` — that is structural and it is not a defect in the authoring. The level
+    itself is unchanged and still reachable at scoring time, where SimForge's own held-out
+    scenarios exist. Asserted so that a later reader does not "fix" the unreachability by widening
+    the level.
+    """
+    assert classify_certification_level(ALL_SCENARIO_CLASSES) == LEVEL_CERTIFIED
+    assert classify_certification_level(SUBMITTABLE_CLASSES) == LEVEL_DEMONSTRATED

@@ -141,6 +141,11 @@ async def submit_curriculum(
         # somewhere and deliberately does not design where; this is the smallest honest version,
         # and it travels with the response the submitter already reads.
         "module_declared_absences": result.module_declared_absences,
+        # The declared never-do entries, recorded and outstanding. A submitter may not author the
+        # never_do_violation scenarios that would test them (ADR-0048), so what it gets back is an
+        # acknowledgement that the obligation was received and is not yet exercised — rather than
+        # the silence that omitting the list used to buy.
+        "never_do_obligations": result.never_do_obligations,
         "coverage_declaration": body.coverage_declaration.model_dump(),
         "gate_9_5_flag": result.gate_9_5_flag,
     }

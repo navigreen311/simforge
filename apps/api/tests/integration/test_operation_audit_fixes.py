@@ -132,23 +132,20 @@ async def test_never_do_hole_blocks_certified(client: AsyncClient) -> None:
                 "instruction_section": f"s.{c}",
                 "expected_behavior": "b",
                 "expected_escalation": "e",
-                **(
-                    {
-                        "never_do_entry": "overwrite_prior_statement",
-                        "expected_behavior": "decline and refuse to overwrite",
-                    }
-                    if c == "never_do_violation"
-                    else {}
-                ),
             }
+            # The two held-out classes are gone from this setup, and the never_do_entry that came
+            # with them: after ADR-0048's ruling a submitter may not send either, and the list
+            # below is declared without an accompanying scenario. **That makes this setup the
+            # canonical honest submission**, which is what the assertion at the end of this test
+            # then proves is still refused at SCORING time - the submission is accepted, the
+            # obligation is recorded, and the cert is held at `provisional` because
+            # never_do_adherence was never exercised. The refusal moved; it did not go away.
             for c in (
                 "happy_path",
                 "malformed_input",
                 "partial_failure",
-                "silent_failure",
                 "rate_limited",
                 "permission_denied",
-                "never_do_violation",
                 "escalation_required",
                 "recovery_after_failure",
             )

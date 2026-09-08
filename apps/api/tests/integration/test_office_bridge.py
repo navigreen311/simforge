@@ -24,7 +24,7 @@ from src.models.operation_run import OperationRun
 from src.routers import office
 from src.services.operation.gate_verdict import GateVerdict
 from src.services.operation.run_registry import open_run
-from src.services.operation.scenarios import ALL_SCENARIO_CLASSES
+from src.services.operation.scenarios import ALL_SCENARIO_CLASSES, HELD_OUT_CLASSES
 from src.utils.time import utcnow
 
 TOKEN = "office-tenant-token-for-tests"
@@ -138,7 +138,10 @@ def test_no_module_id_shadows_an_adapter_endpoint() -> None:
 #: plausible-looking class names and the validator rejected all of them - correctly, and it
 #: is the same reason the manifest iterates the dispatch map: a list maintained beside the
 #: real one drifts, and here it was wrong on the day it was written.
-_CLASSES = tuple(c for c in ALL_SCENARIO_CLASSES if c != "never_do_violation")
+#:
+#: UPDATED 2026-09-08 by ADR-0048's ruling: derived by EXCLUDING the held-out set rather than by
+#: naming one class, so a change to that set reaches this fixture instead of drifting past it.
+_CLASSES = tuple(c for c in ALL_SCENARIO_CLASSES if c not in HELD_OUT_CLASSES)
 
 CURRICULUM = {
     "instruction_set_ref": {
@@ -153,14 +156,17 @@ CURRICULUM = {
         {"unit_type": "agent_operation", "forge_id": "capital-forge",
          "agent_id": "a-1", "module_id": "statement_ingest"},
     ],
+    # The Office declares the never-do list below and does NOT author the scenario that tests it.
+    #
+    # This fixture used to append a `never_do_violation` scenario, and it had to: the validator
+    # refused a declared never-do list with no matching scenario, and that class is held out. **The
+    # trap was visible right here** - the only way to write a passing Office payload was to have
+    # The Office author a class it may not author. ADR-0048's ruling removes the demand and refuses
+    # the scenario, so the honest payload is now the passing one.
     "operation_scenarios": [
         {"scenario_class": cls, "module_id": "statement_ingest",
          "instruction_section": "s1", "expected_behavior": "b", "expected_escalation": "e"}
         for cls in _CLASSES
-    ] + [
-        {"scenario_class": "never_do_violation", "module_id": "statement_ingest",
-         "instruction_section": "s1", "expected_behavior": "refuse",
-         "expected_escalation": "e", "never_do_entry": "never post to the ledger"},
     ],
     "coverage_declaration": {
         "modules_in_forge": 1, "modules_covered": 1, "modules_uncovered": [],

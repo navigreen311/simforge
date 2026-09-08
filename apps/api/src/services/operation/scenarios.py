@@ -36,6 +36,12 @@ HELD-OUT SET / GATE 9.5 DEPENDENCY (flag — read this):
     could leak it to The Office. That separation is an operational/process control — the SAME
     dependency Gate 9.5 rests on. `GATE_9_5_FLAG` is surfaced on every validation result so the
     caller (and the UI) never treats a "held-out authored" claim as self-proving.
+
+    **The split is now ENFORCED on the submission side (ADR-0048).** A submitted scenario carrying
+    a held-out class is refused. It used to be accepted, which meant the party being certified
+    could supply its own refusal test — the isolation was a rule with no enforcement on the only
+    side that could break it. Enforcing it does not make the isolation self-proving; the flag above
+    still stands, because refusing what arrives says nothing about who authored what does not.
 """
 
 from __future__ import annotations
@@ -113,18 +119,18 @@ GATE_9_5_FLAG: str = (
 )
 
 # --- CONTENT LAYER seam (documented) -------------------------------------------------------------
-# Words in a never_do_violation scenario's expected_behavior that evidence the agent DECLINES the
-# prohibited action. A light heuristic ONLY — the authoritative "did it decline" judgement is the
-# held-out scenario's scoring (CONTENT LAYER), not this string check. Kept deliberately minimal.
-_DECLINE_MARKERS: tuple[str, ...] = (
-    "decline",
-    "refus",
-    "reject",
-    "deny",
-    "do not",
-    "does not",
-    "block",
-)
+# There was a `_DECLINE_MARKERS` word-list here, checking that a submitted never_do_violation
+# scenario's expected_behavior evidenced the agent DECLINING. **Removed by ADR-0048's ruling, and
+# this note is left in its place so the removal is found rather than inferred.**
+#
+# It was a light heuristic over a submitted scenario, and its own comment said the authoritative
+# "did it decline" judgement was the held-out scenario's SCORING, never the string check. After the
+# ruling a submitter may not send a never_do_violation scenario at all, so the heuristic could only
+# ever have run on a payload that is now refused one check earlier. Deleting an unreachable
+# approximation of a judgement that lives elsewhere is not the same as dropping the judgement: the
+# `never_do_adherence` rubric dimension is where declining is actually decided, and
+# `never_do.is_never_do_coverage_hole` is what refuses a declared obligation that was never
+# exercised there.
 # -------------------------------------------------------------------------------------------------
 
 
@@ -134,6 +140,11 @@ class CurriculumValidation:
 
     `violations` non-empty ⇒ REJECT the submission. `module_levels` labels each module with one of
     `CERTIFICATION_LEVELS` — a label, NOT a rejection.
+
+    `never_do_obligations` is module → the declared never-do entries, recorded rather than checked:
+    a submitter may not author the `never_do_violation` scenarios that would test them, so whether
+    each was exercised is decided at scoring time (ADR-0048). Carrying them out of the validator is
+    what keeps "declared and not yet tested" visible instead of silent.
 
     `module_declared_absences` is module → class → why, echoing every declaration that was accepted.
     It exists because **a label alone cannot surface a cap.** ADR-0049 requires that a declared
@@ -146,6 +157,7 @@ class CurriculumValidation:
     violations: list[str]
     module_levels: dict[str, str]  # module_id -> one of CERTIFICATION_LEVELS
     module_declared_absences: dict[str, dict[str, str]] = field(default_factory=dict)
+    never_do_obligations: dict[str, list[str]] = field(default_factory=dict)
     gate_9_5_flag: str = GATE_9_5_FLAG
 
     @property
@@ -195,13 +207,6 @@ def classify_certification_level(
     return LEVEL_DEMONSTRATED
 
 
-def _proves_decline(scenario: Mapping) -> bool:
-    if scenario.get("proves_decline") is True:
-        return True
-    behavior = str(scenario.get("expected_behavior", "")).lower()
-    return any(m in behavior for m in _DECLINE_MARKERS)
-
-
 def validate_curriculum_submission(
     scenarios: Sequence[Mapping],
     *,
@@ -220,10 +225,18 @@ def validate_curriculum_submission(
       - a module whose rubric includes the `recovery` dimension but has NO recovery_after_failure
         scenario and no declaration (recovering after a failure is distinct from recognizing one —
         its own class),
-      - a never-do list entry with no never_do_violation scenario, or one that does not prove the
-        agent DECLINES,
+      - a scenario whose class is HELD OUT (`never_do_violation`, `silent_failure`) — SimForge
+        authors those and a submitter may not send one (ADR-0048),
       - a not_applicable declaration that is malformed: no reason, an unknown scenario_class, a
         module that was not submitted, or a class that this module also supplied.
+
+    **No longer a rejection (ADR-0048, path B):** a declared never-do entry with no matching
+    `never_do_violation` scenario. That check asked the submitter for a class the submitter is
+    forbidden to author, so no correct submission could declare a never-do list at all. The
+    obligation is now RECORDED (`never_do_obligations`) and its coverage is decided at scoring
+    time, where SimForge's own held-out scenarios exist — see `never_do.is_never_do_coverage_hole`,
+    which still blocks full certification for an obligation that was never exercised. **The refusal
+    moved; it was not dropped.**
 
     **The whole of ADR-0049 in one sentence: a DECLARED absence is an answer and a bare absence is
     not.** A mandatory class that nobody supplied and nobody declared is still refused, exactly as
@@ -256,6 +269,22 @@ def validate_curriculum_submission(
         if sc not in set(ALL_SCENARIO_CLASSES):
             violations.append(f"scenario[{idx}]: unknown scenario_class {sc!r}")
             continue
+        if sc in HELD_OUT_CLASSES:
+            # ADR-0048's second half. A submitter must not author the classes that test refusal and
+            # concealment: accepting one lets the party being certified supply its own refusal test,
+            # and the cert then measures what it was handed. Until now nothing refused it — the
+            # held-out split was a rule with no enforcement on the only side that could break it.
+            #
+            # `continue`, so the refused scenario is not counted as supplied either. A scenario that
+            # was rejected must not go on to raise the module's certification level.
+            violations.append(
+                f"scenario[{idx}] (module {s.get('module_id')}, {sc}): {sc} is a HELD-OUT class. "
+                f"SimForge authors it and a submitter may not send one — an agent graded against "
+                f"refusal cases its own authoring system wrote is measured on memorisation, not "
+                f"competence. Declare the obligation (module_never_do) and leave the scenario to "
+                f"SimForge."
+            )
+            continue
         mod = s.get("module_id")
         if not mod:
             violations.append(f"scenario[{idx}] ({sc}): missing module_id")
@@ -271,6 +300,7 @@ def validate_curriculum_submission(
     modules = set(requested_modules) if requested_modules is not None else set(by_module)
     module_levels: dict[str, str] = {}
     module_declared_absences: dict[str, dict[str, str]] = {}
+    never_do_obligations: dict[str, list[str]] = {}
 
     # A declaration about a module that was not submitted is a statement about nothing, and the
     # likeliest cause is a mistyped module id — in which case the module the author MEANT to
@@ -334,24 +364,25 @@ def validate_curriculum_submission(
                     f"recovery_after_failure scenario, and none was declared not_applicable"
                 )
 
+        # --- the declared never-do list (ADR-0048, resolved: path B) ---------------------------
+        # This block used to REJECT a declared never-do entry that had no matching
+        # never_do_violation scenario. The rule was correct about the world — a declared
+        # prohibition with nothing testing it IS a coverage hole — and wrong about WHO it asked:
+        # never_do_violation is held out, so it demanded work the submitter is forbidden to do.
+        # There was no correct submission that declared a never-do list, and the only passing path
+        # was to omit the list, which empties `ForgeInstructionSet.neverDo` and destroys the very
+        # distinction that column was added to keep.
+        #
+        # **The refusal is not deleted. It moves to where the evidence is.** A declared entry is
+        # recorded here as an outstanding obligation and carried onto the instruction set; whether
+        # it was ever exercised is decided at scoring time by `never_do.is_never_do_coverage_hole`,
+        # against SimForge's own held-out scenarios, and an unexercised obligation still blocks
+        # full certification there. Submission time cannot answer that question — at submission the
+        # scenarios that would answer it do not exist yet, which is why the check was unanswerable
+        # rather than merely strict.
         nd_entries = list(module_never_do.get(mod, []))
         if nd_entries:
-            nd_scenarios = [
-                s
-                for s in by_module.get(mod, [])
-                if str(s.get("scenario_class")) == ScenarioClass.NEVER_DO_VIOLATION
-            ]
-            for entry in nd_entries:
-                matches = [s for s in nd_scenarios if s.get("never_do_entry") == entry]
-                if not matches:
-                    violations.append(
-                        f"module {mod}: never-do entry {entry!r} has no never_do_violation scenario"
-                    )
-                elif not any(_proves_decline(s) for s in matches):
-                    violations.append(
-                        f"module {mod}: never-do entry {entry!r} scenario does not prove the agent "
-                        f"DECLINES"
-                    )
+            never_do_obligations[mod] = nd_entries
 
         module_levels[mod] = classify_certification_level(
             classes_present,
@@ -362,6 +393,7 @@ def validate_curriculum_submission(
         violations=violations,
         module_levels=module_levels,
         module_declared_absences=module_declared_absences,
+        never_do_obligations=never_do_obligations,
     )
 
 

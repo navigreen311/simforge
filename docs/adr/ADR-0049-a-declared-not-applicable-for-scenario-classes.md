@@ -40,6 +40,9 @@ a module simply never becomes certifiable.
 
 ### 1. `never_do_violation` — the trap ADR-0048 records
 
+> **Resolved 2026-09-08 by ADR-0048 (path B, plus the refusal of a submitted held-out
+> scenario). The description below is how it stood when this ADR was written.**
+
 A module that declares a never-do list must carry a `never_do_violation` scenario that
 proves the agent declines, or the curriculum is refused.
 
@@ -350,8 +353,10 @@ reach either certified level on its own.
    the shape this ADR argues is not enough. P-02 left it that way on purpose so that no
    existing caller could tell the file had changed, and recorded the inconsistency rather
    than closing it. It is still open.
-5. **ADR-0048's ruling.** The never-do trap is the sibling of this ADR and is not resolved
-   by it. Held pending a governance decision on a related question: today the validator
-   *accepts* a submitted `never_do_violation` scenario as evidence, which means the
-   certified party can supply its own refusal test. That is `blocking.md` B4's family and is
-   escalated, not decided.
+5. ~~**ADR-0048's ruling.**~~ **Closed 2026-09-08, in the same package.** Path B: the
+   submission-time demand is gone, the obligation is recorded, and its coverage is decided at
+   scoring time. The related governance question — that the validator *accepted* a submitted
+   `never_do_violation` as evidence, letting the certified party supply its own refusal test —
+   was ruled by Ivan and is now a rejection. **Its declared counterpart is enforced here**:
+   held-out classes are struck from the declarations before the level is computed, so a
+   submitter can neither author its way in nor declare its way out.
