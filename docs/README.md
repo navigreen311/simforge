@@ -48,6 +48,12 @@ kept entirely separate from the domain rubric.
 - **[adr/ADR-0045-deploy-pipeline-is-a-scaffold.md](adr/ADR-0045-deploy-pipeline-is-a-scaffold.md)**
   — `deploy-staging.yml` has been green on every push to main for months while running only
   `echo`. Nothing here has ever been deployed.
+- **[adr/ADR-0048-the-never-do-trap.md](adr/ADR-0048-the-never-do-trap.md)**
+  — **open, not fixed.** The curriculum validator rejects a submission whose declared
+  never-do list has no `never_do_violation` scenario, and that class is held out — SimForge
+  authors it and The Office may not. So there is no correct submission that declares a
+  never-do list: the honest path is refused and the passing path leaves `neverDo` empty,
+  which is what that column exists to prevent.
 - **[adr/ADR-0049-a-declared-not-applicable-for-scenario-classes.md](adr/ADR-0049-a-declared-not-applicable-for-scenario-classes.md)**
   — **proposed, not built.** The curriculum validator asks every module for the same scenario
   classes, and modules differ in kind. Three instances, including one module whose honest
