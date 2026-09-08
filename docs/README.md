@@ -49,16 +49,20 @@ kept entirely separate from the domain rubric.
   — `deploy-staging.yml` has been green on every push to main for months while running only
   `echo`. Nothing here has ever been deployed.
 - **[adr/ADR-0048-the-never-do-trap.md](adr/ADR-0048-the-never-do-trap.md)**
-  — **open, not fixed.** The curriculum validator rejects a submission whose declared
-  never-do list has no `never_do_violation` scenario, and that class is held out — SimForge
-  authors it and The Office may not. So there is no correct submission that declares a
-  never-do list: the honest path is refused and the passing path leaves `neverDo` empty,
-  which is what that column exists to prevent.
+  — **resolved 2026-09-08 (P-03).** The validator used to reject a submission whose declared
+  never-do list had no `never_do_violation` scenario — a held-out class the submitter may not
+  author — so no correct submission could declare a never-do list at all. Path B: the demand is
+  gone, the obligation is recorded, and its coverage is decided at scoring time, where the
+  held-out scenarios are. **The refusal moved; it was not deleted.** Ruled with it: a submitted
+  held-out scenario is now refused, because accepting one let the certified party supply its own
+  refusal test.
 - **[adr/ADR-0049-a-declared-not-applicable-for-scenario-classes.md](adr/ADR-0049-a-declared-not-applicable-for-scenario-classes.md)**
-  — **proposed, not built.** The curriculum validator asks every module for the same scenario
-  classes, and modules differ in kind. Three instances, including one module whose honest
-  content for a mandatory class is *this does not apply here*. Proposes a declared
-  `not_applicable` with a required reason — the concept the rubric already has one layer up.
+  — **accepted, and built** (P-02 the primitive, P-03 the enforcement). The curriculum
+  validator asked every module for the same scenario classes, and modules differ in kind. A
+  class a module genuinely cannot have is now DECLARED `not_applicable` with a required prose
+  reason and admitted; a class neither supplied nor declared is still refused.
+  `classify_certification_level` gains a third level rather than widening `certified`, so the
+  cap stops being silent without being lifted.
 - **[contracts/office-simforge-contract.json](contracts/office-simforge-contract.json)** — the
   vocabulary The Office and SimForge share, asserted from both sides. The canonical copy lives in
   The Office; `contract_version` is what says the two copies are the same generation.

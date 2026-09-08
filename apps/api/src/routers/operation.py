@@ -72,9 +72,16 @@ router = APIRouter()
 async def submit_curriculum(
     body: ForgeOperationCurriculum, session: AsyncSession = Depends(get_session)
 ) -> dict:
-    """Validate a curriculum submission against the Batch-3 rules. Reject (422) on any violation.
-    On success, upsert the bound instruction set and echo per-module cert levels + the Gate 9.5
-    flag."""
+    """Validate a curriculum submission against the Batch-3 rules + ADR-0049. Reject (422) on any
+    violation. On success, upsert the bound instruction set and echo per-module cert levels, the
+    declared absences and the Gate 9.5 flag.
+
+    **A class a module cannot have may be declared not_applicable, with a reason, and accepted; a
+    class that is neither supplied nor declared is still refused.** The declarations arrive on
+    `module_not_applicable` (contract §10 A1.1) and the reason is already required by the schema,
+    so a reasonless one 422s here before this function is reached — which is the same layering
+    every other required field on this payload has.
+    """
     scenarios = [s.model_dump() for s in body.operation_scenarios]
     requested_modules = sorted(
         {s.module_id for s in body.operation_scenarios}
@@ -83,6 +90,7 @@ async def submit_curriculum(
     result = validate_curriculum_submission(
         scenarios,
         module_never_do=body.module_never_do,
+        module_not_applicable=body.module_not_applicable,
         requested_modules=requested_modules or None,
     )
     if result.rejected:
@@ -127,6 +135,17 @@ async def submit_curriculum(
     return {
         "accepted": True,
         "module_levels": result.module_levels,
+        # Every accepted declaration, module -> class -> WHY. Echoed because a level alone cannot
+        # surface a cap: `certified_with_declared_absence` says a class was declared absent, and
+        # only this says which one and on what grounds. ADR-0049 requires the cap be visible
+        # somewhere and deliberately does not design where; this is the smallest honest version,
+        # and it travels with the response the submitter already reads.
+        "module_declared_absences": result.module_declared_absences,
+        # The declared never-do entries, recorded and outstanding. A submitter may not author the
+        # never_do_violation scenarios that would test them (ADR-0048), so what it gets back is an
+        # acknowledgement that the obligation was received and is not yet exercised — rather than
+        # the silence that omitting the list used to buy.
+        "never_do_obligations": result.never_do_obligations,
         "coverage_declaration": body.coverage_declaration.model_dump(),
         "gate_9_5_flag": result.gate_9_5_flag,
     }
