@@ -54,16 +54,22 @@ treated as the same empty set.
 
 **That mechanism is built, tested, and applies to exactly one of nine classes.**
 
-### 2. `rate_limited` — no module has the material
+### 2. `rate_limited` — one module of nineteen has the material
 
-Checked on 2026-09-07 across the authored corpus: **none of the eleven module manuals in
-`theoffice/docs/instructions/` contains any rate-limit material** — zero occurrences of
-`429`, `rate limit` or `throttle` in any of them.
+Counted against the live corpus on 2026-09-07, not against the markdown files: **19 live
+instructions** (`forge_operating_instruction` where `superseded_at IS NULL` — capitalforge
+11, cre-forge 5, simforge 2, voiceforge 1), of which **exactly one** carries anything
+rate-limit-shaped: `voiceforge/transcribe_call`, on `429` and backoff.
 
-Not a rejection, so nothing goes red. Every one of those modules is capped at
-`demonstrated` and cannot reach `certified`, and the report says only that a class is
-missing. An author reading that is told to write a scenario for behaviour their module does
-not have.
+Eleven of those were written from source by an author reading each module's code, and not
+one of them found rate limiting worth teaching. **That is a fact about the modules, not a
+gap in the template** — the reasoning The Office recorded when it refused to add a ninth
+required instruction section for it.
+
+**And this one is not a rejection.** `rate_limited` is outside the refusal set. A curriculum
+missing it is *accepted*, and every affected module is labelled `demonstrated` instead of
+`certified` by `classify_certification_level`. Nothing goes red. Permanently, and silently,
+for eighteen of nineteen modules.
 
 ### 3. `escalation_required` on `capitalforge/portfolio_health` — a refusal
 
@@ -149,6 +155,39 @@ The properties that matter, and they are the same three:
    handles a dimension. And `classify_certification_level` needs a ruling of its own: whether
    a module with a declared, reasoned `not_applicable` can reach `certified`, or whether a
    third level is honest. **That is not decided here.**
+
+## The silent cap has to be visible somewhere
+
+This is the consequence of the label class, and it deserves its own statement because it is
+the failure mode this project keeps finding.
+
+**A cap nobody can see is a degradation nobody will fix.** Eighteen of nineteen modules
+cannot reach `certified`, for a reason that is correct, understood and written down — and
+nothing anywhere turns red, or amber, or anything. A reader of any state report sees
+`demonstrated` and has no way to tell apart:
+
+    demonstrated because the curriculum is incomplete and somebody should finish it
+    demonstrated because a required class describes behaviour this module does not have
+
+Those need different actions and one of them needs none. Today they are the same word.
+
+It is the same shape as every other finding on this project: `ESTATE`'s missing Forge that
+appeared in no report at all, the deploy workflow that was green because it did nothing, the
+`is_mutating` row that verification promoted to evidence on the half it checked. **A state
+that is wrong and loud gets fixed. A state that is honest and invisible accumulates.**
+
+So a declared `not_applicable` is not only a fix for the refusal in instance 3 — it is what
+makes instance 2 *legible*. A module whose `rate_limited` absence is declared, with a
+reason, is distinguishable in a report from one whose author has not got to it yet. The
+declaration is the thing that can be counted, rendered and asked about.
+
+**Without that, whatever level such a module reaches, the cap should still be surfaced** —
+in the coverage view, in the module's cert row, or wherever `demonstrated` is rendered.
+Recording the reasoning in a decision entry is necessary and is not sufficient: a decision
+entry is read by whoever goes looking, and the population that needs this is whoever is
+reading the state.
+
+That surfacing is not designed here. Naming it as required is the point.
 
 ## Why not the alternatives
 
