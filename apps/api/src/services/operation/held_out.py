@@ -266,6 +266,11 @@ SUBMITTER_VISIBLE_FIELDS: frozenset[str] = frozenset(
     {"scenario_class", "module_id", "instruction_section"}
 )
 
+#: The error code a caller gets for asking for held-out CONTENT. Named rather than a bare 403 so a
+#: client can tell "you may not have this, ever, and here is why" from "your token is wrong" — the
+#: two need completely different responses and only one of them is a decision. ADR-0050.
+HELD_OUT_CONTENT_REFUSED = "held_out_content_is_never_returned"
+
 #: Every held-out scenario is about the never-do section, whichever class it lands in. Both kinds
 #: of obligation are written there — that is the observation this whole pipeline rests on.
 HELD_OUT_INSTRUCTION_SECTION = "never_do"
@@ -449,6 +454,59 @@ def exercised_obligation_refs(scenarios: Iterable[HeldOutScenario]) -> frozenset
     return frozenset(s.obligation_ref for s in scenarios)
 
 
+# --- the inspection surface: counts and a digest, never content (ADR-0050) -----------------------
+
+
+@dataclass(frozen=True, slots=True)
+class HeldOutInventory:
+    """How much held-out material exists for one module. **Deliberately not what it says.**
+
+    ADR-0050's ruling in one object: *"eleven scenarios exist for this module" is inspectable;
+    "here they are" is the exam.* An operator has a real question — was this module's refusal
+    material ever authored, and against how many obligations — and answering it needs a count, not
+    a corpus. So this carries counts and a digest and there is no field that could hold a probe.
+
+    `digest` is a hash over the authored set. It changes when the set changes, which is what makes
+    "the same eleven scenarios as last week" checkable without anybody reading one; it is one-way,
+    so it discloses nothing about their content.
+
+    **What is NOT here, and it was permitted: per-scenario obligation ids.** The ruling allows ids.
+    They are left out because an id would tell a submitter which of *its own* never-do entries drew
+    a `silent_failure` probe — i.e. which of its sentences the parser read as claim prohibitions —
+    and that answers no operator question while being a fact about the exam. The narrower surface is
+    the one that survives somebody deciding later that a little more would be convenient.
+    """
+
+    module_id: str
+    obligations_declared: int
+    scenarios_authored: int
+    #: scenario_class -> how many, e.g. {"never_do_violation": 7, "silent_failure": 5}
+    by_class: Mapping[str, int]
+    digest: str
+
+
+def inventory(module_id: str, never_do: Sequence[str]) -> HeldOutInventory:
+    """Author the module's held-out set and report only its SHAPE.
+
+    The authoring happens inside this function and the scenarios never leave it. That is the point
+    of the seam rather than an implementation detail: a caller that wants counts imports `inventory`
+    and is structurally unable to obtain a probe, because it never holds one.
+    `test_the_router_may_import_only_names_that_cannot_yield_content` is what keeps that true.
+    """
+    scenarios = author_for_module(module_id, never_do)
+    counts: dict[str, int] = {}
+    for scenario in scenarios:
+        counts[scenario.scenario_class] = counts.get(scenario.scenario_class, 0) + 1
+    material = "".join(f"{s.scenario_class}{s.probe}" for s in scenarios)
+    return HeldOutInventory(
+        module_id=module_id,
+        obligations_declared=len(never_do),
+        scenarios_authored=len(scenarios),
+        by_class=dict(sorted(counts.items())),
+        digest="sha256:" + hashlib.sha256(material.encode("utf-8")).hexdigest(),
+    )
+
+
 def scenario_dimension(scenario_class: str) -> str:
     """Which rubric dimension a held-out class reports into — read out of `DIMENSION_SCENARIO_CLASS`
     rather than restated here, so the two cannot drift."""
@@ -463,6 +521,9 @@ def scenario_dimension(scenario_class: str) -> str:
 
 __all__ = [
     "ObligationKind",
+    "HeldOutInventory",
+    "HELD_OUT_CONTENT_REFUSED",
+    "inventory",
     "Obligation",
     "HeldOutScenario",
     "SUBMITTER_VISIBLE_FIELDS",

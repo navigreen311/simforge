@@ -267,15 +267,40 @@ def test_author_for_modules_skips_a_module_that_declared_no_never_do_list() -> N
 # self-prove the isolation. That is true and these tests do not pretend otherwise. What CAN be
 # proved is narrower and is proved here:
 #
-#   (a) the authoring module is not REACHABLE from the submitter's request path - measured by
-#       walking the real import graph, not by grepping for a name;
-#   (b) the only projection that crosses to a submitter carries three fields, and every one of them
+#   (a) the submission VALIDATOR cannot reach the authoring module - measured by walking the real
+#       import graph, not by grepping for a name;
+#   (b) the router may import only names from it that CANNOT YIELD CONTENT - see the note below;
+#   (c) the only projection that crosses to a submitter carries three fields, and every one of them
 #       is something the submitter already sent;
-#   (c) a field added to `HeldOutScenario` tomorrow is held out by DEFAULT, because the held-out set
+#   (d) a field added to `HeldOutScenario` tomorrow is held out by DEFAULT, because the held-out set
 #       is derived as the complement of the visible one rather than maintained as a deny-list.
 #
 # What is NOT proved: that a human with access to both codebases keeps them apart. That is the
 # process control Gate 9.5 rests on and no test in this repository can reach it.
+#
+# ---------------------------------------------------------------------------------------------
+# (b) REPLACED A CLAIM THAT WENT STALE, 2026-09-09 (P-05b / ADR-0050). Recorded rather than edited
+# away, because a test whose meaning changed silently is worse than one that failed.
+#
+# P-05 asserted that `src.routers.operation` cannot reach `held_out` AT ALL, and said in its PR that
+# the test "will fail the moment that coupling is made, deliberately". **It did exactly that**, on
+# the first run after ADR-0050's inspection surface landed - which is the test working, not the test
+# being wrong.
+#
+# But the module-level claim is now the wrong claim rather than a broken one. ADR-0050 requires the
+# router to answer "how many held-out scenarios exist for this module", so importing the authoring
+# module is legitimate; what must never be legitimate is the router obtaining a PROBE. Module-level
+# reachability no longer separates those two and name-level reachability does:
+#
+#     may import   `inventory`, `HELD_OUT_CONTENT_REFUSED`  - counts, and an error code
+#     may NOT      `author_for_module`, `HeldOutScenario`, `author_held_out_scenarios`, ...
+#
+# `inventory` authors the set inside itself and returns only counts, so a handler that imports only
+# that is structurally unable to hold a probe - which is a stronger property than a handler that
+# holds one and is trusted not to serialise it. The half of the old claim that is STILL TRUE is kept
+# verbatim: the submission validator cannot reach the authoring module, and that is what the old
+# test was really guarding.
+# ---------------------------------------------------------------------------------------------
 
 SRC = Path(__file__).resolve().parents[2] / "src"
 
@@ -307,25 +332,77 @@ def _imported_src_modules(entry: str) -> set[str]:
     return seen
 
 
-def test_the_submitters_request_path_cannot_reach_the_authoring_module() -> None:
-    """Not reachable, not merely not called. Measured over the transitive import graph of the module
-    that serves `POST /api/operation/curriculum`.
+def test_the_curriculum_validator_cannot_reach_the_authoring_module() -> None:
+    """The half of P-05's claim that survived ADR-0050, kept verbatim because it is what that test
+    was really guarding.
 
-    This is the strongest structural claim available: code that cannot be imported cannot leak, and
-    a future edit that wires the authoring pipeline into the submission response fails HERE rather
-    than in review. The control it does not provide is stated above the section.
+    `validate_curriculum_submission` decides what a submitter may send. If it could reach the
+    authoring module, a submission response could carry a probe, and ADR-0048's refusal would be
+    undone in the same request that enforces it. Nothing about the inspection surface changes that,
+    and nothing should.
     """
+    validator = _imported_src_modules("src.services.operation.scenarios")
+
+    assert "src.services.operation.never_do" in validator, (
+        "the walk has to actually reach something, or an empty result would pass this test while "
+        "measuring nothing"
+    )
+    assert "src.services.operation.held_out" not in validator
+    assert "src.services.operation.held_out_scoring" not in validator
+
+
+#: What a request handler may take from the authoring module. Counts, and the name of a refusal.
+#: Neither can yield a probe: `inventory` authors the set inside itself and returns integers.
+ROUTER_MAY_IMPORT: frozenset[str] = frozenset({"inventory", "HELD_OUT_CONTENT_REFUSED"})
+
+
+def _names_imported_from(module_path: str, source_module: str) -> set[str]:
+    """Which names `module_path` imports FROM `source_module`, read out of its AST."""
+    path = SRC.joinpath(*module_path.split(".")[1:]).with_suffix(".py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == source_module
+        for alias in node.names
+    }
+
+
+def test_the_router_may_import_only_names_that_cannot_yield_content() -> None:
+    """ADR-0050 in one assertion, at the layer that now matters.
+
+    The router legitimately imports the authoring module — it has to answer *"how many held-out
+    scenarios exist for this module"*. What it must never import is anything that could hand it a
+    probe. `author_for_module` returns `HeldOutScenario` objects with the prompts and the grading
+    keys on them; `inventory` returns integers and a hash. **A handler that only ever held integers
+    cannot leak a scenario, whatever anybody later writes in it** — which is a stronger control than
+    a handler that holds scenarios and is trusted to be careful.
+    """
+    imported = _names_imported_from("src.routers.operation", "src.services.operation.held_out")
+
+    assert imported, "the router does import from the authoring module - this is not vacuous"
+    assert imported <= ROUTER_MAY_IMPORT, (
+        f"the router imports {sorted(imported - ROUTER_MAY_IMPORT)} from the authoring module. "
+        f"ADR-0050: no route returns held-out content, and the way that is kept true is that a "
+        f"request handler never holds a scenario in the first place."
+    )
+    assert "author_for_module" not in imported
+    assert "HeldOutScenario" not in imported
+
+
+def test_no_request_handler_can_construct_a_probe() -> None:
+    """The delivery and scoring modules are where a probe becomes a `Probe` and where the grading
+    key is read. Neither belongs anywhere in a request path: delivery is in-process, at run time,
+    inside a battery, and a route that could reach it would be the fetch ADR-0050 refused wearing a
+    different verb."""
     reachable = _imported_src_modules("src.routers.operation")
 
-    assert "src.services.operation.scenarios" in reachable, (
-        "the walk has to actually reach the validator, or an empty result would pass this test "
-        "while measuring nothing"
+    assert "src.services.operation.held_out" in reachable, (
+        "positive control: the inspection surface means this IS reachable now, and a test "
+        "asserting "
+        "otherwise would be asserting the state before ADR-0050"
     )
-    assert "src.services.operation.held_out" not in reachable
     assert "src.services.operation.held_out_scoring" not in reachable
-
-    validator = _imported_src_modules("src.services.operation.scenarios")
-    assert "src.services.operation.held_out" not in validator
 
 
 def test_the_only_submitter_projection_adds_nothing_the_submitter_did_not_send() -> None:

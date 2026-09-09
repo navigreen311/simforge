@@ -262,3 +262,40 @@ class TimedOutRun(BaseModel):
 class TimeoutSweepResult(BaseModel):
     swept_at: datetime
     timed_out: list[TimedOutRun] = Field(default_factory=list)
+
+
+# =================================================================================================
+# Outbound — how much held-out material exists, never what it says (ADR-0050)
+# =================================================================================================
+
+
+class HeldOutInventoryResponse(BaseModel):
+    """Counts and a digest for one module's held-out set. **There is no content field, and that is
+    the design rather than an omission.**
+
+    ADR-0050 ruled that no credential fetches the held-out set, because an endpoint returning the
+    corpus makes isolation a function of who holds a token. An operator still has a real question —
+    was this module's refusal material ever authored, and against how many obligations — so the
+    shape is inspectable and the content is not: *"eleven scenarios exist for this module" is
+    inspectable; "here they are" is the exam.*
+
+    `digest` is one-way. It makes "the same set as last week" checkable without anybody reading a
+    scenario, which is the audit property that would otherwise have justified returning them.
+
+    **Deliberately absent, and it was permitted:** per-scenario obligation ids. The ruling allows
+    ids; they are left out because an id says which of the submitter's OWN never-do entries drew a
+    `silent_failure` probe, and that answers no operator question while being a fact about the exam.
+    """
+
+    forge_id: str
+    module_id: str
+    #: How many never-do entries this module declared. 0 ⇒ nothing to author, genuinely not a hole.
+    obligations_declared: int
+    #: How many probes were authored from them. A claim prohibition yields two, an act one.
+    scenarios_authored: int
+    #: scenario_class -> count, e.g. {"never_do_violation": 7, "silent_failure": 5}
+    by_class: dict[str, int] = Field(default_factory=dict)
+    digest: str
+    #: Carried here for the same reason it is carried on a validation result: a reader must never
+    #: treat a "held-out authored" count as proof the isolation behind it holds.
+    gate_9_5_flag: str

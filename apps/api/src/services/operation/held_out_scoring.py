@@ -39,7 +39,7 @@ which is what stops holding a module at `provisional` for an obligation nobody w
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from src.services.operation.held_out import HeldOutScenario, scenario_dimension
@@ -224,7 +224,107 @@ def grade_module(
     )
 
 
+
+
+# =================================================================================================
+# DELIVERY — a probe reaches the agent under test, and nobody fetches the set (ADR-0050)
+# =================================================================================================
+#
+# P-05 asked for an endpoint a battery could call to fetch a module's held-out scenarios. **It was
+# refused**, and the reasoning constrains the design rather than merely forbidding a route:
+#
+#     An endpoint returning the corpus makes isolation a function of who holds a token, and a strong
+#     enough role gets everything — ADR-0048's refusal undone one endpoint over.
+#
+# **The consequence the ruling does not state, and it is the important one: the operation battery
+# has to run INSIDE SimForge.** An external battery cannot put a probe it cannot obtain, and the
+# only way to obtain one would be the fetch that is refused. So there is no wire format for a probe,
+# no schema field carrying one, and nothing on `GateResultRequest` that could receive an observation
+# of one — a runner able to report those observations would have had to be handed the probes first.
+# The delivery below is a function call, and that is not a shortcut around building an endpoint. It
+# is the only shape the ruling leaves.
+#
+# THREE AUDIENCES, THREE PROJECTIONS, EACH STRICTLY NARROWER
+#
+#     submitter        `HeldOutScenario.for_submitter()` — three fields it already sent
+#     operator         `held_out.inventory()`            — counts and a digest, never content
+#     agent under test `Probe`                           — the prompt, and nothing else
+#
+# The third is narrower than it first looks. A `Probe` carries no grading key, which is obvious, and
+# **no scenario class**, which is not. Telling the agent "this is the never-do test" is coaching as
+# surely as handing it the answer: an agent that knows a question is a refusal case is examined on
+# recognising the format, not on holding the line when a colleague has a good reason and will be
+# inconvenienced by a no. `held_out._decline_probe` is written to read like an ordinary request, and
+# labelling it would undo that in one field.
+#
+# WHAT IS DELIBERATELY ABSENT: there is no `Probe.to_dict()`, no pydantic model, and nothing here is
+# exported to `schemas/operation_payloads.py`. A probe that could be serialised into a response is
+# one route away from being returned by one. If a probe ever needs to cross a process boundary, that
+# is a new decision and it belongs in a new ADR rather than in a serialiser somebody found handy.
+
+
+@dataclass(frozen=True, slots=True)
+class Probe:
+    """What the agent under test receives. Two fields, and the second is a question.
+
+    `module_id` because the agent is operating that module and would know it anyway. `prompt`
+    because that is the question. **There is no third field**, and the ones that are missing are
+    missing on purpose: no `scenario_class` (see the module docstring), no `obligation_ref` (an
+    agent that could name which never-do entry it was being asked about could recognise the format
+    across a battery), and no expectation of any kind.
+    """
+
+    module_id: str
+    prompt: str
+
+
+def deliver(scenario: HeldOutScenario) -> Probe:
+    """The agent-facing projection of one authored scenario.
+
+    Constructed by naming the two fields that cross rather than by copying the object and removing
+    things — so a field added to `HeldOutScenario` tomorrow does not arrive here by default. That is
+    the same fail-safe direction `held_out_fields()` takes for the submitter projection, in the
+    opposite construction: there, the visible set is named and the rest is derived; here, the
+    crossing set is named and nothing else is reachable.
+    """
+    return Probe(module_id=scenario.module_id, prompt=scenario.probe)
+
+
+#: What a caller supplies: something that can put one probe to the agent and report what it DID.
+#: Returning `None` means the probe could not be put — which `grade_scenario` records as NOT_RUN,
+#: never as a pass. A battery that half-ran must produce a result that reads as half-run.
+AskAgent = Callable[[Probe], ObservedBehaviour | None]
+
+
+def run_held_out_battery(
+    module_id: str,
+    scenarios: Iterable[HeldOutScenario],
+    ask: AskAgent,
+) -> HeldOutGrading:
+    """Push every probe to the agent, collect what it did, and grade — all in one process.
+
+    **The direction is the whole design.** `ask` is called BY this function; nothing calls this
+    function to be given the scenarios. A caller holds an agent and receives questions; it never
+    holds the corpus. That is what "delivery, not retrieval" means when written down, and it is why
+    a caller cannot enumerate the set even though it sees every probe in turn: it sees them as they
+    are asked, mediated, one at a time, and it is the agent's answers that come back rather than the
+    scenarios.
+
+    The grading key never leaves this module. `ask` receives a `Probe`, which has no key on it, and
+    the verdict is computed here against the `HeldOutScenario` the caller never held.
+    """
+    ordered = tuple(scenarios)
+    observations: dict[tuple[str, str], ObservedBehaviour] = {}
+    for scenario in ordered:
+        observed = ask(deliver(scenario))
+        if observed is not None:
+            observations[(scenario.obligation_ref, scenario.scenario_class)] = observed
+    return grade_module(module_id, ordered, observations)
 __all__ = [
+    "Probe",
+    "AskAgent",
+    "deliver",
+    "run_held_out_battery",
     "ObservedBehaviour",
     "ScenarioVerdict",
     "HeldOutGrading",
