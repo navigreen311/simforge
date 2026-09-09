@@ -277,3 +277,77 @@ def never_do_status(has_never_do_list: bool, results: list[dict]) -> str:
 def is_never_do_coverage_hole(has_never_do_list: bool, results: list[dict]) -> bool:
     """A required never-do dimension went untested → blocks full certification (FIX 2)."""
     return never_do_status(has_never_do_list, results) == STATUS_UNTESTED
+
+
+# --- the sharper question: WHICH obligations were exercised, not just whether any were -----------
+#
+# `is_never_do_coverage_hole` asks whether the DIMENSION carries a real verdict. That was the right
+# question while nothing could author a never-do scenario at all — the only two states worth telling
+# apart were "tested" and "not tested". Now that `held_out.author_for_module` produces one probe per
+# declared entry, a coarser hole opens underneath the coarse one: a module with thirteen never-do
+# entries and one probe would report `tested`, and twelve prohibitions nobody examined would be
+# invisible behind a PASS.
+#
+# So the per-entry version lives here, beside the dimension-level one, and neither replaces the
+# other: the dimension-level check answers "was this competency exercised at all", and this answers
+# "was every declared obligation exercised". A cert needs both to be true.
+
+
+def unexercised_obligations(
+    declared_refs: Iterable[str], exercised_refs: Iterable[str]
+) -> tuple[str, ...]:
+    """Declared obligations with no graded probe against them, in declaration order.
+
+    `declared_refs` is `held_out.exercised_obligation_refs`'s counterpart on the input side — one
+    ref per never-do entry, from `held_out.obligations_from_never_do`. `exercised_refs` is what
+    `held_out_scoring.grade_module` actually GRADED, which excludes a probe that was authored and
+    never run: an unrun probe closes nothing.
+    """
+    exercised = set(exercised_refs)
+    seen: set[str] = set()
+    out: list[str] = []
+    for ref in declared_refs:
+        if ref not in exercised and ref not in seen:
+            seen.add(ref)
+            out.append(ref)
+    return tuple(out)
+
+
+def is_obligation_coverage_hole(
+    declared_refs: Iterable[str], exercised_refs: Iterable[str]
+) -> bool:
+    """Any declared obligation left unexercised → still a hole, whatever the dimension says."""
+    return bool(unexercised_obligations(declared_refs, exercised_refs))
+
+
+# --- the same shape for the OTHER held-out class -------------------------------------------------
+#
+# `silent_failure` sits in the same `HELD_OUT_CLASSES` frozenset as `never_do_violation`, is refused
+# by the same submission path, and is named in the same `GATE_9_5_FLAG`. Before this it had no
+# coverage question at all — so a module could have every over-reading prohibition in its never-do
+# section go unexamined and nothing would say so, and it would have sat at `provisional` for the
+# second reason after the first was fixed. The obligation here is the module's CLAIM prohibitions
+# (`held_out.Obligation.is_claim`), and the dimension exercising them is `failure_recognition`.
+
+SILENT_FAILURE_DIMENSION = "failure_recognition"
+
+
+def silent_failure_status(has_over_read_obligations: bool, results: list[dict]) -> str:
+    """Classify one result's silent-failure coverage — `coverage_status` again, second instance."""
+    return coverage_status(
+        obligation_declared=has_over_read_obligations,
+        verdict=dimension_verdict(results, SILENT_FAILURE_DIMENSION),
+    )
+
+
+def is_silent_failure_coverage_hole(
+    has_over_read_obligations: bool, results: list[dict]
+) -> bool:
+    """A module that describes over-reading its own answers, with nothing testing it → a hole.
+
+    Deliberately parallel to `is_never_do_coverage_hole` down to the argument order, because they
+    are the same rule about the two classes the submitter may not author. A module whose never-do
+    section names NO over-reading has none of this competency to test, and `False` there is genuine
+    n/a rather than a pass — the same distinction the never-do case has carried since FIX 2.
+    """
+    return silent_failure_status(has_over_read_obligations, results) == STATUS_UNTESTED
