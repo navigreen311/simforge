@@ -138,6 +138,52 @@ def compute_rubric_dimension_spread(results: list[dict]) -> float:
     return sum((s - mean) ** 2 for s in scores) / n
 
 
+# Verdict strength, worst first. A merge takes the WORST, never the newest and never the kindest:
+# two sources reporting on one dimension disagree by one of them having seen a failure the other
+# did not, and the answer to that is the failure.
+_VERDICT_STRENGTH: dict[str, int] = {
+    VERDICT_FAIL: 0,
+    VERDICT_NOT_RUN: 1,
+    VERDICT_NOT_APPLICABLE: 2,
+    VERDICT_PASS: 3,
+}
+
+
+def merge_dimension_results(primary: list[dict], overriding: list[dict]) -> list[dict]:
+    """Combine two named-list rubric results for one agent, taking the WORSE verdict per dimension.
+
+    Both the submitted battery and SimForge's held-out battery report into `failure_recognition` —
+    the submitter's `partial_failure` scenarios and SimForge's `silent_failure` ones — so two
+    results for one dimension is the normal case rather than a conflict to resolve by recency.
+
+    **The merge direction is the point.** A held-out FAIL must never be softened by a submitted
+    PASS: the party being certified supplies the second one, and a merge that let a PASS win would
+    hand the submitter a way to overwrite the verdict on the exact classes it is forbidden to
+    author. `_VERDICT_STRENGTH` orders them FAIL < NOT_RUN < not_applicable < PASS, so a dimension
+    is only as good as its worst observation.
+
+    A dimension present in one list and not the other passes through unchanged; the score carried
+    is the one belonging to the winning verdict, because a score from the losing observation would
+    describe a run the verdict is not about.
+    """
+    merged: dict[str, dict] = {}
+    for item in [*primary, *overriding]:
+        dimension = item.get("dimension")
+        if dimension is None:
+            continue
+        held = merged.get(dimension)
+        if held is None:
+            merged[dimension] = dict(item)
+            continue
+        incoming = _VERDICT_STRENGTH.get(item.get("verdict", ""), 1)
+        standing = _VERDICT_STRENGTH.get(held.get("verdict", ""), 1)
+        if incoming < standing:
+            merged[dimension] = dict(item)
+    order = [i.get("dimension") for i in primary]
+    order += [i.get("dimension") for i in overriding if i.get("dimension") not in order]
+    return [merged[d] for d in order if d in merged]
+
+
 def _numeric_dim_count(results: list[dict]) -> int:
     """How many dimensions carry a real (PASS/FAIL) verdict — the ones that could discriminate.
     not_applicable / not-run dimensions are excluded (they carry no score)."""

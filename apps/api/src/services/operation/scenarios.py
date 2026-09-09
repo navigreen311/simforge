@@ -42,6 +42,16 @@ HELD-OUT SET / GATE 9.5 DEPENDENCY (flag — read this):
     could supply its own refusal test — the isolation was a rule with no enforcement on the only
     side that could break it. Enforcing it does not make the isolation self-proving; the flag above
     still stands, because refusing what arrives says nothing about who authored what does not.
+
+    **The authoring side now exists: `held_out.py`.** ADR-0048 moved the never-do refusal to
+    scoring time and left nobody at the other end, so every module declaring a never-do list sat at
+    `provisional` — a correct refusal of work the submitter was forbidden to do and SimForge had no
+    pipeline to do either. `held_out.author_for_module` takes the declared never-do list and
+    authors both held-out classes from it, because that one list carries both kinds of obligation:
+    a prohibition on an ACT is a `never_do_violation` case and a prohibition on a CLAIM
+    ("never report `score: null` as zero") is a `silent_failure` one. `classify_certification_level`
+    takes what it produced as `held_out_authored`; nothing at SUBMISSION time does, and nothing
+    should — at submission those scenarios do not exist yet, which is the whole of ADR-0048.
 """
 
 from __future__ import annotations
@@ -169,6 +179,7 @@ def classify_certification_level(
     classes_present: Iterable[str],
     *,
     declared_not_applicable: Iterable[str] = (),
+    held_out_authored: Iterable[str] = (),
 ) -> str:
     """Which level one module reaches, given what it supplied and what it declared absent.
 
@@ -197,8 +208,33 @@ def classify_certification_level(
     absence *should* be certifiable is a governance question that ADR-0049 and contract §2.1 both
     leave open, and it is not settled here. What is settled is that the cap stops being silent —
     which is what makes the governance question askable with data instead of by memory.
+
+    **`held_out_authored` is what SimForge itself supplied** (`held_out.authored_classes`), and it
+    is a SEPARATE argument from `classes_present` rather than something a caller folds in, so that
+    the two sources of supply can never be confused at a call site. It counts as SUPPLIED, because
+    it IS supplied — the scenario exists, it was authored against a declared obligation, and it is
+    graded like any other class. Without it the seven-of-nine ceiling in contract §1.1 was not a
+    ceiling on The Office, it was a ceiling on every module in the system: the two classes nobody
+    was permitted to submit were also the two nobody was authoring, so a never-do list bought a
+    module a permanent `demonstrated`.
+
+    **Only a HELD-OUT class may arrive this way, and passing anything else raises.** A caller that
+    could hand a submittable class in as "authored by SimForge" would have found a route around the
+    validator's rejection of that class — the refusal ADR-0048 added on the only side that could
+    break it. Refusing here keeps this parameter a door for the two classes it was cut for.
+
+    Defaults to `()`, so every existing caller behaves exactly as it did.
     """
-    present = set(classes_present)
+    authored = set(held_out_authored)
+    smuggled = authored - HELD_OUT_CLASSES
+    if smuggled:
+        raise ValueError(
+            f"held_out_authored may only carry HELD-OUT classes; got {sorted(smuggled)}. A class a "
+            f"submitter is allowed to send must be counted as SUBMITTED, through classes_present "
+            f"and the validator that checks it — routing one through here would be a way past the "
+            f"rejection ADR-0048 added."
+        )
+    present = set(classes_present) | authored
     if set(ALL_SCENARIO_CLASSES) <= present:
         return LEVEL_CERTIFIED
     declared = set(declared_not_applicable) - HELD_OUT_CLASSES
