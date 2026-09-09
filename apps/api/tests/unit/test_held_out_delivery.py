@@ -3,9 +3,9 @@
 ADR-0050 refused the fetch endpoint P-05 asked for. **The consequence the ruling does not state, and
 the thing these tests are really about: the battery has to run inside SimForge.** An external runner
 cannot put a probe it cannot obtain, and the only way to obtain one would be the refused fetch. So
-delivery is a function call — `held_out_scoring.run_held_out_battery` pushes each probe to a caller-supplied `ask`
-and grades what comes back — and that is the only shape the ruling leaves, not a shortcut around
-building an endpoint.
+delivery is a function call — `held_out_scoring.run_held_out_battery` pushes each probe to a
+caller-supplied `ask` and grades what comes back — and that is the only shape the ruling
+leaves, not a shortcut around building an endpoint.
 
 The third projection is added here. P-05 built two (submitter, and the graded result); ADR-0050
 implies a third, for the agent under test, and it is the narrowest of the three.
