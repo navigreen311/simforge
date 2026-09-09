@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
-from src.deps import require_role
+from src.deps import Principal, get_current_principal, require_role
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
@@ -29,6 +29,7 @@ from src.schemas.operation_payloads import (
     ForgeOperationCurriculum,
     ForgeOperationResults,
     GateResultRequest,
+    HeldOutInventoryResponse,
     OperationRubricResultItem,
     OperationRunStarted,
     OperationRunStartRequest,
@@ -38,6 +39,10 @@ from src.schemas.operation_payloads import (
 from src.services.operation.gating import (
     agent_module_assignability,
     agent_operation_states,
+)
+from src.services.operation.held_out import (
+    HELD_OUT_CONTENT_REFUSED,
+    inventory,
 )
 from src.services.operation.never_do import (
     is_never_do_coverage_hole,
@@ -56,7 +61,7 @@ from src.services.operation.run_registry import (
     sweep_timed_out_runs,
 )
 from src.services.operation.run_window import DEFAULT_RUN_WINDOW_MINUTES
-from src.services.operation.scenarios import validate_curriculum_submission
+from src.services.operation.scenarios import GATE_9_5_FLAG, validate_curriculum_submission
 from src.services.operation.state_machine import OperationState, is_assignable
 from src.utils.time import utcnow
 
@@ -476,6 +481,96 @@ async def agent_operation_view(agent_id: str, session: AsyncSession = Depends(ge
             for c in certs
         ],
     }
+
+
+# =================================================================================================
+# Held-out material — counts are inspectable, content is refused to everyone (ADR-0050)
+# =================================================================================================
+#
+# Two routes, and the second one exists in order to say no.
+#
+# `GET /held-out/{forge}/{module}`            -> counts, and a digest of the authored set
+# `GET /held-out/{forge}/{module}/scenarios`  -> 403, ALWAYS, at every role
+#
+# The refusal route is not an oversight and it is not a placeholder. ADR-0050's ruling is that no
+# credential fetches the held-out set — not `forge_owner`, not the founder — because *an endpoint
+# returning the corpus makes isolation a function of who holds a token*, and `Principal.has_role`
+# already answers True to everything once `admin` is present. A 404 at this URL would read as "not
+# built yet" and invite exactly the construction the ruling forbids; a 403 that names the ADR is the
+# decision, left where the next author will look for it.
+
+
+@router.get("/held-out/{forge_id}/{module_id}", dependencies=[Depends(require_role("viewer"))])
+async def held_out_inventory(
+    forge_id: str, module_id: str, session: AsyncSession = Depends(get_session)
+) -> HeldOutInventoryResponse:
+    """How much held-out material exists for this module. **Never what it says.**
+
+    ADR-0050: *"eleven scenarios exist for this module" is inspectable; "here they are" is the
+    exam.*
+    An operator has a real question — was this module's refusal material ever authored, and against
+    how many obligations — and a count answers it. Without this, the only way to know a held-out set
+    exists is to read the code, which is the same defect as a `status` column nobody can check
+    against the rows.
+
+    The scenarios are authored inside `held_out.inventory` and never leave it. This handler cannot
+    return a probe because it never holds one, which is a stronger property than a handler that
+    holds one and remembers not to.
+    """
+    never_do = await module_never_do_list(session, forge_id, module_id)
+    inv = inventory(module_id, never_do)
+    return HeldOutInventoryResponse(
+        forge_id=forge_id,
+        module_id=inv.module_id,
+        obligations_declared=inv.obligations_declared,
+        scenarios_authored=inv.scenarios_authored,
+        by_class=dict(inv.by_class),
+        digest=inv.digest,
+        gate_9_5_flag=GATE_9_5_FLAG,
+    )
+
+
+@router.get(
+    "/held-out/{forge_id}/{module_id}/scenarios",
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def held_out_scenarios_are_never_returned(
+    forge_id: str, module_id: str, principal: Principal = Depends(get_current_principal)
+) -> dict:
+    """**Always 403.** This is the refusal, and it is the one part of the isolation the engine can
+    prove about itself.
+
+    `GATE_9_5_FLAG` records that the engine cannot self-prove that whoever authors the held-out set
+    is isolated from whoever could leak it — true, and unchanged. But *whether this service hands
+    the corpus to a caller* is a question about this service, and it is answerable here by being
+    refused rather than asserted in prose.
+
+    **The refusal is unconditional, and it has to be.** `require_role("viewer")` on this route is
+    not what refuses — it is there so the route is reachable enough to BE refused, because a 401 for
+    an anonymous caller would prove nothing about a credentialled one. The refusal is below, it
+    reads no role, and the principal is accepted only to be named in the response: a caller holding
+    every role in the system gets the same answer as a caller holding one. That is what
+    "no credential fetches the held-out set" means when it is code instead of a sentence.
+    """
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": HELD_OUT_CONTENT_REFUSED,
+            "forge_id": forge_id,
+            "module_id": module_id,
+            "roles_held": sorted(principal.roles),
+            "message": (
+                "Held-out scenario content is never returned to any caller, at any role. An "
+                "endpoint returning the corpus would make isolation a function of who holds a "
+                "token, and a strong enough role gets everything — which is ADR-0048's refusal "
+                "undone one endpoint over. The probe reaches the agent under test at run time, "
+                "inside a battery; nobody fetches the set. Counts, and a digest, are at "
+                f"GET /api/operation/held-out/{forge_id}/{module_id}. See ADR-0050."
+            ),
+            "inspectable_instead": f"/api/operation/held-out/{forge_id}/{module_id}",
+            "adr": "ADR-0050",
+        },
+    )
 
 
 @router.get("/coverage/{forge_id}", dependencies=[Depends(require_role("viewer"))])
