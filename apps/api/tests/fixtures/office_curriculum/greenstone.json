@@ -1,0 +1,732 @@
+{
+  "_provenance": {
+    "captured": "2026-09-09",
+    "captured_by": "P-01 (simforge), package card T-004",
+    "how": "Not hand-written. Produced by The Office's own code: `generators.pipeline.run_all` against the live Office database, then `broker.provisioning._curriculum_payload` called verbatim on the resulting CurriculumScenario rows and the live `broker.instructions.live` instruction set. This is byte-for-byte what Gate 8 puts on the wire, one entry per module Gate 8 would submit for.",
+    "modules": [
+      "assign_contract",
+      "buyer_match",
+      "comp_analysis",
+      "property_lookup",
+      "transcribe_call",
+      "underwrite_deal"
+    ],
+    "note": "Six modules on cre-forge/voiceforge. THESE ARE THE SIX the card is about: the six curriculum_submission rows written 2026-09-07 with simforge_run_ref NULL. No content file exists for any of these modules, so expected_behavior and expected_escalation come across empty.",
+    "office_route_the_real_client_calls": "POST {simforge_base_url}/office/submit_curriculum",
+    "pack_content_hash": "a359aa0558a3c1e07aa2ae9d4a6b3a3eed34217469284f46dee3262216f75299",
+    "pack_version": "1.4.0",
+    "theoffice_sha": "7ba5efc025ba2409d118a6a2a9426dd416d466cf",
+    "venture_id": "greenstone"
+  },
+  "payloads": {
+    "assign_contract": {
+      "certification_units_requested": [
+        {
+          "agent_id": "86bcb759-797c-49e6-bdbb-72697ff069db",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "95283023-0b0f-4ded-a53c-6f19135dac8d",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "45f3dcd7-c4e0-4b01-ac6e-5352a7207503",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "d7ec8ff4-0860-470f-a767-a7e12760123f",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "062a9580-637b-48d8-9c85-ef4c2f3e6f18",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "cc49a49c-c7aa-459d-9ecb-ecb46100216f",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "c7d5784c-e035-4ced-806f-2fc571d684e3",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "c8afb0e6-c632-4e07-8943-d5159a1d2298",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "70da1e74-7703-4c7d-af18-814c86bd0934",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "6437c168-7487-4b80-beff-c0e67645e48b",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "7a039dfe-74d0-49e2-8929-ee5901e0eec7",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "619d3d26-6867-44a6-a9e6-ca67a98ac697",
+          "forge_id": "cre-forge",
+          "module_id": "assign_contract",
+          "unit_type": "agent_operation"
+        }
+      ],
+      "coverage_declaration": {
+        "functions_covered": 0,
+        "functions_in_module": 0,
+        "modules_covered": 5,
+        "modules_in_forge": 5,
+        "modules_uncovered": []
+      },
+      "instruction_set_ref": {
+        "authored_by": null,
+        "content_hash": "cacf28ef5ba0113b34b2107e6777cd0ebbbf6b8fd0eaf0cf0bccc81431acf1fe",
+        "forge_api_version": "1.4.0",
+        "forge_id": "cre-forge",
+        "instruction_version": "1.1.0",
+        "module_id": "assign_contract"
+      },
+      "module_never_do": {
+        "assign_contract": [
+          "Never retry after a timeout. The write may have landed and nothing de-duplicates it. Report the uncertainty and let a human check the deal.",
+          "Never report a created draft as sent, signed, executed or agreed.",
+          "Never supply signer details an agent inferred, looked up or assumed. They go onto a contract as given.",
+          "Never call this to 'check' whether a contract can be made. It writes.",
+          "Never treat the absence of an error as evidence that no duplicate exists. There is no existence check to have failed."
+        ]
+      },
+      "module_not_applicable": {
+        "assign_contract": {}
+      },
+      "operation_scenarios": [
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "retry_vs_escalate",
+          "module_id": "assign_contract",
+          "scenario_class": "escalation_required"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "correct_sequence",
+          "module_id": "assign_contract",
+          "scenario_class": "happy_path"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "failure_signatures",
+          "module_id": "assign_contract",
+          "scenario_class": "permission_denied"
+        }
+      ]
+    },
+    "buyer_match": {
+      "certification_units_requested": [
+        {
+          "agent_id": "86bcb759-797c-49e6-bdbb-72697ff069db",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "95283023-0b0f-4ded-a53c-6f19135dac8d",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "45f3dcd7-c4e0-4b01-ac6e-5352a7207503",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "d7ec8ff4-0860-470f-a767-a7e12760123f",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "062a9580-637b-48d8-9c85-ef4c2f3e6f18",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "cc49a49c-c7aa-459d-9ecb-ecb46100216f",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "c7d5784c-e035-4ced-806f-2fc571d684e3",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "c8afb0e6-c632-4e07-8943-d5159a1d2298",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "70da1e74-7703-4c7d-af18-814c86bd0934",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "6437c168-7487-4b80-beff-c0e67645e48b",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "7a039dfe-74d0-49e2-8929-ee5901e0eec7",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "619d3d26-6867-44a6-a9e6-ca67a98ac697",
+          "forge_id": "cre-forge",
+          "module_id": "buyer_match",
+          "unit_type": "agent_operation"
+        }
+      ],
+      "coverage_declaration": {
+        "functions_covered": 0,
+        "functions_in_module": 0,
+        "modules_covered": 5,
+        "modules_in_forge": 5,
+        "modules_uncovered": []
+      },
+      "instruction_set_ref": {
+        "authored_by": null,
+        "content_hash": "648e494d60261641eef4ba4f5ce6f7e09103397c5eabffbfb29e5e8ea62ce502",
+        "forge_api_version": "1.4.0",
+        "forge_id": "cre-forge",
+        "instruction_version": "1.1.0",
+        "module_id": "buyer_match"
+      },
+      "module_never_do": {
+        "buyer_match": [
+          "Never report a ranked buyer as having been approached, offered the deal, or made aware of it. Nothing was sent and nothing was recorded.",
+          "Never describe a match as reserved, allocated or committed. Two callers see the same list.",
+          "Never report `match_score` without `potential_concerns`.",
+          "Never read a high match score as a judgement about the deal. It is about fit.",
+          "Never report an empty result as evidence that a deal has no buyer. It is a fact about this tenant's buyer list.",
+          "Never drop or paraphrase a `potential_concerns` entry when summarising."
+        ]
+      },
+      "module_not_applicable": {
+        "buyer_match": {}
+      },
+      "operation_scenarios": [
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "retry_vs_escalate",
+          "module_id": "buyer_match",
+          "scenario_class": "escalation_required"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "correct_sequence",
+          "module_id": "buyer_match",
+          "scenario_class": "happy_path"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "failure_signatures",
+          "module_id": "buyer_match",
+          "scenario_class": "permission_denied"
+        }
+      ]
+    },
+    "comp_analysis": {
+      "certification_units_requested": [
+        {
+          "agent_id": "dec16919-d263-4c98-80cc-ee2640ea29ca",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "417ba916-edd9-45db-8abc-607123eda34f",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "0da23a11-c62b-49dc-8405-f616cdcdd123",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "1cf1417d-2065-44a3-92f9-3b84c32439b0",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "9930e181-d2be-4c92-8454-515947ae7905",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "2ba9bb4e-b246-4e17-9f5f-295cb5a47668",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "3eb81966-8de9-4605-9af6-274f90a1c7a7",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "1547f78c-7815-4300-907f-d63b1eb694f9",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "43a55628-c447-4b06-808e-0e4f219fcade",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "452d8cf2-6784-478b-8a63-a8435e612a52",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "545fb17a-68d0-421a-a672-9c28d056a2a1",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "1a73c678-0f9c-44a3-b322-704d0c1a32f4",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "b0ec4a55-67fd-4322-8e4f-1f2e1c7db71c",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "add3acc2-fcf2-47a6-82e0-67d0acfc461b",
+          "forge_id": "cre-forge",
+          "module_id": "comp_analysis",
+          "unit_type": "agent_operation"
+        }
+      ],
+      "coverage_declaration": {
+        "functions_covered": 0,
+        "functions_in_module": 0,
+        "modules_covered": 5,
+        "modules_in_forge": 5,
+        "modules_uncovered": []
+      },
+      "instruction_set_ref": {
+        "authored_by": null,
+        "content_hash": "d57e1d204bbb51c7a8d37123a15f6c17a1771a91492984855d53420faf4d8540",
+        "forge_api_version": "1.4.0",
+        "forge_id": "cre-forge",
+        "instruction_version": "1.1.0",
+        "module_id": "comp_analysis"
+      },
+      "module_never_do": {
+        "comp_analysis": [
+          "Never report comps as the basis of any valuation this Forge produced. `underwrite_deal` does not use them.",
+          "Never report a comp count without the radius and age window that produced it.",
+          "Never report zero comps as a fact about the property or the market.",
+          "Never average the comps into a value and report it as one. That computation is not this module's and has not been reviewed as one.",
+          "Never widen the radius past the subject property's own market to fill a thin result. Nothing in the response marks the comps as out-of-market."
+        ]
+      },
+      "module_not_applicable": {
+        "comp_analysis": {}
+      },
+      "operation_scenarios": [
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "retry_vs_escalate",
+          "module_id": "comp_analysis",
+          "scenario_class": "escalation_required"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "correct_sequence",
+          "module_id": "comp_analysis",
+          "scenario_class": "happy_path"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "failure_signatures",
+          "module_id": "comp_analysis",
+          "scenario_class": "permission_denied"
+        }
+      ]
+    },
+    "property_lookup": {
+      "certification_units_requested": [],
+      "coverage_declaration": {
+        "functions_covered": 0,
+        "functions_in_module": 0,
+        "modules_covered": 5,
+        "modules_in_forge": 5,
+        "modules_uncovered": []
+      },
+      "instruction_set_ref": {
+        "authored_by": null,
+        "content_hash": "5aab8992fefb491007dfc1050704dd157578eba447aa2723ea1f67d5063f43e5",
+        "forge_api_version": "1.4.0",
+        "forge_id": "cre-forge",
+        "instruction_version": "1.1.0",
+        "module_id": "property_lookup"
+      },
+      "module_never_do": {
+        "property_lookup": [
+          "Never report the number of results on the page as the number of matching properties. Read `total`.",
+          "Never report an empty result as a fact about the market. It is a fact about this tenant's records and this query string.",
+          "Never treat result order as ranking, relevance or recommendation.",
+          "Never report `asking_price` as a value, an appraisal or a fair price. It is a listing figure entered by a person.",
+          "Never widen a search by raising `page_size` past 100 and assuming it worked. The cap is silent."
+        ]
+      },
+      "module_not_applicable": {
+        "property_lookup": {}
+      },
+      "operation_scenarios": [
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "retry_vs_escalate",
+          "module_id": "property_lookup",
+          "scenario_class": "escalation_required"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "correct_sequence",
+          "module_id": "property_lookup",
+          "scenario_class": "happy_path"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "failure_signatures",
+          "module_id": "property_lookup",
+          "scenario_class": "permission_denied"
+        }
+      ]
+    },
+    "transcribe_call": {
+      "certification_units_requested": [
+        {
+          "agent_id": "86bcb759-797c-49e6-bdbb-72697ff069db",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "95283023-0b0f-4ded-a53c-6f19135dac8d",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "45f3dcd7-c4e0-4b01-ac6e-5352a7207503",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "d7ec8ff4-0860-470f-a767-a7e12760123f",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "062a9580-637b-48d8-9c85-ef4c2f3e6f18",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "cc49a49c-c7aa-459d-9ecb-ecb46100216f",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "c7d5784c-e035-4ced-806f-2fc571d684e3",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "c8afb0e6-c632-4e07-8943-d5159a1d2298",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "70da1e74-7703-4c7d-af18-814c86bd0934",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "6437c168-7487-4b80-beff-c0e67645e48b",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "7a039dfe-74d0-49e2-8929-ee5901e0eec7",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "619d3d26-6867-44a6-a9e6-ca67a98ac697",
+          "forge_id": "voiceforge",
+          "module_id": "transcribe_call",
+          "unit_type": "agent_operation"
+        }
+      ],
+      "coverage_declaration": {
+        "functions_covered": 0,
+        "functions_in_module": 0,
+        "modules_covered": 1,
+        "modules_in_forge": 2,
+        "modules_uncovered": [
+          "place_call"
+        ]
+      },
+      "instruction_set_ref": {
+        "authored_by": null,
+        "content_hash": "9711528544710550fb27127765aa0b83953fbea56c4543644019e5d0c12483e6",
+        "forge_api_version": "2.0.0",
+        "forge_id": "voiceforge",
+        "instruction_version": "1.0.0",
+        "module_id": "transcribe_call"
+      },
+      "module_never_do": {
+        "transcribe_call": [
+          "Never re-submit after a 200.",
+          "Never generate a new idempotency key to force a retry."
+        ]
+      },
+      "module_not_applicable": {
+        "transcribe_call": {}
+      },
+      "operation_scenarios": [
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "retry_vs_escalate",
+          "module_id": "transcribe_call",
+          "scenario_class": "escalation_required"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "correct_sequence",
+          "module_id": "transcribe_call",
+          "scenario_class": "happy_path"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "failure_signatures",
+          "module_id": "transcribe_call",
+          "scenario_class": "permission_denied"
+        }
+      ]
+    },
+    "underwrite_deal": {
+      "certification_units_requested": [
+        {
+          "agent_id": "dec16919-d263-4c98-80cc-ee2640ea29ca",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "417ba916-edd9-45db-8abc-607123eda34f",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "0da23a11-c62b-49dc-8405-f616cdcdd123",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "1cf1417d-2065-44a3-92f9-3b84c32439b0",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "9930e181-d2be-4c92-8454-515947ae7905",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "2ba9bb4e-b246-4e17-9f5f-295cb5a47668",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "3eb81966-8de9-4605-9af6-274f90a1c7a7",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "1547f78c-7815-4300-907f-d63b1eb694f9",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "43a55628-c447-4b06-808e-0e4f219fcade",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "452d8cf2-6784-478b-8a63-a8435e612a52",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "545fb17a-68d0-421a-a672-9c28d056a2a1",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "1a73c678-0f9c-44a3-b322-704d0c1a32f4",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "b0ec4a55-67fd-4322-8e4f-1f2e1c7db71c",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        },
+        {
+          "agent_id": "add3acc2-fcf2-47a6-82e0-67d0acfc461b",
+          "forge_id": "cre-forge",
+          "module_id": "underwrite_deal",
+          "unit_type": "agent_operation"
+        }
+      ],
+      "coverage_declaration": {
+        "functions_covered": 0,
+        "functions_in_module": 0,
+        "modules_covered": 5,
+        "modules_in_forge": 5,
+        "modules_uncovered": []
+      },
+      "instruction_set_ref": {
+        "authored_by": null,
+        "content_hash": "f06db69c8768d907db06404d1f1efa3792af4818e0fdd054aeaba5d87309fd53",
+        "forge_api_version": "1.4.0",
+        "forge_id": "cre-forge",
+        "instruction_version": "1.1.0",
+        "module_id": "underwrite_deal"
+      },
+      "module_never_do": {
+        "underwrite_deal": [
+          "Never report `arv` as a valuation, an appraisal, or what the property is worth. Through this module it is the asking price. Say which it is.",
+          "Never report `arv` without `arv_confidence`. They are one fact in two fields.",
+          "Never present the `arv_low`-`arv_high` band as a market range. It is the midpoint +/-15%, computed, not observed.",
+          "Never report `max_allowable_offer` as an offer, a recommendation, or a price to pay. It is arithmetic over a number that came from the seller.",
+          "Never treat a repeated analysis as confirmation. Two runs against unchanged inputs return identical figures by construction, and agreement between them is not evidence.",
+          "Never report a figure from this module to a party outside the tenant. It is internal analysis built on unverified inputs, and it reads like a valuation.",
+          "Never infer that a deal is good, bad, over- or under-priced from `deal_score` or `deal_grade` alone. The score consumes `arv_confidence`; a grade computed at 0.10 confidence is a grade about the confidence as much as about the deal."
+        ]
+      },
+      "module_not_applicable": {
+        "underwrite_deal": {}
+      },
+      "operation_scenarios": [
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "retry_vs_escalate",
+          "module_id": "underwrite_deal",
+          "scenario_class": "escalation_required"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "correct_sequence",
+          "module_id": "underwrite_deal",
+          "scenario_class": "happy_path"
+        },
+        {
+          "expected_behavior": "",
+          "expected_escalation": "",
+          "instruction_section": "failure_signatures",
+          "module_id": "underwrite_deal",
+          "scenario_class": "permission_denied"
+        }
+      ]
+    }
+  }
+}
