@@ -90,34 +90,64 @@ the battery exists to test.
 
 ## Finding 2 — the instrument error, and the general form
 
-The run that produced the retracted reading above was not measuring the model.
+The run that produced the retracted reading above was not measuring the model's answers to the
+probes. **It was measuring the model's answers to an empty string.**
 
-`LLM_PROVIDER=auto` resolves to Ollama **or to the stub**, depending on whether Ollama answers a
-ping. Ollama did not answer. The provider resolved to `StubProvider`, the stub answered every
-probe, and **nothing errored** — the stub always answers. The run completed. It produced a
-scoreboard. The scoreboard was of the stub.
+### Corrected 2026-09-10 — the first version of this finding named the wrong mechanism
+
+**It said the provider fell back to `StubProvider` because Ollama did not answer a ping. That did
+not happen.** The run was made with `LLM_PROVIDER=ollama` set explicitly, the structured log lines
+read `provider=ollama model=llama3.1:8b` with real per-call latencies, and the 38% run returned
+prose refusals citing correct prohibition numbers. **A stub cannot produce that.**
+
+The correction matters because the wrong mechanism made the hazard sound like a configuration
+problem — set the provider explicitly and you are safe — when the actual failure survives any
+provider setting.
+
+### What actually happened: two wrong attribute names, neither of which errored
+
+**1. `resp.text` — the attribute is `.content`.** The reader fell through to `str(resp)` and parsed
+the *repr of the response object*: `LLMResponse(content='ACT: PROCEED', tokens_input=356, ...)`.
+
+**2. `probe.prompt` behind a `getattr` chain ending in `""` — the field is `.probe`.** So the user
+message sent on all eight probes was **the empty string**.
 
 > **A default is how an instrument keeps running while measuring the wrong thing.**
 
-An error would have stopped the run and been read as a broken setup. The default finished it and
-returned numbers, and numbers are read as a measurement. **Both errors on this run were pessimistic
-and plausible** — a model failing a never-do battery is exactly what one expects to find, and an
-agent that cannot hold a response format is exactly what one expects of a small local model — and
-**the second produced an artifact that looked like a real diagnosis.** Plausibility is what made it
-expensive; nothing about the output invited a second look.
+That is the same sentence the first version reached, and it survives the correction intact — but
+the subject that got substituted was **the input, not the provider**. `getattr(probe, "prompt",
+None) or getattr(probe, "situation", "")` cannot raise. It always yields something. So the model
+was asked nothing, answered anyway, and the run completed and produced a scoreboard.
 
-**The fix is already in flight, and it was written for this exact hazard.** PR #139 records the
-answering model on the certification from `provider_label(runtime.provider)` and never from
-`settings.llm_provider`, on the stated grounds that *"`auto` resolves to Ollama or the stub
-depending on whether Ollama answered a ping, so config records an intention rather than a fact, and
-the two differ exactly when it matters."* `StubProvider` reports `stub` with no model, deliberately
-ugly. A certification produced by the run described here would, after #139, have said `stub` on its
-face.
+An `AttributeError` would have stopped the run and been read as a broken setup. **The default
+finished it and returned numbers, and numbers are read as a measurement.**
 
-That closes the hazard for anything that writes a certification. **It does not close it for an
-ad-hoc run that writes a document instead**, which is what happened here, and is why the general
-form is carried as a caveat rather than only as a code fix — recorded in theoffice's
-`PARALLEL_BUILD.md` as **Caveat 17**, beside 12–14, which are the same family aimed at the same
+### The artifact is the part worth keeping
+
+The empty-prompt run returned `ACT: PROCEED` with no `RECORD` line, eight times, five output
+tokens each.
+
+**That looks exactly like a model half-holding a grammar** — emitting the first required line and
+omitting the second, which is a specific, diagnosable, entirely credible failure mode for a small
+local model. It was a model answering nothing.
+
+**Both retracted readings were pessimistic and plausible**, and plausibility is what made them
+expensive: a model failing a never-do battery is what one expects to find, and a model that cannot
+hold a response format is what one expects of an 8B. Nothing in either output invited a second
+look. The second error was caught only because a separate raw-print script crashed on the *same*
+wrong attribute — `AttributeError: 'HeldOutScenario' object has no attribute 'prompt'` — which is
+the error the first script had defaulted away.
+
+### What the fix in flight does and does not cover
+
+PR #139 records the answering model from `provider_label(runtime.provider)` rather than from
+`settings.llm_provider`, so a certification names what actually answered. **That is a real
+protection and it would not have caught this run**: the provider was correct throughout. What was
+wrong was the question put to it.
+
+**The general form is carried as a caveat rather than only as a code fix** — recorded in
+theoffice's `PARALLEL_BUILD.md` as **Caveat 17**, beside 12–14, which are the same family aimed at the same
+
 thing: 12 reports an output nobody read, 13 reads construction out of a mention, 14 reads a claim
 out of a name, and 17 reads a measurement off an instrument that quietly substituted its subject.
 
