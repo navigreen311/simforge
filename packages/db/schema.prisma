@@ -1038,6 +1038,10 @@ model OperationCertification {
   forgeApiVersion        String // semver, earned under
   instructionContentHash String // mismatch at run → VOID
   operationRubricVersion String // semver, SEPARATE from domain rubric_version — required
+  // provider/model that ANSWERED the battery, e.g. ollama/llama3.1:8b. Everything above
+  // describes the exam; this is the candidate. NULL only where nothing answered: a
+  // timed-out run, or a department_context unit cleared by department state.
+  agentModel             String?
 
   // Unit A (nullable for Unit B rows)
   agentId               String?

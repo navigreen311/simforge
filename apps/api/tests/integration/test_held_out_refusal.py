@@ -156,6 +156,7 @@ async def _seed(client: AsyncClient, never_do: list[str]) -> None:
             "modules_covered": 1,
             "modules_uncovered": [],
             "functions_in_module": 0,
+            "agent_model": "ollama/llama3.1:8b",
             "functions_covered": 0,
         },
         "module_never_do": {MODULE: never_do},

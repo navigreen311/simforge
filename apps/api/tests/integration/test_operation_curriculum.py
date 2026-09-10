@@ -202,6 +202,7 @@ def _curriculum_body(scenarios: list[dict]) -> dict:
             "modules_covered": 1,
             "modules_uncovered": ["billing", "scheduling"],
             "functions_in_module": 14,
+            "agent_model": "ollama/llama3.1:8b",
             "functions_covered": 11,
         },
     }
@@ -260,6 +261,7 @@ async def test_gate_result_named_list_round_trip_and_spread(client: AsyncClient)
                 "forge_id": "medlink-pro",
                 "functions_certified": 11,
                 "functions_in_module": 14,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
                 "operation_rubric_results": [
