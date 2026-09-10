@@ -90,6 +90,18 @@ STATUS_NONE = "none"  # no obligation is declared → n/a is genuine
 STATUS_TESTED = "tested"  # an obligation exists and the dimension was exercised (PASS/FAIL)
 STATUS_UNTESTED = "untested"  # an obligation exists but the dimension is n/a / not-run → HOLE
 
+# The two shapes of `untested`, told apart only when the caller knows which (ADR-0052). The umbrella
+# above remains what an uninformed caller gets, so nothing that already reads these strings moves.
+STATUS_UNTESTED_NOT_PUT = "untested_probe_not_put"  # examiner-side: the harness never asked
+STATUS_UNTESTED_UNREADABLE = "untested_answer_unreadable"  # candidate-side: answered off-grammar
+
+#: Every status that IS a coverage hole. Membership, not equality — the point of splitting the
+#: umbrella was to keep one gating decision while reporting two causes, and a caller that tests
+#: `== STATUS_UNTESTED` would silently stop seeing holes the moment a cause is supplied.
+UNTESTED_STATUSES: frozenset[str] = frozenset(
+    {STATUS_UNTESTED, STATUS_UNTESTED_NOT_PUT, STATUS_UNTESTED_UNREADABLE}
+)
+
 # The state of one scenario class for one module. ADR-0049's "fourth outcome per class", minus the
 # fourth: a declaration without a reason never becomes a state, because it is refused at
 # construction and therefore cannot be classified.
@@ -232,17 +244,49 @@ def dimension_verdict(results: list[dict], dimension: str) -> str | None:
     return None
 
 
-def coverage_status(*, obligation_declared: bool, verdict: str | None) -> str:
+def coverage_status(
+    *,
+    obligation_declared: bool,
+    verdict: str | None,
+    answer_unreadable: bool | None = None,
+) -> str:
     """Classify one declared obligation's coverage: none / tested / untested.
 
     The general form of `never_do_status`. An obligation nobody declared is genuinely n/a. One that
     is declared and whose dimension reports n/a, NOT_RUN, or nothing at all was not exercised — and
     an unexercised obligation is a coverage hole wearing an n/a, not an n/a.
+
+    **`untested` carried two opposite situations, and this is the same split this file's own header
+    already argues for one level up.** There, `not_applicable` meant either "no never-do list" or
+    "a list nobody exercised", and conflating them hid a coverage hole inside a legitimate n/a.
+    Here, `untested` means either:
+
+      * **the probe was never put** — examiner-side. The provider raised and `run_module_battery`
+        returned None, or nothing was authored. **Our harness broke.**
+      * **the answer could not be read** — candidate-side. The probe WAS put, the agent answered,
+        and the answer did not conform to the grammar. **The model will not speak the protocol.**
+
+    Both are holes and **the verdict is identical in both** — the dimension carries no verdict
+    either way, so full certification is withheld either way. Nothing about gating changes. What
+    changes is that an operator reading `untested` can now tell a broken harness from a model that
+    answered off-grammar, which are different problems with different owners and were one word.
+
+    `answer_unreadable` is the discriminator and it is **tri-state on purpose**. `None` means the
+    caller does not know, and gets the umbrella `STATUS_UNTESTED` exactly as before — so every
+    existing caller is unable to tell this function changed, which is the constraint this module's
+    header sets on itself. Only a caller that HAS the fact passes it.
+
+    It is derivable wherever `failure_modes_observed` is: a dimension that went unexercised while
+    `FAILURE_MODE_UNREADABLE` was reported is the candidate-side case, because had the probe been
+    put and read, the dimension would carry a verdict.
     """
     if not obligation_declared:
         return STATUS_NONE  # genuinely not applicable — n/a is correct, no penalty
     if verdict in (None, VERDICT_NOT_APPLICABLE, VERDICT_NOT_RUN):
-        return STATUS_UNTESTED  # declared but the dimension wasn't exercised → coverage hole
+        # Declared but the dimension wasn't exercised → coverage hole, in one of two shapes.
+        if answer_unreadable is None:
+            return STATUS_UNTESTED
+        return STATUS_UNTESTED_UNREADABLE if answer_unreadable else STATUS_UNTESTED_NOT_PUT
     return STATUS_TESTED
 
 
@@ -261,22 +305,47 @@ async def module_never_do_list(session: AsyncSession, forge_id: str, module_id: 
     return (await module_never_do_lists(session)).get((forge_id, module_id), [])
 
 
-def never_do_status(has_never_do_list: bool, results: list[dict]) -> str:
+def never_do_status(
+    has_never_do_list: bool,
+    results: list[dict],
+    *,
+    answer_unreadable: bool | None = None,
+) -> str:
     """Classify the never-do coverage of one operation result.
 
     One instance of `coverage_status`: the declared obligation is the module's never-do list, and
     the dimension that exercises it is `never_do_adherence`. Behaviour is unchanged from before the
     generalisation — this is the same two-branch decision, named once instead of twice.
+
+    `answer_unreadable` passes straight through and defaults to not-knowing, so a caller that does
+    not supply it sees precisely what it saw before ADR-0052.
     """
     return coverage_status(
         obligation_declared=has_never_do_list,
         verdict=dimension_verdict(results, NEVER_DO_DIMENSION),
+        answer_unreadable=answer_unreadable,
     )
 
 
-def is_never_do_coverage_hole(has_never_do_list: bool, results: list[dict]) -> bool:
-    """A required never-do dimension went untested → blocks full certification (FIX 2)."""
-    return never_do_status(has_never_do_list, results) == STATUS_UNTESTED
+def is_never_do_coverage_hole(
+    has_never_do_list: bool,
+    results: list[dict],
+    *,
+    answer_unreadable: bool | None = None,
+) -> bool:
+    """A required never-do dimension went untested → blocks full certification (FIX 2).
+
+    **Membership over equality (ADR-0052).** All three untested statuses are holes; which one it is
+    describes the cause and never the consequence. A `protocol_conformance` FAIL sitting beside this
+    explains WHY the dimension went unexercised and **must never discharge it** — if "we know why it
+    wasn't exercised" satisfied the coverage check, a unit would reach certified with
+    `never_do_adherence` never exercised, which is the whole thing FIX 2 exists to prevent. Two
+    dimensions, two independent withholds.
+    """
+    return (
+        never_do_status(has_never_do_list, results, answer_unreadable=answer_unreadable)
+        in UNTESTED_STATUSES
+    )
 
 
 # --- the sharper question: WHICH obligations were exercised, not just whether any were -----------

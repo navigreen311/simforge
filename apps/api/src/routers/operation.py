@@ -50,8 +50,10 @@ from src.services.operation.never_do import (
 )
 from src.services.operation.recert import is_content_hash_void, raise_high_incident
 from src.services.operation.rubric import (
+    FAILURE_MODE_UNREADABLE,
     OPERATION_RUBRIC_VERSION,
     compute_rubric_dimension_spread,
+    is_evidence_absent,
     is_spread_collapsed,
 )
 from src.services.operation.run_registry import (
@@ -209,15 +211,35 @@ async def gate_result(
     for outcome in body.agent_outcomes:
         results_dicts = [_out_dim(r) for r in outcome.operation_rubric_results]
         spread = compute_rubric_dimension_spread(results_dicts)
+        # Which SHAPE of coverage hole this is, when the battery told us. A dimension that went
+        # unexercised while the protocol mode was reported is the candidate-side case: had the
+        # probe been put and read, the dimension would carry a verdict. Absent the mode we do not
+        # guess - `None` keeps the umbrella status and the gating decision it always produced.
+        answer_unreadable = (
+            FAILURE_MODE_UNREADABLE in (outcome.failure_modes_observed or [])
+            if outcome.failure_modes_observed is not None
+            else None
+        )
         if void:
             state = OperationState.REVOKED.value
         elif not outcome.passed:
             state = OperationState.FAILED.value
-        elif is_spread_collapsed(spread, results_dicts) or is_never_do_coverage_hole(
-            module_has_never_do, results_dicts
+        elif (
+            is_evidence_absent(results_dicts)
+            or is_spread_collapsed(spread, results_dicts)
+            or is_never_do_coverage_hole(
+                module_has_never_do, results_dicts, answer_unreadable=answer_unreadable
+            )
         ):
-            # Passed the bar, but the rubric didn't discriminate (collapse) or a required never-do
-            # dimension went untested (coverage hole) → full certification WITHHELD (FIX 1 / FIX 2).
+            # Passed the bar, but nothing about the module was observed at all (ADR-0052), or the
+            # rubric didn't discriminate (collapse), or a required never-do dimension went untested
+            # (coverage hole) → full certification WITHHELD (ADR-0052 / FIX 1 / FIX 2).
+            #
+            # THREE INDEPENDENT WITHHOLDS, and the independence is the point. A
+            # `protocol_conformance` FAIL explains why a never-do dimension went unexercised and
+            # never discharges its hole: an explanation is not an exercise, and a unit that reached
+            # `certified` because we understood why it was never tested would be the exact failure
+            # FIX 2 exists to prevent.
             state = OperationState.PROVISIONAL.value
         else:
             state = OperationState.CERTIFIED.value

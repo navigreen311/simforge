@@ -61,8 +61,10 @@ async def test_side_by_side_pairs_domain_and_operation(
 ) -> None:
     vid = await _seed(db_session)
     res = (await client.get("/api/operation/side-by-side")).json()
-    # Two SEPARATE version stamps, never one number.
-    assert res["operation_rubric_version"] == "0.1.0"
+    # Two SEPARATE version stamps, never one number. The view reports the rubric in force
+    # today (0.2.0 since ADR-0052); the seeded record below keeps 0.1.0, the version it was
+    # earned under. That divergence is the intended reading of an old cert, not drift.
+    assert res["operation_rubric_version"] == "0.2.0"
     assert res["domain_rubric_version"] == "1.0.0"
     item = next(i for i in res["items"] if i["agent_village_id"] == vid)
     # Operation record carries its OWN denominator + named list.

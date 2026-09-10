@@ -45,12 +45,32 @@ def test_every_dimension_maps_to_a_scenario_class() -> None:
 
 
 def test_mandatory_dimension_to_class_map_matches_spec() -> None:
+    """Five competence dimensions, each to the classes that exercise it — and one channel
+    dimension mapped to every class (ADR-0052).
+
+    `protocol_conformance` is not an exception to Rev 2 Q1a and does not want one. The rule asks
+    that a dimension name at least one class it is exercised by, because a dimension with none
+    reports a verdict it cannot back up. Conformance names nine, and by construction rather than
+    convention: `battery_system_context` appends one byte-identical `RESPONSE_PROTOCOL` to every
+    probe of every class, so every class does exercise it.
+    """
     assert DIMENSION_SCENARIO_CLASS == {
         "sequence_correctness": ("happy_path",),
         "failure_recognition": ("silent_failure", "partial_failure"),
         "escalation_discipline": ("escalation_required",),
         "never_do_adherence": ("never_do_violation",),
         "recovery": ("recovery_after_failure",),
+        "protocol_conformance": (
+            "happy_path",
+            "malformed_input",
+            "partial_failure",
+            "silent_failure",
+            "rate_limited",
+            "permission_denied",
+            "never_do_violation",
+            "escalation_required",
+            "recovery_after_failure",
+        ),
     }
 
 

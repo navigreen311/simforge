@@ -114,13 +114,23 @@ async def test_a_battery_runs_end_to_end_and_the_gate_result_route_accepts_its_o
     assert cert["agent_id"] == AGENT
     assert cert["module_id"] == MODULE
     assert cert["state"] != "revoked"
-    # The dimensions the held-out battery actually exercised, and only those. A battery that
-    # reported five dimensions would be reporting on scenarios it never ran.
+    # The dimensions the held-out battery actually exercised, and only those — plus the channel.
+    # A battery that reported five competence dimensions would be reporting on scenarios it never
+    # ran; `protocol_conformance` is different in kind and is present on EVERY run, because every
+    # probe of every class carries the same RESPONSE_PROTOCOL (ADR-0052).
     assert {r["dimension"] for r in cert["operation_rubric_results"]} == {
         "never_do_adherence",
         "failure_recognition",
+        "protocol_conformance",
     }
     assert all(r["verdict"] == "PASS" for r in cert["operation_rubric_results"])
+    # And the channel PASSES here on its own evidence: this provider answers in the grammar, so
+    # the rate is 1.0. The assertion is worth making because the interesting case is the other
+    # one, and a dimension that could only ever pass would be measuring nothing.
+    conformance = next(
+        r for r in cert["operation_rubric_results"] if r["dimension"] == "protocol_conformance"
+    )
+    assert conformance["score"] == 1.0
     assert {r["scenario_class"] for r in cert["per_scenario_class_results"]} == {
         "never_do_violation",
         "silent_failure",
@@ -305,12 +315,21 @@ async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
 ) -> None:
     """**`StubProvider` was deliberately NOT taught to answer the protocol.**
 
-    It returns conversational prose, so the battery reads every answer as unreadable and the whole
-    run is NOT_RUN. Teaching the hermetic default to pass its own exam would have made the green in
-    this file self-fulfilling, and a stub that certifies itself is exactly the shape of result this
-    subsystem exists to refuse. What it proves instead is the fail-safe: NOT_RUN is not a FAIL
-    (the agent is not blamed for the harness) and it is not a PASS either — the never-do dimension
-    is unexercised, `is_never_do_coverage_hole` reports a hole, and the unit holds at `provisional`.
+    It returns conversational prose, so the battery reads every answer as unreadable and every
+    COMPETENCE dimension is NOT_RUN. Teaching the hermetic default to pass its own exam would have
+    made the green in this file self-fulfilling, and a stub that certifies itself is exactly the
+    shape of result this subsystem exists to refuse. What it proves instead is the fail-safe:
+    NOT_RUN is not a FAIL (the agent is not blamed for the harness) and it is not a PASS either —
+    the never-do dimension is unexercised, `is_never_do_coverage_hole` reports a hole, and the unit
+    holds at `provisional`.
+
+    **ADR-0052 is visible here, and this run is why it exists.** `protocol_conformance` is the one
+    dimension that does NOT come back NOT_RUN: the probes were put, the answers came back, and they
+    could not be read — which is a measurement, not an absence of one. So the report now separates
+    *nothing was observed about the module* from *the agent would not speak the protocol*, where
+    before there was one NOT_RUN carrying both. The state is unchanged and that is the point: making
+    a failure legible must not make it cheaper. A conformance FAIL never discharges the never-do
+    hole, because an explanation is not an exercise.
     """
     await _seed(db_session, run_ref="op-run-battery-9")
 
@@ -320,8 +339,21 @@ async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
     assert not isinstance(built, BatterySkipped)
     outcome = built.agent_outcomes[0]
     assert outcome.passed is True  # not blamed
-    assert all(r.verdict == "NOT_RUN" for r in outcome.operation_rubric_results)
+    competence = [
+        r for r in outcome.operation_rubric_results if r.dimension != "protocol_conformance"
+    ]
+    assert competence, "the competence dimensions must still be reported, not omitted"
+    assert all(r.verdict == "NOT_RUN" for r in competence)
     assert all(r.verdict == "NOT_RUN" for r in outcome.per_scenario_class_results)
+    # The channel, scored rather than skipped: every probe was put and none came back readable.
+    conformance = next(
+        r for r in outcome.operation_rubric_results if r.dimension == "protocol_conformance"
+    )
+    assert conformance.verdict == "FAIL"
+    assert conformance.score == 0.0
+    # A FAIL on the channel does not become a FAIL on the agent — `passed` is computed from the
+    # grading, and an unreadable answer is not evidence the agent did the forbidden thing.
+    assert outcome.passed is True
 
     body = (
         await client.post("/api/operation/gate-result", json=built.model_dump(mode="json"))
