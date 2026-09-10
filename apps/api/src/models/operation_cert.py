@@ -43,6 +43,19 @@ class OperationCertification(Base):
     instructionContentHash: Mapped[str] = mapped_column(String)  # mismatch at run → VOID (Batch 4)
     # SEPARATE from and independent of the domain rubric_version — required, not optional.
     operationRubricVersion: Mapped[str] = mapped_column(String)  # semver
+    #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
+    #:
+    #: Everything above describes the EXAM — which instructions, which Forge version,
+    #: which rubric. This is the CANDIDATE, and without it a row says *the agent passed*
+    #: and cannot say *the agent, on this model, passed*: swap the model and the
+    #: certification still reads as current.
+    #:
+    #: Nullable, and that is not the same as optional. A timed-out run got no answer, and
+    #: a `department_context` unit is cleared by department state rather than by a model
+    #: sitting an exam — both legitimately have nothing to name. The requirement is
+    #: enforced where the verdict class is known, in the gate-result path, not by a
+    #: NOT NULL that would be wrong for two real row shapes.
+    agentModel: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # --- Unit A: agent operation (nullable for Unit B rows) ---
     agentId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)

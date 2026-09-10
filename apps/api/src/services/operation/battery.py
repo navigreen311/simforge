@@ -106,6 +106,7 @@ from src.schemas.operation_payloads import (
     OperationRubricResultItem,
     ScenarioClassResult,
 )
+from src.services.agent_runtime.llm_client import provider_label
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.held_out import (
     HeldOutScenario,
@@ -461,6 +462,7 @@ def build_gate_result_request(
     report: BatteryReport,
     run: OperationRun,
     instruction_set: ForgeInstructionSet,
+    agent_model: str,
     submitted_rubric_results: list[dict] | None = None,
 ) -> GateResultRequest:
     """Turn one battery's report into the payload `POST /operation/gate-result` accepts.
@@ -499,6 +501,7 @@ def build_gate_result_request(
         functions_in_module=run.coverageDenominator,
         passed=report.passed,
         max_certified_trust_tier=None,
+        agent_model=agent_model,
         operation_rubric_results=[OperationRubricResultItem(**item) for item in results],
         per_scenario_class_results=list(report.scenario_class_results),
         failure_modes_observed=list(report.failure_modes),
@@ -589,7 +592,20 @@ async def battery_for_run(
         unreadable=report.unreadable_answers,
         passed=report.passed,
     )
-    return build_gate_result_request(report=report, run=run, instruction_set=instruction_set)
+    return build_gate_result_request(
+        report=report,
+        run=run,
+        instruction_set=instruction_set,
+        # Named from the provider that ACTUALLY answered, never from configuration.
+        # `settings.llm_provider` says what was asked for - `auto` resolves to Ollama or
+        # the stub depending on whether Ollama answered a ping - so reading config here
+        # would record an intention rather than a fact, and the two differ exactly when
+        # it matters most.
+        #
+        # Required rather than defaulted, so a future caller that forgets it fails at the
+        # signature instead of writing a certification that cannot name its candidate.
+        agent_model=provider_label(runtime.provider),
+    )
 
 
 async def submit_battery_result(

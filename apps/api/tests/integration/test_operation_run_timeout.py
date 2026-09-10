@@ -197,6 +197,7 @@ async def _gate_result(client: AsyncClient, *, passed: bool, run_ref: str = "op-
                 "forge_id": "capital-forge",
                 "functions_certified": 4,
                 "functions_in_module": 4,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": passed,
                 "max_certified_trust_tier": "propose",
                 "operation_rubric_results": [
@@ -328,6 +329,7 @@ async def test_one_failure_among_several_units_is_not_a_pass(
                 "forge_id": "capital-forge",
                 "functions_certified": 4,
                 "functions_in_module": 4,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": passed,
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},

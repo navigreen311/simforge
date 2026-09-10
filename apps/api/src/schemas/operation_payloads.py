@@ -139,6 +139,14 @@ class AgentRunOutcome(BaseModel):
     functions_in_module: int  # DENOMINATOR
     passed: bool = True  # did the battery pass → certified vs failed (never a low score)
     max_certified_trust_tier: str | None = None  # auto_execute | propose | suggest
+    #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
+    #:
+    #: Optional on the wire and NOT optional in a certification: `gate_result` refuses to
+    #: persist a certified or provisional `agent_operation` row without one. Optional here
+    #: so a caller that omits it gets a REFUSAL naming the missing fact, rather than a 422
+    #: naming the shape — the two need different responses, and only the first says what
+    #: is actually wrong.
+    agent_model: str | None = None
     operation_rubric_results: list[OperationRubricResultItem] = Field(default_factory=list)
     per_scenario_class_results: list[ScenarioClassResult] = Field(default_factory=list)
     failure_modes_observed: list[str] = Field(default_factory=list)

@@ -435,6 +435,7 @@ async def test_a_held_out_FAIL_is_never_softened_by_the_submitted_battery(
         report=report,
         run=run,
         instruction_set=instruction_set,
+        agent_model="ollama/llama3.1:8b",
         submitted_rubric_results=submitted,
     )
 
@@ -478,6 +479,7 @@ async def test_a_merged_clean_run_reaches_certified(
         report=report,
         run=run,
         instruction_set=instruction_set,
+        agent_model="ollama/llama3.1:8b",
         submitted_rubric_results=[
             {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.94},
             {"dimension": "escalation_discipline", "verdict": "PASS", "score": 0.71},
@@ -493,3 +495,101 @@ async def test_a_merged_clean_run_reaches_certified(
         (await client.get("/api/operation/gate-result/op-run-battery-13")).json()["verdict"]
         == GateVerdict.PASS.value
     )
+
+
+async def test_a_certifying_outcome_without_a_model_is_refused(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The guard, exercised rather than asserted.
+
+    A certification records the version matrix it was earned under — instructions, Forge
+    version, rubric — and every one of those describes the EXAM. The model is the
+    CANDIDATE. Without it the row says *the agent passed* and cannot say *the agent, on
+    this model, passed*, so swapping the model leaves the certification reading as current.
+
+    This posts the same payload as the test above with the model stripped, and the only
+    difference between a green board and a decorative guard is that this expects a 422.
+    """
+    from src.services.operation.battery import build_gate_result_request, run_module_battery
+
+    run = await _seed(db_session, run_ref="op-run-battery-14")
+    instruction_set = (
+        (
+            await db_session.execute(
+                select(ForgeInstructionSet).where(ForgeInstructionSet.moduleId == MODULE)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    report = await run_module_battery(
+        module_id=MODULE,
+        agent_id=AGENT,
+        never_do=PORTFOLIO_HEALTH_NEVER_DO,
+        runtime=_runtime(ScriptedProvider(_compliant)),
+    )
+    built = build_gate_result_request(
+        report=report,
+        run=run,
+        instruction_set=instruction_set,
+        agent_model="ollama/llama3.1:8b",
+        submitted_rubric_results=[
+            {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.94},
+            {"dimension": "escalation_discipline", "verdict": "PASS", "score": 0.71},
+            {"dimension": "recovery", "verdict": "PASS", "score": 0.62},
+        ],
+    )
+
+    payload = built.model_dump(mode="json")
+    payload["agent_outcomes"][0]["agent_model"] = None
+
+    res = await client.post("/api/operation/gate-result", json=payload)
+    assert res.status_code == 422, (
+        f"an outcome that certifies without naming its model was accepted: {res.text}"
+    )
+    # The refusal names the missing fact. A 422 that only said "invalid" would leave a
+    # caller guessing which of a dozen fields was wrong.
+    assert "agent_model" in res.text
+
+
+async def test_a_failing_outcome_needs_no_model_to_be_recorded(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The other direction, and the reason the guard is not a NOT NULL.
+
+    A run that FAILS is still a record worth keeping, and the rule is about what a
+    certification CLAIMS: `certified` and `provisional` assert an agent may act, and those
+    are the states that must name what answered. A `failed` row asserts the opposite and
+    is refused nothing.
+    """
+    from src.services.operation.battery import build_gate_result_request, run_module_battery
+
+    run = await _seed(db_session, run_ref="op-run-battery-15")
+    instruction_set = (
+        (
+            await db_session.execute(
+                select(ForgeInstructionSet).where(ForgeInstructionSet.moduleId == MODULE)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    report = await run_module_battery(
+        module_id=MODULE,
+        agent_id=AGENT,
+        never_do=PORTFOLIO_HEALTH_NEVER_DO,
+        runtime=_runtime(ScriptedProvider(_violating)),
+    )
+    built = build_gate_result_request(
+        report=report,
+        run=run,
+        instruction_set=instruction_set,
+        agent_model="ollama/llama3.1:8b",
+    )
+
+    payload = built.model_dump(mode="json")
+    payload["agent_outcomes"][0]["agent_model"] = None
+
+    res = await client.post("/api/operation/gate-result", json=payload)
+    assert res.status_code == 200, res.text
+    assert res.json()["agent_operation_certs"][0]["state"] == "failed"

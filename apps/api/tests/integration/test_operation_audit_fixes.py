@@ -52,6 +52,7 @@ async def test_passing_but_collapsed_result_is_provisional_not_certified(
                 "forge_id": "capital-forge",
                 "functions_certified": 10,
                 "functions_in_module": 12,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
                 "operation_rubric_results": [
@@ -80,6 +81,7 @@ async def test_passing_with_healthy_spread_and_no_neverdo_is_certified(
                 "forge_id": "capital-forge",
                 "functions_certified": 10,
                 "functions_in_module": 12,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
                 # Varied scores (healthy spread) and no never-do list persisted for this module.
@@ -155,6 +157,7 @@ async def test_never_do_hole_blocks_certified(client: AsyncClient) -> None:
             "modules_covered": 1,
             "modules_uncovered": [],
             "functions_in_module": 12,
+            "agent_model": "ollama/llama3.1:8b",
             "functions_covered": 10,
         },
         "module_never_do": {"statement_ingest": ["overwrite_prior_statement"]},
@@ -173,6 +176,7 @@ async def test_never_do_hole_blocks_certified(client: AsyncClient) -> None:
                 "forge_id": "capital-forge",
                 "functions_certified": 10,
                 "functions_in_module": 12,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
                 # Healthy spread, but never_do_adherence is n/a while a never-do list EXISTS → hole.
@@ -205,6 +209,7 @@ async def test_trust_tier_suppressed_on_non_certified(client: AsyncClient) -> No
                 "forge_id": "capital-forge",
                 "functions_certified": 2,
                 "functions_in_module": 12,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": False,
                 "max_certified_trust_tier": "propose",  # supplied, but must NOT surface
                 "operation_rubric_results": [

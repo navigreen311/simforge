@@ -101,6 +101,7 @@ async def test_gate_result_void_path_via_router(client) -> None:  # noqa: ANN001
                 "forge_id": "medlink-pro",
                 "functions_certified": 11,
                 "functions_in_module": 14,
+                "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.9}

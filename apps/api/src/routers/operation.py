@@ -222,6 +222,30 @@ async def gate_result(
         else:
             state = OperationState.CERTIFIED.value
 
+        # A cert that says something PASSED must name what answered. Everything else on
+        # this row describes the exam — the instructions, the Forge version, the rubric —
+        # and without the model it reads as *this agent passed* rather than *this agent,
+        # on this model, passed*, so swapping the model leaves it looking current.
+        #
+        # Checked HERE rather than as a NOT NULL because the column is legitimately empty
+        # for two shapes a constraint cannot distinguish: a timed-out run got no answer,
+        # and a `department_context` unit is cleared by department state. The verdict
+        # class is only known at this point.
+        if state in (
+            OperationState.CERTIFIED.value,
+            OperationState.PROVISIONAL.value,
+        ) and not (outcome.agent_model or "").strip():
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"agent_operation outcome for {outcome.agent_id}/{outcome.module_id} "
+                    f"resolves to '{state}' and names no agent_model. A certification "
+                    "that cannot say which model answered is one nobody can reproduce or "
+                    "expire when the model moves. Send `provider/model`, e.g. "
+                    "`ollama/llama3.1:8b`."
+                ),
+            )
+
         cert = OperationCertification(
             unitType="agent_operation",
             state=state,
@@ -235,6 +259,7 @@ async def gate_result(
             functionsCertified=outcome.functions_certified,
             functionsInModule=outcome.functions_in_module,
             maxCertifiedTrustTier=outcome.max_certified_trust_tier,
+            agentModel=outcome.agent_model,
             perScenarioClass={
                 r.scenario_class: r.verdict for r in outcome.per_scenario_class_results
             },

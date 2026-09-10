@@ -464,6 +464,34 @@ def reset_reachability_cache() -> None:
     _reachable_cache.clear()
 
 
+def provider_label(provider: LLMProvider) -> str:
+    """`provider/model` for the thing that actually answered, e.g. `ollama/llama3.1:8b`.
+
+    **A certification records this**, and the reason it is `provider/model` rather than a
+    bare model name is that a tag is not an identity: the same `llama3.1:8b` can serve
+    different weights over time, and an Ollama one is not interchangeable evidence with a
+    hosted one. Naming both halves is the least that can be checked later.
+
+    `CachedLLMProvider` reports its INNER provider, not itself. A cache is not a
+    candidate - it returns what some model said - and labelling a cached answer `cached`
+    would lose the only fact this column exists to keep.
+
+    `StubProvider` reports `stub`, with no model, because it has none. That value is
+    deliberately ugly: a stub answer must never look like a certification earned from a
+    model, and if one ever reaches a certified row the column says so plainly rather than
+    inventing a name. The stub does not know the battery's grammar - ADR-0051's runner
+    refuses to teach it, on the grounds that a stub passing its own exam makes the green
+    self-fulfilling - so this should stay unreachable, and this label is what proves it if
+    it is not.
+    """
+    inner = getattr(provider, "inner", None)
+    if inner is not None:
+        return provider_label(inner)
+    model = getattr(provider, "model", None)
+    name = type(provider).__name__.removesuffix("Provider").lower()
+    return f"{name}/{model}" if model else name
+
+
 def resolve_provider(provider: str) -> str:
     """Resolve a provider name, expanding `auto` → ollama-if-reachable-else-stub (ADR-0023).
 
