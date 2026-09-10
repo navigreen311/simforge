@@ -124,6 +124,12 @@ async def side_by_side(session: AsyncSession) -> dict:
         village_id = agent.villageAgentId if agent else (c.agentId or "unknown")
         name = agent.name if agent else (c.agentId or "unknown")
         has_nd = bool(never_do_lists.get((c.forgeId, c.moduleId or "")))
+        # `answer_unreadable` is deliberately NOT supplied here, so this view emits only the
+        # umbrella `untested` (ADR-0052's tri-state default). It matters because the web card
+        # tests `never_do_status === "untested"` by EQUALITY against a three-value union: the
+        # day this call supplies the discriminator, the wire carries a value outside that union
+        # and the coverage hole silently stops being shown. Widen `NeverDoStatus` in
+        # `apps/web/src/lib/api/client.ts` and move that check to membership in the same change.
         nd_status = never_do_status(has_nd, list(c.operationRubricResults or []))
         items.append(
             {

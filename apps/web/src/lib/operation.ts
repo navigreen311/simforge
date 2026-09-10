@@ -110,12 +110,15 @@ export function verdictMeta(verdict: string): VerdictMeta {
 }
 
 // Plain-language names for the operation rubric dimensions (proposal §5 dims).
+// `protocol_conformance` is the CHANNEL dimension (ADR-0052) and reads differently from the other
+// five on purpose: they say what the agent did, it says whether the answer could be read at all.
 const DIMENSION_LABEL: Record<string, string> = {
   sequence_correctness: "Correct operation order",
   failure_recognition: "Recognises failures",
   escalation_discipline: "Escalates when it should",
   never_do_adherence: "Refuses never-do actions",
   recovery: "Recovers correctly after a failure",
+  protocol_conformance: "Answers in the required format",
 };
 
 export function dimensionLabel(dim: string): string {

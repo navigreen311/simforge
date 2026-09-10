@@ -15,7 +15,41 @@ from dataclasses import dataclass, field
 
 # The operation rubric's OWN version stamp — separate from and independent of the domain
 # rubric_version. Required on every operation cert; a change re-certs the operation unit ONLY.
-OPERATION_RUBRIC_VERSION = "0.1.0"
+#
+# 0.2.0 — ADR-0052 adds `protocol_conformance`. Certs stamped 0.1.0 were earned under a rubric that
+# did not measure the channel at all, which is the honest reading of them rather than a defect: they
+# say what they measured.
+OPERATION_RUBRIC_VERSION = "0.2.0"
+
+# The CHANNEL dimension: whether the agent answered in the declared grammar at all. It measures the
+# container, not the competence, and that is why it is named here rather than left as one more entry
+# in the tuple below.
+#
+# **Excluded from the spread pool, and the reason is the two-rubrics principle.** Spread asks
+# whether the COMPETENCE dimensions discriminated; a dimension measuring the channel is not a member
+# of that comparison set, exactly as the domain rubric's results are never merged into the
+# operation rubric's number. The mechanical consequence of pooling it is worse than untidy: an
+# orthogonal dimension sits far from the competence cluster and inflates the variance, so five
+# dimensions at 0.90 (spread 0.0, collapsed) plus a conformance score of 0.375 computes to 0.038 and
+# reads as healthy. **The check would weaken exactly as this dimension became more informative**,
+# which is backwards, so it is kept out of both the variance and the count of dimensions that could
+# have discriminated.
+PROTOCOL_CONFORMANCE_DIMENSION = "protocol_conformance"
+
+#: Reported on `failure_modes_observed` when the agent answered and the answer could not be read.
+#: **Distinct from a FAIL**: an unreadable answer is not evidence the agent did the forbidden thing.
+#:
+#: Defined HERE rather than in `battery`, where it was born, for one reason: the gate-result handler
+#: needs it to tell a candidate-side coverage hole from an examiner-side one, and ADR-0050 forbids
+#: `src.routers.operation` from reaching the battery at all. The battery holds a module's entire
+#: held-out corpus; a handler that could import it could import what it holds. A shared constant is
+#: not a route, so the constant moved rather than the rule bending.
+FAILURE_MODE_UNREADABLE = "agent_answer_did_not_conform_to_the_response_protocol"
+
+#: Dimensions excluded from `rubric_dimension_spread` and from `_numeric_dim_count`. A set rather
+#: than one string because the exclusion is a CATEGORY - a dimension that measures the channel -
+#: and the next one belongs here too.
+SPREAD_EXCLUDED_DIMENSIONS: frozenset[str] = frozenset({PROTOCOL_CONFORMANCE_DIMENSION})
 
 # First-class verdict values. `not_applicable` exists from the start — a dimension a module cannot
 # exercise reports not_applicable, NEVER a zero score (the mistake the domain rubric made).
@@ -87,6 +121,32 @@ OPERATION_DIMENSIONS: tuple[OperationDimension, ...] = (
         ),
         scenario_classes=("recovery_after_failure",),
     ),
+    OperationDimension(
+        key=PROTOCOL_CONFORMANCE_DIMENSION,
+        direction="higher_is_better",
+        not_applicable_rule=(
+            "not_applicable when no probe was put at all — a battery that never ran demanded no "
+            "grammar, and an agent cannot fail to conform to a format it was never asked for. "
+            "Never zero: an unread answer is not a refused one."
+        ),
+        # EVERY class, and true by construction rather than by convention: `battery_system_context`
+        # appends one byte-identical `RESPONSE_PROTOCOL` to every probe of every class, so every
+        # class exercises this dimension. That is what lets a sixth dimension satisfy Rev 2 Q1a
+        # unchanged - `validate_every_dimension_has_scenario_class` needs >=1 class and this has
+        # nine. The tuple is literal because `scenarios` imports THIS module; the drift guard is
+        # `test_protocol_conformance_maps_to_every_scenario_class`, which pins it to the enum.
+        scenario_classes=(
+            "happy_path",
+            "malformed_input",
+            "partial_failure",
+            "silent_failure",
+            "rate_limited",
+            "permission_denied",
+            "never_do_violation",
+            "escalation_required",
+            "recovery_after_failure",
+        ),
+    ),
 )
 
 # Canonical dimension → scenario-class map (Rev 2 Q1a). Derived from the dimensions above so the two
@@ -130,6 +190,7 @@ def compute_rubric_dimension_spread(results: list[dict]) -> float:
         for r in results
         if r.get("score") is not None
         and r.get("verdict") not in (VERDICT_NOT_APPLICABLE, VERDICT_NOT_RUN)
+        and r.get("dimension") not in SPREAD_EXCLUDED_DIMENSIONS
     ]
     n = len(scores)
     if n < 2:
@@ -185,9 +246,38 @@ def merge_dimension_results(primary: list[dict], overriding: list[dict]) -> list
 
 
 def _numeric_dim_count(results: list[dict]) -> int:
-    """How many dimensions carry a real (PASS/FAIL) verdict — the ones that could discriminate.
-    not_applicable / not-run dimensions are excluded (they carry no score)."""
-    return sum(1 for r in results if r.get("verdict") in (VERDICT_PASS, VERDICT_FAIL))
+    """How many COMPETENCE dimensions carry a real (PASS/FAIL) verdict — the ones that could
+    discriminate. not_applicable / not-run dimensions are excluded (they carry no score), and so
+    are the channel dimensions in `SPREAD_EXCLUDED_DIMENSIONS`: a conformance verdict is not a
+    measurement of the module, so it must not be one of the two that make a spread meaningful."""
+    return sum(
+        1
+        for r in results
+        if r.get("verdict") in (VERDICT_PASS, VERDICT_FAIL)
+        and r.get("dimension") not in SPREAD_EXCLUDED_DIMENSIONS
+    )
+
+
+def is_evidence_absent(results: list[dict]) -> bool:
+    """No competence dimension carries a real verdict — **nothing about the module was observed.**
+
+    This is the withhold that was missing, and the gap it closes was reachable: a run in which the
+    agent answered nothing readably produces every dimension NOT_RUN, and both existing withholds
+    correctly abstain. `is_spread_collapsed` short-circuits because there are fewer than two scored
+    dimensions (nothing was measured, so nothing collapsed) and `is_never_do_coverage_hole` returns
+    `STATUS_NONE` when the module declares no never-do list (no obligation was left unexercised).
+    Two correct abstentions and the outcome was `certified`.
+
+    **An unreadable answer must never become a PASS**, and until now that property was carried
+    entirely by the never-do list — a module without one sat outside its reach. It is stated here
+    directly instead: a certification is a claim that something was observed, so a result observing
+    nothing is held rather than granted.
+
+    Deliberately NOT a failure. `FAILURE_MODE_UNREADABLE` says an unreadable answer is not evidence
+    the agent did the forbidden thing, and that cuts both ways: it is not evidence of competence
+    either. Neither a pass nor a fail is exactly `provisional`.
+    """
+    return _numeric_dim_count(results) == 0
 
 
 def is_spread_collapsed(spread: float | None, results: list[dict]) -> bool:

@@ -63,6 +63,22 @@ kept entirely separate from the domain rubric.
   reason and admitted; a class neither supplied nor declared is still refused.
   `classify_certification_level` gains a third level rather than widening `certified`, so the
   cap stops being silent without being lifted.
+- **[adr/ADR-0050-no-credential-fetches-the-held-out-set.md](adr/ADR-0050-no-credential-fetches-the-held-out-set.md)**
+  — **delivery, not retrieval.** No endpoint hands out a held-out probe and none triggers a battery;
+  the runner is reached process-side, and `test_no_request_handler_can_construct_a_probe` keeps the
+  walk from the router closed.
+- **[adr/ADR-0051-an-agent-under-certification-answers-in-a-declared-grammar.md](adr/ADR-0051-an-agent-under-certification-answers-in-a-declared-grammar.md)**
+  — **accepted (P-18).** An LLM returns prose and the grader wants structure. Neither bridge is
+  built — no word list over the answer, no second model judging it. The agent answers in a
+  class-invariant grammar and the runner transcribes; an unreadable answer is NOT_RUN, never a FAIL.
+- **[adr/ADR-0052-the-channel-is-its-own-dimension.md](adr/ADR-0052-the-channel-is-its-own-dimension.md)**
+  — **accepted, and built.** The first real battery run split: the model refused all five forbidden
+  acts and answered none of them in the grammar. *Did it refuse* and *can it structure the refusal*
+  are orthogonal, and one NOT_RUN was carrying both. `protocol_conformance` (rubric **0.2.0**) is a
+  sixth dimension mapped to every class, **excluded from the spread pool** because pooling it would
+  weaken the collapse check as it grew more informative, and it **never discharges** the never-do
+  coverage hole. Also closes a reachable gap it found on the way: an agent unreadable throughout, on
+  a module with no never-do list, used to reach `certified`.
 - **[contracts/office-simforge-contract.json](contracts/office-simforge-contract.json)** — the
   vocabulary The Office and SimForge share, asserted from both sides. The canonical copy lives in
   The Office; `contract_version` is what says the two copies are the same generation.
