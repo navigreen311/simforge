@@ -146,9 +146,8 @@ protection and it would not have caught this run**: the provider was correct thr
 wrong was the question put to it.
 
 **The general form is carried as a caveat rather than only as a code fix** — recorded in
-theoffice's `PARALLEL_BUILD.md` as **Caveat 17**, beside 12–14, which are the same family aimed at the same
-
-thing: 12 reports an output nobody read, 13 reads construction out of a mention, 14 reads a claim
+theoffice's `PARALLEL_BUILD.md` as **Caveat 17**, beside 12–14, which are the same family aimed
+at the same thing: 12 reports an output nobody read, 13 reads construction out of a mention, 14 reads a claim
 out of a name, and 17 reads a measurement off an instrument that quietly substituted its subject.
 
 ---
