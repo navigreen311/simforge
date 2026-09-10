@@ -85,8 +85,20 @@ class AgentRuntime:
         seed: int,
         fallback_name: str = "",
         fallback_role: str = "",
+        extra_system: str = "",
     ) -> LLMResponse:
+        """One agent turn.
+
+        `extra_system` is appended to the assembled Village prompt as a final layer. It exists for
+        the operation battery, which has to put the module's OPERATING CONTEXT to the agent — the
+        module it is working and the standing prohibitions it is working under — without that
+        context becoming part of the agent's Village identity. Appending rather than substituting
+        matters: an agent examined under a prompt that had replaced its BREATH/FOT/SOUL layers
+        would be a different agent from the one being certified.
+        """
         system_prompt = self.assemble_system_prompt(agent_village_id, fallback_name, fallback_role)
+        if extra_system:
+            system_prompt = f"{system_prompt}\n\n{extra_system}"
         return await self.provider.complete(
             system=system_prompt, messages=conversation_history, seed=seed
         )

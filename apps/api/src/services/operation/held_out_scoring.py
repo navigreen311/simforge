@@ -39,7 +39,7 @@ which is what stops holding a module at `provisional` for an obligation nobody w
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from src.services.operation.held_out import HeldOutScenario, scenario_dimension
@@ -320,9 +320,44 @@ def run_held_out_battery(
         if observed is not None:
             observations[(scenario.obligation_ref, scenario.scenario_class)] = observed
     return grade_module(module_id, ordered, observations)
+
+
+#: The same contract for a caller whose agent is reached over a coroutine. A real agent is an LLM
+#: behind an `await`, so the synchronous `AskAgent` cannot express the only caller that matters.
+AsyncAskAgent = Callable[[Probe], Awaitable[ObservedBehaviour | None]]
+
+
+async def run_held_out_battery_async(
+    module_id: str,
+    scenarios: Iterable[HeldOutScenario],
+    ask: AsyncAskAgent,
+) -> HeldOutGrading:
+    """`run_held_out_battery`, awaited. Same direction, same isolation, same grading.
+
+    Duplicated rather than shared because the loop IS the design: `ask` is called BY this function,
+    one probe at a time, and a version that collected the probes first so a caller could await them
+    in a batch would hand the caller the set — which is the one thing ADR-0050 forbids. The eight
+    lines are the price of not building that.
+
+    The order is part of the contract and callers rely on it: exactly one `ask` per scenario, in the
+    order the scenarios were given. A runner attributing an answer to the scenario it is currently
+    probing is only correct because of that, and `battery.ProbeOrderError` checks rather than
+    assumes it.
+    """
+    ordered = tuple(scenarios)
+    observations: dict[tuple[str, str], ObservedBehaviour] = {}
+    for scenario in ordered:
+        observed = await ask(deliver(scenario))
+        if observed is not None:
+            observations[(scenario.obligation_ref, scenario.scenario_class)] = observed
+    return grade_module(module_id, ordered, observations)
+
+
 __all__ = [
     "Probe",
     "AskAgent",
+    "AsyncAskAgent",
+    "run_held_out_battery_async",
     "deliver",
     "run_held_out_battery",
     "ObservedBehaviour",
