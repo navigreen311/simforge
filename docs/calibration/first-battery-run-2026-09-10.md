@@ -161,3 +161,85 @@ would. Whether a certification battery can observe a refusal that arrives as pro
 rebuilding either bridge ADR-0051 refused — is the open question, and it is open.
 
 **No follow-up run was made.**
+
+---
+
+# Entry 3 — the second-model run did not happen, and the reason is worth more than an excuse
+
+**Package P-01 / A0.** The task was to put **the same eight probes** to a second model —
+`claude-3-5-sonnet-20241022`, already the configured `ANTHROPIC_AGENT_MODEL` default — and report
+the grammar-compliance split beside the numbers above.
+
+**No measurement was made. There are no numbers in this entry, and nothing below should be read as
+one.** The 0/5 and 3/3 above still stand as the only battery numbers this project has.
+
+## The blocker, named exactly
+
+`ANTHROPIC_API_KEY` **is not set to a credential.** The variable is present in `.env` and its value
+is the placeholder `YOUR_AN…` — 27 characters, no `sk-ant-` prefix. It is absent from the process
+environment entirely. Nothing else was missing: the model is already configured, and eight probes
+is a handful of calls.
+
+Per the package's own standing rule, the run stops here rather than substituting a provider. Which
+turns out to matter more than it sounds, because of what substituting would have done.
+
+## The third instrument hazard — caught before it produced a number, for once
+
+`.env` carries `LLM_PROVIDER=auto`. From `llm_client.resolve_provider`:
+
+    if provider == "auto":
+        return "ollama" if _ollama_reachable(settings.ollama_base_url) else "stub"
+
+**`auto` resolves to `ollama` or `stub`. It never resolves to `anthropic`.** And Ollama is up on
+this box right now, serving `llama3.1:8b` — *the first model*.
+
+So a second-model run launched on the configuration as it sits, with the placeholder key in place,
+would not have failed. It would have quietly put the eight probes to **the model that produced the
+numbers above**, and returned a split — very likely `3/3` and `0/5`, because that is what that
+model does — which would then have been written down as *the second model's* result and read as
+**"the split is general."** A confident, plausible, wrong reading, arrived at by a third route.
+
+This is the same family as Findings 2's two retractions, and it is the one the existing protection
+does **not** cover. PR #139 records `provider_label(runtime.provider)`, so the artifact would have
+carried the string `ollama/llama3.1:8b` — **correct, and useless**, because the label would have
+been correct about a run whose entire purpose was that it be a different model. The instrument
+would have named its subject accurately while answering the wrong question.
+
+> The retractions substituted the **input** and then the **reading**. This one would have
+> substituted **the comparison** — the one thing a second-model run consists of.
+
+A fourth member of the family alongside Caveat 17: **`bool(self.api_key)`** is the whole of
+`AnthropicProvider.health_check`. The placeholder string is truthy, so a health check on this
+configuration reports `{"provider": "anthropic", "ok": True}`. A green health check here means
+"a string is present", not "a credential works".
+
+## A reproducibility gap, found while trying to reuse the eight probes
+
+**The 10 September run cannot currently be reproduced from this repository.** PR #140 committed
+this document and nothing else; the script that drove the run was ad-hoc and was never committed.
+The probes are authored at run time by `author_held_out_scenarios(obligations_from_never_do(...))`
+from a module's declared never-do list, which is read from the database — and **this document does
+not record which forge and module that was.** With the simforge database also not running, the
+eight probes could not be re-derived even to inspect them.
+
+"The same eight probes" is the precondition for the comparison being worth anything, and right now
+that phrase does not resolve to anything a later run can pick up. Whoever completes A0 needs the
+`forge_id` and `module_id` recorded here.
+
+## What was left behind
+
+`scripts/second-model-battery.py` — **written, never executed.** It is committed for the guards it
+encodes rather than for any result, and it aborts rather than runs when any of them trips:
+
+| guard | what it refuses |
+|---|---|
+| resolved provider must be `anthropic` | `auto`/`ollama`/`stub` silently answering a second-model run |
+| key must start `sk-ant-` | a placeholder passing as a credential |
+| `LLM_CACHE_MODE` must not replay | fixtures answering instead of the model |
+| every probe non-empty, asserted **before** the first call | the second retraction, exactly |
+| probe set must be 3 `silent_failure` + 5 `never_do_violation` | a different battery being compared to this one |
+
+No field in it is read with `getattr(x, "name", default)`. A renamed field must raise, because an
+`AttributeError` is the thing that caught the second retraction and a default is what hid it.
+
+**The open question from "What this run does not settle" is still open, and A0 is still unanswered.**
