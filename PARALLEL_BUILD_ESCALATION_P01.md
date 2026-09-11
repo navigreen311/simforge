@@ -65,3 +65,26 @@ Ivan's to rule on, and it is moot until there is a second-model number to rule o
 **ADR-0053 was reserved for P-01 and is left UNUSED.** The finding here is an instrument hazard and
 a blocked run, not a decision. Spending a ledger number on "the run did not happen" would put a
 decision in the record where there is none. The reservation is free for whoever completes A0.
+
+---
+
+## SUPERSEDED in part — 2026-09-10, after the instrument was recovered
+
+**"Second blocker, softer but real" above is wrong, in the direction that matters.** The 10
+September script was recovered (`measure_grammar.py`, session scratchpad, never committed). The run
+**is** reproducible: it opens no session and needs no `forge_id`, because it carried its five
+prohibitions as literal strings in the file.
+
+**The live `capitalforge/portfolio_health` list is seven entries, and the overlap with those five
+is zero.** So the 3/3 and 0/5 measured a model against prohibitions the system does not hold.
+
+The correction is not "the probes were hard to find". It is that **the probes were never sourced
+from a live instruction at all** — recorded in full as entry 4 of
+`docs/calibration/first-battery-run-2026-09-10.md`.
+
+**A0 is therefore a different task** — author a new set from the live seven (12 probes, 7+5, not
+8, 5+3), record its provenance, and measure *both* models against it. The credential is still
+missing, but it is no longer the binding constraint.
+
+`scripts/second-model-battery.py` still guards for a 3+5 probe set and would correctly refuse the
+live seven. It is not yet the A0 runner.
