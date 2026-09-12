@@ -1238,3 +1238,111 @@ keys are in The Office's. `hashtext` of the same string in two databases has no 
 this buys mutual exclusion between SimForge battery passes and **nothing else**. Cross-repo
 serialisation would need a shared lock service, which does not exist and is not implied by the
 shared naming convention.
+
+---
+
+# Entry 10 - the ingest side, and why no module can close the loop today
+
+**2026-09-12.** The battery sweep merged (#147). The other half of the loop was traced the same
+way - follow one, name where it stops.
+
+## What the ingest trace found
+
+`sweep_verdict_ingest` calls `simforge.overdue_submissions(conn, deadline_hours=0)`:
+
+```sql
+SELECT submission_id, venture_id, forge_id, module_id, department,
+       scenario_pack_ref, simforge_run_ref, submitted_at, ...
+FROM curriculum_submission
+WHERE result_received_at IS NULL
+  AND submitted_at < now() - make_interval(hours => %s)
+```
+
+The Office's database:
+
+    curriculum_submission rows              10
+      result_received_at IS NULL            10
+      simforge_run_ref IS NULL              10   <- every one
+
+The sweep **does** find candidates. Ten of them. Then it reaches `run_ref = sub.get(...)`, finds
+NULL, and falls through to `record_result` with a synthesised `f"unanswered:{submission_id}"` - a
+ref SimForge has never seen and never could.
+
+**It does not stop for want of a certification. It stops for want of a key to ask with.** The
+hand-over that mints a ref through `mint_run_ref` and writes it back to
+`curriculum_submission.simforge_run_ref` has never run for any of these ten.
+
+## The ten are unsatisfiable by anything
+
+They are `cre-forge` and `voiceforge` modules - `buyer_match`, `comp_analysis`, `property_lookup`,
+`underwrite_deal`, `place_call`, `transcribe_call` - all submitted 2026-09-07.
+
+**SimForge holds no `ForgeInstructionSet` for any of them.** So they are not waiting on a battery,
+and running one would not help: `battery_for_run` would skip every one of them at
+`SKIP_NO_MODULE`. They are waiting on a hand-over that never ran, for modules the examiner does not
+know about.
+
+**No sweep on either side can close them.** The battery sweep scores runs that exist; no run exists
+for any of these submissions. The ingest sweep polls for verdicts; there is no ref to poll with.
+
+## The intersection is empty, and that is the real state of the loop
+
+| | |
+|---|---|
+| SimForge `ForgeInstructionSet` | `capital-forge/{statement_ingest, reconciliation, wire_release}`, `voiceforge/call_flow` |
+| Office `forge_operating_instruction` forges | `capitalforge`, `cre-forge`, `simforge`, `voiceforge` |
+| **exact intersection (forge_id AND module_id)** | **EMPTY** |
+| **module-name overlap ignoring forge_id** | **EMPTY** |
+
+Two independent mismatches, and either alone would be enough:
+
+1. **The forge id is spelled differently.** SimForge has `capital-forge`; The Office has
+   `capitalforge`. `voiceforge` agrees on both sides - it is the only one that does.
+2. **No module name appears on both sides at all.** SimForge's four are `statement_ingest`,
+   `reconciliation`, `wire_release`, `call_flow`. The Office's `capitalforge` set is
+   `client_read`, `client_read_credit`, `client_read_pii`, `compliance_manifest_assemble`,
+   `portfolio_health`, `record_consent`, `regulator_dossier_export`, `restack_recommend`,
+   `scan_communication`, `statement_pull`, `submit_application`. Even `voiceforge`, where the forge
+   ids agree, has `call_flow` on one side and `place_call`/`transcribe_call` on the other.
+
+**So the answer to "which module could complete this loop today" is: none.** Not
+`capital-forge/statement_ingest` - The Office holds no operating instruction for it under either
+spelling.
+
+## The first real hand-over is a different act
+
+It needs a submission that does not exist yet, for a module both sides hold. Today no such module
+exists, so something has to be created rather than repaired.
+
+**The nearest candidate is `capitalforge/portfolio_health`**, and it is one seeded instruction set
+away:
+
+- The Office **has** a live `forge_operating_instruction` for it.
+- The captured Gate 8 payload for it exists and is committed here -
+  `tests/fixtures/office_curriculum/burkham_wickmont.json`, content_hash `4de7dcb6...`, the seven
+  prohibitions.
+- **The A0 held-out probes are already authored against exactly that instruction set** and the
+  examiner is measured on them at 11/11 conformance (ADR-0054).
+- SimForge has **no** `ForgeInstructionSet` row for it - which is the one missing piece, and the
+  one `submit_curriculum` writes on an accepted submission.
+
+That is not a fix to the ten. It is the first hand-over, and it should be recognised as its own act
+with its own decision, not as unblocking a backlog.
+
+## Two errors of mine, recorded in the same entry
+
+**I said a certification existed. It does not.** SimForge still holds ten
+`OperationCertification` rows, newest **2026-08-27** - August seed data, predating every run. The
+trace I ran earlier wrote nothing: it was rejected at `submit_curriculum` by a stale server, and the
+run it opened is still `verdict: NULL`. **The battery sweep landing is not the same as a battery
+running**, and I let the merge stand in for the run.
+
+**I framed the gap as a sweep that had never seen a certification.** It is a sweep that has never
+had a key to ask with - `simforge_run_ref` NULL on all ten. The distinction matters because the two
+have different fixes: one would be satisfied by producing a certification, and the other cannot be,
+because the poll never reaches the point of reading one.
+
+Both are the same error in different clothes: **describing a downstream symptom as though it were
+the blocked step.** The session has now produced this shape at four levels - a probe set authored
+from a paraphrase, a model attribution read from configuration, a battery with no caller, and now
+an ingest sweep with no key.
