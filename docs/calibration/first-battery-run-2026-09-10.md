@@ -1101,3 +1101,140 @@ anything.** All seven of opus-5's failures and seven of sonnet-5's eight are
 answer may require particular words in it; the grader requires an exact hidden sentence. The
 constant is no longer hiding behind a conformance problem, and the next run that touches a
 concealment probe will measure it and nothing else.
+
+---
+
+# Entry 9 - the caller, the second read, and four things the wiring turned up
+
+**2026-09-12.** An end-to-end trace found the gap: `submit_battery_result` had no caller anywhere
+in `src`, so runs opened, polled `IN_PROGRESS`, and were swept to `TIMEOUT` forever. Three
+`OperationRun` rows had sat open since 4-7 September; all ten `OperationCertification` rows were
+seed data from 21-27 August, predating the oldest run. **Not one certification in this database had
+ever been produced by a run.**
+
+Built: `src/workers/battery_sweep.py` (the caller, own lock, own entry point),
+`scripts/run_battery_sweep.py`, and `battery_result_for` behind
+`GET /api/operation/battery-result/{run_ref}`. `gate_result_for` is untouched.
+
+## Finding 1 - ingest cannot see a run mid-score, and it is a property that was already there
+
+`battery_for_run` performs **no writes**. It reads the run, the instruction set and the never-do
+list, runs eleven probes, and returns a request. Every write happens inside `gate_result(...)`, in
+one session, under a single commit. A concurrent reader sees the pre-state or the post-state;
+certification rows and the run's verdict become visible together.
+
+**This was not built for the two-sweep design. It was already true**, and the two-sweep design is
+safe because of it. Worth separating: the guarantee is the transaction boundary, not anything the
+sweep does.
+
+**One correction to how it was described.** `get_gate_result` does **not** refuse `IN_PROGRESS` -
+it returns it. `verdict = TIMEOUT if window.timed_out else IN_PROGRESS`, and the live trace got
+`200 {"verdict": "IN_PROGRESS"}` twice. The safety is real; the mechanism named for it was not the
+one holding it up. There are also no scenario-result rows anywhere - **`operation_scenario_result`
+does not exist in either schema.**
+
+What a reader *can* see is a verdict about to be replaced: a battery outliving its own window reads
+`TIMEOUT` while still running, and `close_run` lets the real verdict win afterwards. **A staleness
+window, not a torn read.**
+
+## Finding 2 - the near-miss: a correct decision on a mechanism that was backwards
+
+Option B - a separate sweep - was chosen to stop a 45-minute battery stalling the audit chain
+through `run_all`'s advisory lock.
+
+**The lock is not what would have stalled it.** `_sweep_lock` keys per kind:
+`pg_try_advisory_lock(hashtext(f"sweep:{kind}"))`. `sweep:audit_chain` and `sweep:verdict_ingest`
+are different keys and never contend. What serialises `run_all` is a **plain sequential `for`
+loop** over four sweeps on one connection.
+
+So a battery added to that tuple would stall every sweep after it **regardless of having its own
+lock key** - and "a separate sweep with its own key, inside `run_all`" would have satisfied the
+letter of the ruling while reintroducing exactly the stall it was made to avoid. **One `git log`
+entry between a correct decision and a build that undoes it.**
+
+The decision stands. Its reason is now the loop, not the lock.
+
+## Finding 3 - certification_staleness: right answer, wrong table, and a snapshot-dependent count
+
+The question was whether `run_all` reads `OperationRun`. It does not - `sweep_certification_staleness`
+reads The Office's `certification` table.
+
+**Two corrections beyond that.** The battery does **not** write that table in the same transaction:
+SimForge's battery writes SimForge's `OperationCertification`, and The Office's `certification` is
+populated later by `sweep_verdict_ingest` reading the gate result. Different databases, different
+transactions, an ingest hop between them - so whatever safety this sweep has, it does not come from
+the battery's transaction. And the count is `checked`, not `checked_count`; `checked_count` belongs
+to `sweep_audit_chain` and comes from `audit_log_verify_chain()`.
+
+**The count is the part worth keeping.** In `sweep_certification_staleness`:
+
+    SELECT count(*) FROM certification WHERE state = 'certified'   -- taken FIRST
+    for forge_id in forges: recompute_staleness(conn, forge_id)    -- then this
+
+`checked` is read **before** the per-forge recompute loop and returned as the sweep's
+`denominator`. A certification landing between the count and the recompute changes the population
+without changing the denominator, and **nothing in the result says when the count was taken.**
+
+Same shape as every count in this session: **correct about what it measured, silent about when.**
+
+**Not fixed. What it would take to make the denominator legible:** stamp the moment the count was
+taken beside it, so a reader can tell a stale denominator from a current one; or take the count
+from the same snapshot as the recompute, which means one transaction across the whole loop and a
+longer-held lock. The first is cheap and honest, the second is correct and costly. Neither is
+ruled on here.
+
+## Finding 4 - `gate_result` names three things, and the two identities are not the collision
+
+**Three things carry the name.** The bound Pack module, the client method, and
+`OperationRun.verdict` - the gate verdict itself. The name asserts one thing where there are three,
+and renaming any of them while a run is mid-flight is how the confusion becomes a bug. The new read
+is deliberately `battery_result` so the second thing gets its own name rather than the first losing
+its.
+
+**The identity half does not hold, and the truth is more interesting.** `simforge_run_ref` and
+`idempotency_key` are not the same string and never were:
+
+| | produced by | shape |
+|---|---|---|
+| `simforge_run_ref` | `mint_run_ref(venture_id, forge_id, module_id, content_hash)` | an `op-...` ref |
+| `idempotency_key` | `sha256(f"{task_id}\|{module_id}\|{payload_hash(payload)}")` | 64-char hex |
+
+Different functions, different inputs, different tables. Nothing sets both, so nothing can diverge
+and nothing breaks. What **is** true: both are deterministic derivations, and both exist to defeat
+the same failure. `mint_run_ref`: *"A caller minting a fresh uuid on every attempt defeats that
+control from the outside: two runs, two windows, and the second one young."* `idempotency_key`: *"a
+fresh uuid per attempt would defeat the at_most_once guard."* **Two independent solutions to
+retry-safety, reached separately, neither aware of the other** - the session's shape once more.
+
+## Cadence: three numbers, two of them load-bearing
+
+| | value | where it comes from |
+|---|---|---|
+| **measured** | **24.2s** / 11 probes, mean 2.20s, max 3.9s | `a0-decline-sonnet5` transcript, the examiner ADR-0054 names |
+| **budgeted** | **8 min** per battery | deliberate headroom, ~18x the measured mean - not a measurement |
+| **worst case** | **44 min** | 11 x `llm_request_timeout_seconds` (60) x (`llm_max_retries` 3 + 1) |
+
+The interval is designed against the budget; the advisory lock bounds the pathological case. **The
+44 minutes is not `MAX_SCENARIOS x timeout` - there is no `MAX_SCENARIOS` constant in either
+repository.** It is retries: `_with_retries` runs `max_retries + 1` attempts with exponential
+backoff, so a pass that reaches it is a provider outage, not a slow battery.
+
+## Two defects the tests caught in the new code
+
+**The sweep's failure isolation was broken by the thing it exists to survive.** `session.rollback()`
+on a failed run expires every ORM object, so the next iteration's `run.runRef` emitted a lazy
+refresh and raised `MissingGreenlet` - one failed battery would have failed the whole pass. Fixed
+by reading the refs out as plain strings before the loop.
+
+**A test that greps prose passes on nothing.** The first version of the lock's regression guard
+asserted `"except" not in inspect.getsource(...)` - and matched the word `except` in the function's
+own docstring. Rewritten with `ast` to assert there is no `ExceptHandler` and that the `try` is a
+`try/finally` for the unlock.
+
+## Also stated, because the naming invites the assumption
+
+The battery sweep's `sweep:battery` key is in **SimForge's** cluster. The Office's `sweep:<kind>`
+keys are in The Office's. `hashtext` of the same string in two databases has no relationship, so
+this buys mutual exclusion between SimForge battery passes and **nothing else**. Cross-repo
+serialisation would need a shared lock service, which does not exist and is not implied by the
+shared naming convention.
