@@ -36,6 +36,7 @@ from src.schemas.operation_payloads import (
     TimedOutRun,
     TimeoutSweepResult,
 )
+from src.services.operation.battery_result import battery_result_for
 from src.services.operation.gating import (
     agent_module_assignability,
     agent_operation_states,
@@ -454,6 +455,39 @@ async def read_gate_result(run_ref: str, session: AsyncSession = Depends(get_ses
                 "detail": (
                     f"SimForge has no record of run_ref {run_ref!r}. It was never opened via "
                     "POST /operation/run/start, so there is no window and no verdict to report."
+                ),
+            },
+        )
+    return body
+
+
+@router.get("/battery-result/{run_ref}", dependencies=[Depends(require_role("viewer"))])
+async def read_battery_result(run_ref: str, session: AsyncSession = Depends(get_session)) -> dict:
+    """What a battery OBSERVED on this run - the second read, beside the gate verdict.
+
+    **One `run_ref`, two reads, neither pretending to be the other.**
+    `GET /gate-result/{run_ref}` answers whether the run reached a verdict, in the shape The
+    Office's response manifest declares - a contract with a bound Pack module, which is why it is
+    not extended to carry this. This answers what the battery saw: rubric results, per-class
+    verdicts, failure modes, the model that answered.
+
+    A run with a verdict and no battery behind it is a normal state, not an error: the gate-result
+    path accepts a result The Office computed itself. Such a run reads `observed: false` here while
+    reporting a real verdict there, and the two answers are both correct.
+
+    **This route reads certifications; it cannot reach the battery.** ADR-0050 is unaffected -
+    `battery_result` imports models only, and the walk from this module to
+    `src.services.operation.battery` stays closed.
+    """
+    body = await battery_result_for(session, run_ref)
+    if body is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "unknown_run_ref",
+                "detail": (
+                    f"SimForge has no record of run_ref {run_ref!r}. It was never opened via "
+                    "POST /operation/run/start, so there is nothing a battery could have scored."
                 ),
             },
         )
