@@ -941,6 +941,18 @@ no part of the argument anticipated. A decision that comes out defensible throug
 nobody named is the kind that never gets examined, because the outcome licenses the reasoning
 retrospectively. It is recorded here so that it does not.
 
+## The general property this suggests, recorded as a question rather than a rule
+
+**Adding a legal option that costs less work than an existing correct one moves answers toward
+it.** `REFUSE <n>` costs reading the numbered list and choosing; `DECLINE` costs nothing. Three
+lineages moved on P-09, where the prohibition was available and citable, and one gave up a PASS.
+
+It is invisible in a conformance rate - **every one of those substitutions raised conformance while
+lowering correctness** - which is what makes it worth asking about in advance. The question for the
+next grammar addition is not whether it is legal or whether the rate improves, but **what it costs
+the agent relative to the answer beside it, and which answers will move.** Nothing is built for
+this; it is the question to ask next time.
+
 ## What is left open, and it is not proposed here
 
 **Whether a battery should require a model capable of the protocol, or whether the protocol should

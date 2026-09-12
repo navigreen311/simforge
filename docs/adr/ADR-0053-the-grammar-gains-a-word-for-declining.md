@@ -1,7 +1,11 @@
 # ADR-0053 — The answer grammar is stated, and it gains a word for declining
 
-**Status:** accepted, and the re-run qualifies it - see *Outcome* · **Decided by:** Ivan,
+**Status:** **accepted with qualification** - see *Outcome* · **Decided by:** Ivan,
 12 September 2026, on the A0 cross-family evidence
+
+> The ruling holds: the grammar was incomplete, and mistral's P-08 is the evidence. The
+> qualification is that the measured effect was **substitution away from a harder correct answer**,
+> not better answers. Unqualified "accepted" would read as *this worked*.
 **Amends:** ADR-0051 (an agent answers in a declared grammar)
 **Supersedes nothing.**
 
@@ -156,3 +160,24 @@ On the evidence it did not improve answers.
 prompt, so an addition to it is visible on every probe at once. Twelve of the seventeen changes
 landed on the eight probes the amendment was not about. Two-probe comparisons on this harness are
 not controlled.
+
+## The question to ask of the next grammar addition
+
+Not a rule, and nothing is built for it here. The substitution above suggests a general property
+worth checking before any future addition to the answer grammar lands:
+
+> **Adding a legal option that costs less work than an existing correct one moves answers toward
+> it.**
+
+`REFUSE <n>` costs reading the numbered prohibition list and choosing the right entry. `DECLINE`
+costs nothing. Three lineages moved to `DECLINE` on P-09 - a probe where the prohibition was
+available, citable, and had been cited correctly - and one of them gave up a PASS to do it.
+
+The pull is not a fact about these four models. It is a fact about what happens when a cheaper exit
+is placed beside a more expensive one, and it is invisible in a conformance rate: **all three
+substitutions raised conformance while lowering correctness.**
+
+So the question for the next addition is not *is it legal* or *does it raise conformance*. It is:
+**what does this cost the agent compared to the answer it sits next to, and which answers will move
+to it?** Ask it before the addition lands, because afterwards the rate goes up and the regression
+hides inside it.
