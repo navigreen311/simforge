@@ -54,7 +54,7 @@ from scripts.a0_probes import (
     live_never_do,
 )
 from src.config import get_settings
-from src.services.agent_runtime.llm_client import OllamaProvider
+from src.services.agent_runtime.llm_client import AnthropicProvider, OllamaProvider
 from src.services.operation.battery import (
     battery_system_context,
     observe_answer,
@@ -107,15 +107,23 @@ def _preflight(context: str, selected: tuple[tuple[int, object, str], ...]) -> N
           f"{min(len(p.probe) for _, p, _ in selected)} chars")
 
 
-async def run(model: str, base_url: str, timeout: float) -> dict:
+async def run(model: str, base_url: str, timeout: float, provider_name: str = "ollama") -> dict:
     never_do = live_never_do()
     context = battery_system_context(MODULE_ID, never_do)
     declared_refs = tuple(o.ref for o in obligations_from_never_do(MODULE_ID, never_do))
     selected = _selected()
     _preflight(context, selected)
 
-    provider = OllamaProvider(base_url, model, timeout, 1)
-    print(f"provider constructed by name: {provider.name}/{provider.model} at {provider.base_url}")
+    # Named in code. `resolve_provider` is never called and `settings.llm_provider` never read.
+    if provider_name == "ollama":
+        provider = OllamaProvider(base_url, model, timeout, 1)
+        where = provider.base_url
+    elif provider_name == "anthropic":
+        provider = AnthropicProvider(get_settings().anthropic_api_key, model, timeout, 1)
+        where = "api.anthropic.com"
+    else:
+        raise SystemExit(f"unknown provider {provider_name!r} - name it explicitly")
+    print(f"provider constructed by name: {provider.name}/{provider.model} at {where}")
     print()
 
     scenarios = tuple(probe for _, probe, _ in selected)
@@ -134,8 +142,7 @@ async def run(model: str, base_url: str, timeout: float) -> dict:
         response = await provider.complete(
             system=context,
             messages=[{"role": "scenario", "content": probe.prompt}],
-            temperature=0.0,
-            max_tokens=512,
+            max_tokens=1024,
         )
         elapsed = int((time.monotonic() - started) * 1000)
 
@@ -178,11 +185,12 @@ async def run(model: str, base_url: str, timeout: float) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=DEFAULT_MODEL, help="named explicitly; never resolved")
+    ap.add_argument("--provider", default="ollama", choices=("ollama", "anthropic"))
     ap.add_argument("--out", default=None, help="write the full transcript here as JSON")
     args = ap.parse_args()
 
     settings = get_settings()
-    result = asyncio.run(run(args.model, settings.ollama_base_url, 180.0))
+    result = asyncio.run(run(args.model, settings.ollama_base_url, 300.0, args.provider))
     records = result["records"]
     grading = result["grading"]
 

@@ -265,7 +265,9 @@ class OllamaProvider(LLMProvider):
             content=content,
             tokens_input=int(data.get("prompt_eval_count", 0)),
             tokens_output=int(data.get("eval_count", 0)),
-            model=self.model,
+            # The model the SERVER named, not the one we asked for. `self.model` is a request;
+            # `data["model"]` is what answered, and a certification records the second.
+            model=str(data.get("model") or f"unreported({self.model})"),
             provider=self.name,
             finish_reason=data.get("done_reason", "stop"),
             latency_ms=int((time.perf_counter() - started) * 1000),
@@ -285,6 +287,22 @@ class OllamaProvider(LLMProvider):
 # ═══════════════════════════════════════════════════════════════
 # AnthropicProvider
 # ═══════════════════════════════════════════════════════════════
+
+
+#: Models that REJECT `temperature`/`top_p` with a 400. Sampling controls were removed across the
+#: current generation; sending them is not a degraded request, it is a failed one.
+_NO_SAMPLING_PREFIXES = (
+    "claude-opus-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+
+def rejects_sampling_params(model: str) -> bool:
+    return any(model.startswith(p) for p in _NO_SAMPLING_PREFIXES)
 
 
 class AnthropicProvider(LLMProvider):
@@ -317,15 +335,18 @@ class AnthropicProvider(LLMProvider):
         ] or [{"role": "user", "content": "Begin."}]
         started = time.perf_counter()
 
+        params: dict = {
+            "model": self.model,
+            "system": system,
+            "messages": chat,
+            "max_tokens": max_tokens,
+        }
+        if not rejects_sampling_params(self.model):
+            params["temperature"] = temperature
+            params["top_p"] = 1.0
+
         async def _call():
-            return await client.messages.create(
-                model=self.model,
-                system=system,
-                messages=chat,
-                temperature=temperature,
-                top_p=1.0,
-                max_tokens=max_tokens,
-            )
+            return await client.messages.create(**params)
 
         # Retry on 5xx / connection; never retry 4xx (bad request / auth).
         msg = await _with_retries(
@@ -338,7 +359,10 @@ class AnthropicProvider(LLMProvider):
             content=content.strip(),
             tokens_input=msg.usage.input_tokens,
             tokens_output=msg.usage.output_tokens,
-            model=self.model,
+            # `msg.model` is what the API says answered. `self.model` is what we asked for, and
+            # recording the request as though it were the answer is the substitution this whole
+            # calibration exists to avoid - it was doing exactly that until 2026-09-12.
+            model=str(getattr(msg, "model", "") or f"unreported({self.model})"),
             provider=self.name,
             finish_reason=msg.stop_reason or "stop",
             latency_ms=int((time.perf_counter() - started) * 1000),
