@@ -54,12 +54,12 @@ class Settings(BaseSettings):
     ollama_agent_model: str = Field(default="llama3.1:8b", alias="OLLAMA_AGENT_MODEL")
     ollama_judge_model: str = Field(default="llama3.1:8b", alias="OLLAMA_JUDGE_MODEL")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
-    anthropic_agent_model: str = Field(
-        default="claude-3-5-sonnet-20241022", alias="ANTHROPIC_AGENT_MODEL"
-    )
-    anthropic_judge_model: str = Field(
-        default="claude-3-5-sonnet-20241022", alias="ANTHROPIC_JUDGE_MODEL"
-    )
+    # ADR-0054. `claude-3-5-sonnet-20241022` was the default here and is RETIRED - a 404
+    # not_found_error, absent from the account's model list. It would have configured a provider
+    # that authenticates and fails on its first real call, which `health_check` (bool(api_key))
+    # cannot catch. Measured on the A0 probes: claude-sonnet-5 is 11/11 conformant.
+    anthropic_agent_model: str = Field(default="claude-sonnet-5", alias="ANTHROPIC_AGENT_MODEL")
+    anthropic_judge_model: str = Field(default="claude-sonnet-5", alias="ANTHROPIC_JUDGE_MODEL")
     llm_request_timeout_seconds: float = Field(default=60.0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
     llm_max_retries: int = Field(default=3, alias="LLM_MAX_RETRIES")
     llm_cache_dir: str = Field(default="./tests/fixtures/llm_cache", alias="LLM_CACHE_DIR")
