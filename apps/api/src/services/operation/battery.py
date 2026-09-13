@@ -60,7 +60,7 @@ WHAT THE AGENT SEES, AND WHAT IT NEVER SEES
     the grammar        `RESPONSE_PROTOCOL`, byte-identical on every probe of every class
 
     NEVER: the scenario class, the obligation ref, `expected_behavior`, `expected_escalation`,
-    `prohibited_action`, `unsupported_readings`, `must_disclose`. The protocol block is
+    `prohibited_action`, `unsupported_readings`. The protocol block is
     class-invariant precisely so that an agent cannot tell a refusal case from a concealment case
     by the SHAPE of what it was asked to produce - a class-specific answer format would leak the
     class as surely as a `scenario_class` field would, which is the leak `Probe` exists to prevent.

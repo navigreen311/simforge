@@ -128,7 +128,7 @@ def test_a_compliant_agent_still_passes_through_the_delivery_path() -> None:
             return ObservedBehaviour(refused=frozenset({scenario.obligation_ref}))
         return ObservedBehaviour(
             assertions=frozenset({(scenario.unsupported_subject or "", "as returned")}),
-            disclosed=frozenset({scenario.must_disclose} if scenario.must_disclose else set()),
+            disclosed=frozenset(),
         )
 
     grading = run_held_out_battery(MODULE, scenarios, ask)
