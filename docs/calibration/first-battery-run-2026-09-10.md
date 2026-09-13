@@ -1376,3 +1376,67 @@ five. Two tests were deleted rather than weakened, each site commented.
 no caller, an ingest sweep with no key, and this. Each was a join between two things that were
 never the same; each failed by returning a legal empty answer. This was the only one that produced
 real verdicts over nothing measured.
+
+---
+
+# Entry 12 - the writer works, and The Office has never submitted a capitalforge curriculum
+
+**2026-09-13.** Chasing why `submit_application` cannot be certified turned up the actual location
+of the gap, and it is not where the previous entry's candidate list implied.
+
+## What SimForge holds, exactly
+
+| forge / module | version | authored_by | never_do |
+|---|---|---|---|
+| capital-forge/statement_ingest | 1.2.0 | ivan | `['overwrite_prior_statement']` |
+| capital-forge/reconciliation | 1.2.0 | ivan | `['delete_ledger_entry']` |
+| capital-forge/wire_release | 1.1.0 | ivan | `['release_without_dual_approval']` |
+| voiceforge/call_flow | 2.1.0 | ivan | `[]` |
+| **capital-forge/statement_ingest** | **1.0.0** | **office** | `['never post to the ledger']` |
+
+**`submit_application` has zero rows in SimForge.** So the skip is `SKIP_NO_MODULE`, not
+`SKIP_NO_NEVER_DO` - the module is unknown, not known-and-empty. Only `call_flow` reaches
+`SKIP_NO_NEVER_DO`.
+
+The three capital-forge lists are **one entry each and all different** - not one identical
+sentence. They are terse action tokens, which is what `parse_obligation` was built for and why the
+splicing defect never showed on them.
+
+## The writer exists and has run with real content
+
+`submit_curriculum` writes `ForgeInstructionSet` on an accepted submission. **The fifth row proves
+it works end to end**: `authoredBy='office'`, written 2026-09-07 20:16:30 through the Office bridge,
+carrying a real never-do list. That is ADR-0047's live call. The other four are seeds from 21-27
+August, authored by hand.
+
+So "nothing writes it" is false, and "the handover has never run" is false. **It ran once, and it
+wrote what it was sent.**
+
+## The gap is upstream: nothing has ever been sent for capitalforge
+
+    curriculum_submission by forge:  cre-forge 8, voiceforge 2
+    capitalforge submissions ever made: 0
+
+The Office **holds** the content - `forge_operating_instruction` for `capitalforge/submit_application`
+carries **8 never-do entries** in its live `content->'never_do'`. It has simply never submitted
+them. `burkham_wickmont.json` is a **captured generator output**, not a record of a submission that
+was ever made: nothing in `curriculum_submission` corresponds to it.
+
+So the chain is: content exists in The Office -> **no submission** -> no `ForgeInstructionSet` in
+SimForge -> `SKIP_NO_MODULE` -> no battery -> no certification. **The break is the first arrow.**
+
+## Correcting how the previous read has been used
+
+Entry 10 listed **ten** capitalforge modules, not eleven, and it did not present them as a ready
+set. It stated the opposite in as many words: *"EXACT intersection (forge_id AND module_id):
+EMPTY"* and *"the answer to 'which module could complete this loop today' is: none."* The list
+described **what The Office holds instructions for** - one of three conditions - and the entry said
+explicitly that SimForge holds no instruction set for any of them.
+
+This entry does not supersede that read; it agrees with it and supplies the mechanism the read
+stopped short of: every one of the ten hits `SKIP_NO_MODULE`, and the reason is that no capitalforge
+curriculum has ever been submitted.
+
+**Worth naming anyway**: a list published as "what would be needed" was carried forward as "what is
+ready". The entry's own conclusion was one paragraph below the table, and the table travelled
+without it.
