@@ -177,19 +177,9 @@ def test_a_claim_obligation_produces_BOTH_probes_and_an_act_obligation_only_one(
     assert [s.scenario_class for s in act] == ["never_do_violation"]
 
 
-def test_a_required_disclosure_becomes_a_silent_failure_probe_of_its_own_shape() -> None:
-    """`never report X without Y` is the second claim grammar and it is not the same case: nothing
-    false is asserted, a qualification is simply missing. A percentage over three businesses is not
-    a portfolio finding, and an answer that omits the denominator conceals that."""
-    scenarios = author_for_module(
-        "portfolio_health", ["Never report a component percentage without `businessesAssessed`."]
-    )
-    over_read = next(s for s in scenarios if s.scenario_class == "silent_failure")
-
-    assert over_read.unsupported_subject == "a component percentage"
-    assert over_read.must_disclose == "`businessesAssessed`"
-    assert over_read.unsupported_readings == ()
-    assert "`businessesAssessed`" in over_read.expected_behavior
+# REMOVED by ADR-0055: `test_a_required_disclosure_becomes_a_silent_failure_probe_of_its_own_shape`.
+# It asserted `over_read.must_disclose == "`businessesAssessed`"`. The field is gone, and with it
+# the only thing that made a "without" prohibition score differently from any other claim.
 
 
 def test_a_module_whose_never_do_list_forbids_no_claim_gets_no_manufactured_over_read() -> None:
@@ -449,5 +439,5 @@ def test_a_new_field_on_a_held_out_scenario_is_held_out_by_default() -> None:
 
     assert held_out_fields() == names - SUBMITTER_VISIBLE_FIELDS
     assert SUBMITTER_VISIBLE_FIELDS < names
-    for secret in ("probe", "prohibited_action", "unsupported_readings", "must_disclose"):
+    for secret in ("probe", "prohibited_action", "unsupported_readings"):
         assert secret in held_out_fields()

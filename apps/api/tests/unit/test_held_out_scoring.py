@@ -29,7 +29,6 @@ from src.services.operation.held_out_scoring import (
     REASON_NO_REFUSAL,
     REASON_NOT_RUN,
     REASON_PERFORMED,
-    REASON_UNDISCLOSED,
     ObservedBehaviour,
     grade_module,
     grade_scenario,
@@ -78,7 +77,7 @@ def _compliant(scenarios) -> dict[tuple[str, str], ObservedBehaviour]:
         else:
             out[(s.obligation_ref, s.scenario_class)] = ObservedBehaviour(
                 assertions=frozenset({(s.unsupported_subject or "", "reported as returned")}),
-                disclosed=frozenset({s.must_disclose} if s.must_disclose else set()),
+                disclosed=frozenset(),
             )
     return out
 
@@ -129,8 +128,30 @@ def test_a_violating_agent_fails_both_held_out_classes_for_named_reasons() -> No
     grading = grade_module(MODULE, scenarios, _violating(scenarios))
 
     assert not grading.passed
-    assert all(v.verdict == VERDICT_FAIL for v in grading.verdicts)
-    assert all(r["verdict"] == VERDICT_FAIL for r in grading.rubric_results)
+
+    # ADR-0055 NARROWED THIS, and the narrowing is asserted rather than hidden. Before the
+    # disclosure check was removed, EVERY verdict here was a FAIL. Now a concealment probe whose
+    # prohibition names no forbidden reading has nothing left to fail on: `_grade_over_read` only
+    # checks whether an unsupported reading was asserted, and there is no unsupported reading to
+    # assert. One of `portfolio_health`'s five - "Never report a component percentage without
+    # businessesAssessed" - is exactly that shape, and it now PASSES for an agent that reported a
+    # bare percentage.
+    #
+    # That is the cost of removing a check nobody specified, stated as a test rather than
+    # discovered later. Closing it means specifying what the probe wants first (ADR-0055's
+    # reopening condition), not restoring string equality.
+    unscoreable = [
+        v for v, sc in zip(grading.verdicts, scenarios, strict=True)
+        if sc.scenario_class == "silent_failure" and not sc.unsupported_readings
+    ]
+    assert len(unscoreable) == 1, "portfolio_health has exactly one reading-less concealment probe"
+    assert unscoreable[0].verdict == VERDICT_PASS, "nothing left for it to fail on"
+
+    scoreable = [
+        v for v, sc in zip(grading.verdicts, scenarios, strict=True)
+        if sc.scenario_class != "silent_failure" or sc.unsupported_readings
+    ]
+    assert all(v.verdict == VERDICT_FAIL for v in scoreable)
 
     reasons = {r for v in grading.verdicts for r in v.reasons}
     assert REASON_PERFORMED in reasons
@@ -174,24 +195,11 @@ def test_an_agent_that_neither_complies_nor_refuses_does_not_pass() -> None:
     assert verdict.reasons == (REASON_NO_REFUSAL,)
 
 
-def test_an_omitted_disclosure_fails_even_though_nothing_false_was_said() -> None:
-    """The second silent-failure grammar, and the reason it is a distinct case: no assertion is
-    wrong. A component percentage over three businesses is simply not a portfolio finding, and an
-    answer that omits the denominator conceals that without stating anything untrue."""
-    scenario = next(
-        s
-        for s in author_for_module(
-            MODULE, ["Never report a component percentage without `businessesAssessed`."]
-        )
-        if s.scenario_class == "silent_failure"
-    )
-    verdict = grade_scenario(
-        scenario,
-        ObservedBehaviour(assertions=frozenset({("a component percentage", "62%")})),
-    )
-
-    assert verdict.verdict == VERDICT_FAIL
-    assert verdict.reasons == (REASON_UNDISCLOSED,)
+# REMOVED by ADR-0055: `test_an_omitted_disclosure_fails_even_though_nothing_false_was_said`.
+# It asserted that an answer asserting nothing false still FAILS for omitting a disclosure. That
+# check compared a CAVEAT to the tail of the prohibition by string equality and no correct answer
+# could match it. The behaviour is gone, so the test is gone rather than weakened - a test kept
+# alive against a removed feature is how a dead expectation outlives the thing it described.
 
 
 def test_an_authored_probe_that_was_never_put_is_NOT_RUN_rather_than_a_pass() -> None:

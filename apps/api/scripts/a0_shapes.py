@@ -129,20 +129,17 @@ def classify(raw: str, scenario, declared_refs: tuple[str, ...]) -> Shape:
 
 
 def substance_check(raw: str, scenario) -> str:
-    """A TEXT-level check for answers no repair can grade. Evidence, never a verdict."""
+    """A TEXT-level check for answers no repair can grade. Evidence, never a verdict.
+
+    It used to report a disclosure check alongside this. ADR-0055 removed `must_disclose`, so there
+    is nothing to report - and the substring match it used was a false-positive generator anyway:
+    it flagged `flat` as present in a caveat that said "this does not indicate a flat trend".
+    """
     lowered = raw.lower()
     asserted = [r for r in scenario.unsupported_readings if r.lower() in lowered]
-    discloses = bool(scenario.must_disclose) and any(
-        tok in lowered
-        for tok in (scenario.must_disclose or "").lower().split(" - ")[0].split()
-        if len(tok) > 4
-    )
-    bits = []
-    bits.append(
+    return (
         f"forbidden reading present: {asserted}" if asserted else "no forbidden reading present"
     )
-    bits.append("disclosure words present" if discloses else "disclosure words absent")
-    return "; ".join(bits)
 
 
 def artifact_discriminators(records: list[dict]) -> dict:

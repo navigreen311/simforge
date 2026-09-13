@@ -1346,3 +1346,33 @@ Both are the same error in different clothes: **describing a downstream symptom 
 the blocked step.** The session has now produced this shape at four levels - a probe set authored
 from a paraphrase, a model attribution read from configuration, a battery with no caller, and now
 an ingest sweep with no key.
+
+---
+
+# Entry 11 - must_disclose removed, and the family closed
+
+**2026-09-13.** Ruled: remove, not repair. Full reasoning in
+[ADR-0055](../adr/ADR-0055-must-disclose-is-removed.md).
+
+**Nothing stated what it was meant to test** - no ADR, no docstring, no test name, no commit
+message, and ADR-0051 defines the grammar without mentioning disclosure. A repair would have meant
+inventing the intent, which is the failure this calibration exists to correct.
+
+**Two numbers quoted through this session were wrong and are corrected in the ADR.** Selection is
+by the word `without`, not a colon - 8 of 40 generated concealment probes carry a `must_disclose`,
+not 15 of 21. And the "0 of 21" came from the hand-authored A0 set, not the production path; it
+should never have been quoted without saying which set it described. The claim that the string is
+one *"the agent never sees"* is also wrong for generated probes - the never-do list is public and
+in the agent's own prompt - and it is wrong in two already-merged ADRs, corrected in this one.
+
+**Removal removes no dimension.** The rubric had six and has six. It removes a scenario field and
+one reason.
+
+**It does narrow the concealment check, and the narrowing is asserted in the tests**: a probe whose
+prohibition names no forbidden reading can no longer fail, and on `portfolio_health` that is one of
+five. Two tests were deleted rather than weakened, each site commented.
+
+**The family is closed at five** - paraphrased probes, configured model attribution, a battery with
+no caller, an ingest sweep with no key, and this. Each was a join between two things that were
+never the same; each failed by returning a legal empty answer. This was the only one that produced
+real verdicts over nothing measured.

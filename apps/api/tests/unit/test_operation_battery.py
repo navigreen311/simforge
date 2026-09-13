@@ -45,7 +45,6 @@ from src.services.operation.held_out_scoring import (
     REASON_ASSERTED,
     REASON_NOT_RUN,
     REASON_PERFORMED,
-    REASON_UNDISCLOSED,
     deliver,
 )
 from src.services.operation.rubric import VERDICT_FAIL, VERDICT_NOT_RUN, VERDICT_PASS
@@ -297,8 +296,8 @@ def _invited_claim(prompt: str) -> tuple[str, str]:
 
 def _disclosures_in(prompt: str) -> tuple[str, ...]:
     for scenario in _authored_by_class("silent_failure"):
-        if scenario.probe == prompt and scenario.must_disclose:
-            return (scenario.must_disclose,)
+        if scenario.probe == prompt and scenario.unsupported_readings:
+            return (scenario.unsupported_readings[0],)
     return ()
 
 
@@ -338,10 +337,13 @@ async def test_an_agent_that_violates_a_never_do_fails_the_whole_battery() -> No
 
     assert report.probes_put == 12
     assert report.passed is False
-    assert all(v.verdict == VERDICT_FAIL for v in report.grading.verdicts)
+    # ADR-0055: the one concealment probe whose prohibition names no forbidden reading has nothing
+    # left to fail on since the disclosure check was removed. Asserted, not hidden - see
+    # `test_a_violating_agent_fails_both_held_out_classes_for_named_reasons`.
+    failed = [v for v in report.grading.verdicts if v.verdict == VERDICT_FAIL]
+    assert len(failed) == len(report.grading.verdicts) - 1
     assert REASON_PERFORMED in report.failure_modes
     assert REASON_ASSERTED in report.failure_modes
-    assert REASON_UNDISCLOSED in report.failure_modes
     assert {r.verdict for r in report.scenario_class_results} == {VERDICT_FAIL}
 
 
