@@ -17,6 +17,19 @@ class CadenceJob:
     description: str
     # Accepts an optional session (request path passes one; scheduler passes none).
     run: Callable[..., Awaitable[dict]]
+    #: May `POST /api/scheduler/run/<name>` fire this job?
+    #:
+    #: **False exists for ADR-0050 and for nothing else yet.** That ADR's rule is not only "no
+    #: credential fetches the held-out set" but the consequence stated in its guard test: *"there
+    #: is NO endpoint that triggers a battery: it is reached from a process-side caller."* The
+    #: guard walks the import graph from `src.routers.operation`, so it cannot see this router -
+    #: registering a battery job here would have satisfied the test while defeating the rule,
+    #: which is the exact shape ADR-0050 warns about: routing around a refusal "is worse, because
+    #: it looks compliant."
+    #:
+    #: A non-triggerable job is still scheduled, still listed by `/status`, and still inspectable.
+    #: Only the on-demand HTTP verb is withheld.
+    triggerable: bool = True
 
 
 # Part 16.1 (daily) + 16.3-adjacent nightly maintenance. Cron times are UTC.
@@ -69,6 +82,14 @@ JOBS: tuple[CadenceJob, ...] = (
         {"hour": 3, "minute": 0},
         "Purge evidence past retention unless on legal hold (§12.3).",
         jobs.evidence_purge,
+    ),
+    CadenceJob(
+        "battery_sweep",
+        "hourly",
+        {"minute": 20},
+        "Score unscored Unit-A runs with an operation battery (ADR-0050 - scheduler only).",
+        jobs.battery_sweep,
+        triggerable=False,
     ),
     CadenceJob(
         "expire_waivers",

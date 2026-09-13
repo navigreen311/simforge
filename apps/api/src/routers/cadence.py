@@ -1,4 +1,14 @@
-"""Cadence/scheduler router (Part 16) — inspect the schedule + trigger a job on demand."""
+"""Cadence/scheduler router (Part 16) — inspect the schedule + trigger a job on demand.
+
+Not every registered job is triggerable from here. `CadenceJob.triggerable` is checked before
+`run`, because ADR-0050's consequence — no endpoint triggers a battery — is about this router and
+is invisible to the guard test that walks out of `src.routers.operation`.
+
+**The role dependency is not what holds that line.** ADR-0050 read `Principal.has_role` out of the
+code and found `return role in self.roles or "admin" in self.roles` — any check answers True once
+`admin` is present. So `require_role("admin")` below is the weakest gate in the file, and a
+battery must be excluded by name rather than by role.
+"""
 
 from __future__ import annotations
 
@@ -35,5 +45,16 @@ async def run_job(job_name: str, session: AsyncSession = Depends(get_session)) -
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown job '{job_name}'. Known: {sorted(JOBS_BY_NAME)}",
+        )
+    if not job.triggerable:
+        # 403 and not 404: the job exists, is scheduled, and is listed by /status. Pretending it
+        # were unknown would hide a running job from an operator to enforce a rule about who may
+        # START it - two different questions. See CadenceJob.triggerable and ADR-0050.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Job '{job_name}' is scheduler-only and cannot be triggered by request. "
+                "See ADR-0050: no endpoint triggers a battery."
+            ),
         )
     return await job.run(session=session)

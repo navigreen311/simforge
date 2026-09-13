@@ -261,3 +261,68 @@ def test_the_lock_is_dialect_checked_and_never_exception_swallowed() -> None:
     src = inspect.getsource(battery_sweep.battery_sweep_lock)
     assert 'dialect.name != "postgresql"' in src
     assert "pg_try_advisory_lock" in src and "pg_advisory_unlock" in src
+
+
+# --- the lock's Postgres branch, which had never executed (ADR-0057) -----------------------
+
+
+def test_the_lock_statement_compiles_for_the_driver_this_service_actually_uses() -> None:
+    """The lock's Postgres branch was malformed for nine days and two tests did not notice.
+
+    It was written `exec_driver_sql("... hashtext(%s)", (LOCK_KEY,))`. `%s` is psycopg's
+    paramstyle; `config.py` rewrites every URL to `postgresql+asyncpg://`, and asyncpg's is `$1`.
+    Against a real connection it raised `syntax error at or near "%"`.
+
+    **Why the existing tests passed.** One asserts the SQLite branch — the branch whose whole
+    behaviour is to take no lock and return. The other asserts the module's *source text* contains
+    `dialect.name != "postgresql"`. Between them they cover the shape of the code and the branch
+    that does nothing, and neither ever sent the statement anywhere.
+
+    CI has no Postgres service, so a live test here would be permanently skipped — which is the
+    same hiding mechanism wearing a different hat. Compiling against the real dialect needs no
+    database and fails on exactly the defect that shipped.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.dialects.postgresql import asyncpg as pg_asyncpg
+
+    from src.workers.battery_sweep import LOCK_KEY
+
+    compiled = text("SELECT pg_try_advisory_lock(hashtext(:key))").compile(
+        dialect=pg_asyncpg.dialect(), compile_kwargs={"render_postcompile": True}
+    )
+    rendered = str(compiled)
+    assert "%s" not in rendered, "psycopg paramstyle against an asyncpg driver is the bug"
+    assert "$1" in rendered, f"asyncpg renders positional $-params; got {rendered!r}"
+    assert compiled.params == {"key": None} or "key" in compiled.params
+    assert LOCK_KEY == "sweep:battery"
+
+
+def test_the_lock_does_not_reach_for_the_raw_driver_cursor() -> None:
+    """`exec_driver_sql` bypasses SQLAlchemy's paramstyle translation, which is how `%s` got in.
+
+    Asserted on the source because the alternative — a live Postgres — is what CI does not have.
+    Unlike the prose assertion it replaces, this one names the mechanism that failed.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from src.workers import battery_sweep
+
+    src = textwrap.dedent(inspect.getsource(battery_sweep.battery_sweep_lock))
+
+    # Read the CALLS, not the characters. The first version of this assertion was
+    # `"exec_driver_sql" not in src` and it failed against the fix, because the fix's own comment
+    # explains what it stopped doing. A source test that cannot tell code from prose is the
+    # weaker sibling of the prose assertion it was written to replace.
+    called = {
+        node.func.attr
+        for node in ast.walk(ast.parse(src))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    } | {
+        node.func.id
+        for node in ast.walk(ast.parse(src))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "exec_driver_sql" not in called
+    assert "text" in called, "the statement goes through SQLAlchemy so the dialect renders it"
