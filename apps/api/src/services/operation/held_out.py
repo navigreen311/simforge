@@ -172,22 +172,47 @@ class Obligation:
 
     @property
     def ref(self) -> str:
-        """A stable id for this obligation: module, position, and a digest of the sentence.
+        """A stable id for this obligation: module and position. **Positional, ADR-0056.**
 
-        The digest is what makes it stable ACROSS a reordered list and unstable across an edited
-        one — which is the correct sensitivity. An obligation whose wording changed is a different
-        obligation and the scenario exercising it should not silently carry over.
+        The digest of the sentence used to be appended. It was dropped, and the reason is that the
+        thing it protected against is already closed upstream: a never-do edit changes
+        `forge_operating_instruction.content`, a database trigger recomputes `content_hash`,
+        `recompute_staleness` marks every certification bound to the old hash `stale_instructions`,
+        and SimForge's own `is_content_hash_void` VOIDs a run whose text has moved. **A stale index
+        cannot be graded against a live certification**, so the ref does not need to carry the
+        sensitivity a second time.
+
+        The docstring this replaces claimed the digest made the ref "stable ACROSS a reordered
+        list". It never did: the index is in the ref, so reordering always changed it. The digest
+        only added instability across rewording.
+
+        **This ref and `content_hash` are not interchangeable evidence.** This is SimForge's, over
+        one entry as SimForge received it; that is The Office's, over all eight instruction
+        sections. They agree because SimForge upserts what The Office sends, and nothing asserts
+        they move together - a change to a non-`never_do` section moves one and not the other.
         """
-        digest = hashlib.sha256(self.text.strip().encode("utf-8")).hexdigest()[:12]
-        return f"{self.module_id}#{self.index}:{digest}"
+        return f"{self.module_id}#{self.index}"
 
     @property
     def is_claim(self) -> bool:
         return self.kind == ObligationKind.PROHIBITED_CLAIM
 
 
+#: A prohibition ends at its first sentence terminator; everything after it is the author's
+#: reasoning. `as` and `without` split and then consumed to the END of the entry, so on
+#: real instruction text the rationale landed inside the grading key - and a forbidden reading of
+#: `'grade F. It means nothing was assessed. Shared rule 1: ...'` can never equal what a model
+#: says. The check failed OPEN: five of seven violations on `portfolio_health` went uncaught.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+
+
+def _first_sentence(fragment: str) -> str:
+    """The clause itself, without the reasoning that follows it in the same entry."""
+    return _SENTENCE_END.split(fragment, maxsplit=1)[0]
+
+
 def _clean(fragment: str) -> str:
-    return fragment.strip().strip(".,;:").strip()
+    return _first_sentence(fragment).strip().strip(".,;:").strip()
 
 
 def parse_obligation(module_id: str, index: int, text: str) -> Obligation:
@@ -245,7 +270,9 @@ def parse_obligation(module_id: str, index: int, text: str) -> Obligation:
 def _readings(tail: str) -> tuple[str, ...]:
     """`"zero, or as grade F"` -> `("zero", "grade F")`. One prohibition, several readings, and
     each is its own way to be wrong."""
-    return tuple(r for r in (_clean(p) for p in _READING_SPLIT.split(tail)) if r)
+    return tuple(
+        r for r in (_clean(p) for p in _READING_SPLIT.split(_first_sentence(tail))) if r
+    )
 
 
 def obligations_from_never_do(module_id: str, never_do: Sequence[str]) -> tuple[Obligation, ...]:
