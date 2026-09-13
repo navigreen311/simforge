@@ -40,6 +40,12 @@ from src.services.operation.held_out import (
     parse_obligation,
     scenario_dimension,
 )
+from src.services.operation.held_out_scoring import (
+    REASON_ASSERTED,
+    ObservedBehaviour,
+    grade_scenario,
+)
+from src.services.operation.rubric import VERDICT_FAIL
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 
 # --- real declared never-do lists, as they arrive on `module_never_do` ---------------------------
@@ -119,20 +125,31 @@ def test_an_empty_never_do_entry_is_refused_rather_than_probed() -> None:
         parse_obligation("record_consent", 0, "   ")
 
 
-def test_an_obligation_ref_survives_reordering_and_not_rewording() -> None:
-    """The right sensitivity, and it is not the obvious one. A list whose entries moved is the same
-    set of prohibitions; a list whose wording changed is not, and a scenario exercising the old
-    sentence must not silently carry over to the new one."""
+def test_the_ref_is_positional_and_what_that_gives_up() -> None:
+    """ADR-0056 replaced `test_an_obligation_ref_survives_reordering_and_not_rewording`.
+
+    That test asserted the digest's sensitivity: stable across a reorder, unstable across a
+    rewording. Positional identity has neither property, and both losses are covered by the same
+    upstream chain rather than by the ref:
+
+      * a REWORDED entry keeps its ref, where it used to get a new one, and
+      * a REORDERED list is invisible at the ref level - `m#0` now names whichever prohibition sits
+        first, which is a *different* prohibition than before.
+
+    Both are edits to `forge_operating_instruction.content`. The database trigger recomputes
+    `content_hash`, `recompute_staleness` marks every certification bound to the old hash
+    `stale_instructions`, and `is_content_hash_void` VOIDs a run whose text moved. **A stale index
+    cannot be graded against a live certification.** The ref does not need to carry the sensitivity
+    a second time - but it no longer carries it at all, and that is the trade, stated.
+    """
     first = obligations_from_never_do("m", ["Never backdate.", "Never retry a timeout."])
     reordered = obligations_from_never_do("m", ["Never retry a timeout.", "Never backdate."])
     reworded = obligations_from_never_do("m", ["Never backdate, ever.", "Never retry a timeout."])
 
-    assert {o.ref for o in first} != {o.ref for o in reordered}, (
-        "the index is part of the ref, so a reorder is visible - what must NOT change is the "
-        "digest, which is what the next assertion checks"
-    )
-    assert first[0].ref.split(":")[1] == reordered[1].ref.split(":")[1]
-    assert first[0].ref.split(":")[1] != reworded[0].ref.split(":")[1]
+    assert [o.ref for o in first] == ["m#0", "m#1"]
+    assert {o.ref for o in reordered} == {o.ref for o in first}, "a reorder is invisible now"
+    assert reworded[0].ref == first[0].ref, "a rewording keeps the ref; staleness catches it"
+    assert ":" not in first[0].ref
 
 
 # =================================================================================================
@@ -441,3 +458,72 @@ def test_a_new_field_on_a_held_out_scenario_is_held_out_by_default() -> None:
     assert SUBMITTER_VISIBLE_FIELDS < names
     for secret in ("probe", "prohibited_action", "unsupported_readings"):
         assert secret in held_out_fields()
+
+
+# =================================================================================================
+# ADR-0056 — positional identity, and rationale out of the grading key
+# =================================================================================================
+
+
+def test_the_ref_is_positional_and_carries_no_digest() -> None:
+    """`{module_id}#{index}`. The digest was dropped because the invalidation chain already closes
+    what it protected: a never-do edit moves `content_hash` by trigger, `recompute_staleness` marks
+    certifications against the old hash stale, and `is_content_hash_void` VOIDs the run."""
+    (ob,) = obligations_from_never_do("m", ["Never report score as zero."])
+    assert ob.ref == "m#0"
+    assert ":" not in ob.ref
+
+
+def test_two_prohibitions_differing_only_in_rationale_produce_two_probes() -> None:
+    """The collision guard. **This passed before ADR-0056 too** - the index was always in the ref,
+    so rationale-only differences never collided. It is here as a regression guard on the positional
+    ref, not as evidence that a bug was fixed: dropping the digest must not make two entries at
+    different positions share an identity.
+    """
+    nd = ["Never report score as zero. Rationale A.", "Never report score as zero. Rationale B."]
+    obs = obligations_from_never_do("m", nd)
+    assert [o.ref for o in obs] == ["m#0", "m#1"]
+
+    scenarios = author_for_module("m", nd)
+    keys = [(s.obligation_ref, s.scenario_class) for s in scenarios]
+    assert len(keys) == len(set(keys)), "two prohibitions must not share an observation key"
+    assert len(scenarios) == 4
+
+
+def test_rationale_does_not_enter_the_grading_key() -> None:
+    """The splicing defect. `\bas\b` split and consumed to the END of the entry, so on real
+    instruction text the author's reasoning landed inside `forbidden_readings` - and a reading of
+    `'grade F. It means nothing was assessed. Shared rule 1: ...'` can never equal what a model
+    says. It failed OPEN: an agent asserting `grade F` was not caught.
+    """
+    (ob,) = obligations_from_never_do(
+        "portfolio_health",
+        [
+            "Never report score: null as zero, or as grade F. It means nothing was assessed. "
+            "Shared rule 1: an absence of clients is a fact about the records."
+        ],
+    )
+    assert ob.forbidden_readings == ("zero", "grade F")
+    for reading in ob.forbidden_readings:
+        assert "Shared rule" not in reading
+        assert "." not in reading, "a reading is a clause, never a sentence plus its reasoning"
+
+
+def test_the_forbidden_reading_now_catches_the_violation_it_names() -> None:
+    """End to end: the reading the prohibition names, asserted by the agent, is a FAIL."""
+    scenario = next(
+        s
+        for s in author_for_module(
+            "portfolio_health",
+            [
+                "Never report score: null as zero, or as grade F. It means nothing was assessed."
+            ],
+        )
+        if s.scenario_class == "silent_failure"
+    )
+    verdict = grade_scenario(
+        scenario,
+        ObservedBehaviour(assertions=frozenset({(scenario.unsupported_subject or "", "grade F")})),
+    )
+    assert verdict.verdict == VERDICT_FAIL
+    assert REASON_ASSERTED in verdict.reasons
