@@ -20,6 +20,11 @@ from src.telemetry.logging import get_logger
 
 log = get_logger("cadence")
 
+#: Runs scored per battery pass. Eleven live model calls each, so this is a spend ceiling as much
+#: as a throughput one: ten is the sweep's own default, restated here because a scheduled caller
+#: choosing it silently is how a cost becomes invisible.
+BATTERY_SWEEP_LIMIT = 10
+
 
 @asynccontextmanager
 async def _session(session: AsyncSession | None) -> AsyncIterator[AsyncSession]:
@@ -97,6 +102,62 @@ async def hourly_approval_escalation(session: AsyncSession | None = None) -> dic
     async with _session(session) as s:
         expired = await expire_stale_requests(s)
     return {"job": "hourly_approval_escalation", "expired": expired, "count": len(expired)}
+
+
+async def battery_sweep(session: AsyncSession | None = None) -> dict:
+    """Put a battery to each unscored Unit-A run, and let each one close its own run.
+
+    **Hourly, not daily, and the interval is not a taste.** A run's default window is
+    `DEFAULT_RUN_WINDOW_MINUTES = 180`. A daily sweep would arrive after almost every run had
+    already been stamped TIMEOUT, and `unscored_runs` deliberately does not re-score a timed-out
+    run - so a daily cadence would make this job a no-op against the very runs it exists to find.
+    Hourly leaves a run at worst 60 minutes of its 180 waiting, and at least 120 for a battery
+    that the sweep's own docstring warns "can take minutes".
+
+    **The examiner is named in the result because it is not always the one you assume.**
+    `LLM_PROVIDER` defaults to `stub`, and `auto` resolves to ollama-if-reachable-else-stub - never
+    anthropic. A scheduled pass therefore scores with whatever that resolution produced, unattended.
+    The certification itself already records it (`agent_model=provider_label(...)` in
+    `battery_for_run`), so this is not silent; surfacing it here means the operator reading the job
+    log sees it without opening a cert.
+
+    Degrades the way `daily_snapshot` does: no Village data, no runtime, no pass - a skip rather
+    than a 500, because an unreachable reader is a deployment fact and not a sweep failure.
+    """
+    from src.services.agent_runtime.llm_client import provider_label
+    from src.services.agent_runtime.runtime import build_agent_runtime
+    from src.workers.battery_sweep import battery_sweep_lock, sweep_unscored_runs
+
+    try:
+        reader = VillageReader.from_settings()
+    except VillageReaderError as exc:
+        log.warning("cadence_battery_sweep_skipped", error=str(exc))
+        return {"job": "battery_sweep", "skipped": "village_data_unavailable"}
+
+    runtime = build_agent_runtime(reader)
+    # The lock gets its OWN session, and this is not tidiness.
+    #
+    # `battery_sweep_lock` pins itself to one connection because `pg_advisory_lock` is held by the
+    # backend, not the transaction. `sweep_unscored_runs` calls `session.rollback()` for every run
+    # whose battery raises - that is the whole point of its `except` - and a rollback hands the
+    # connection back. Holding the lock on the swept session therefore means the first failed run
+    # closes the connection the unlock needs, and the pass ends in `ResourceClosedError` instead of
+    # the outcome it had already computed. Observed, not theorised.
+    async with _session(session) as s, SessionLocal() as lock_session:
+        async with battery_sweep_lock(lock_session) as acquired:
+            if not acquired:
+                log.info("cadence_battery_sweep_locked")
+                return {"job": "battery_sweep", "skipped": "another_pass_holds_the_lock"}
+            outcome = await sweep_unscored_runs(s, runtime=runtime, limit=BATTERY_SWEEP_LIMIT)
+
+    return {
+        "job": "battery_sweep",
+        "examiner": provider_label(runtime.provider),
+        "considered": outcome.considered,
+        "scored": outcome.scored,
+        "skipped": [list(pair) for pair in outcome.skipped],
+        "failed": [list(pair) for pair in outcome.failed],
+    }
 
 
 async def daily_fingerprint(session: AsyncSession | None = None) -> dict:

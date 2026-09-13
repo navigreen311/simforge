@@ -52,7 +52,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
@@ -96,17 +96,18 @@ async def battery_sweep_lock(session: AsyncSession) -> AsyncIterator[bool]:
         yield True
         return
 
-    got = await conn.exec_driver_sql(
-        "SELECT pg_try_advisory_lock(hashtext(%s))", (LOCK_KEY,)
-    )
+    # `text()` with a bound parameter, NOT `exec_driver_sql` with `%s`. This service's driver is
+    # asyncpg (config.py rewrites every URL to `postgresql+asyncpg://`), whose paramstyle is `$1`;
+    # `%s` is psycopg's. The original raised `syntax error at or near "%"` the first time it ever
+    # reached a Postgres connection - which was the day this sweep acquired a caller, because the
+    # only tests it had asserted the SQLite branch and the source text. See ADR-0057.
+    got = await conn.execute(text("SELECT pg_try_advisory_lock(hashtext(:key))"), {"key": LOCK_KEY})
     acquired = bool(got.scalar())
     try:
         yield acquired
     finally:
         if acquired:
-            await conn.exec_driver_sql(
-                "SELECT pg_advisory_unlock(hashtext(%s))", (LOCK_KEY,)
-            )
+            await conn.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), {"key": LOCK_KEY})
 
 
 @dataclass(frozen=True, slots=True)
