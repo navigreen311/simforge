@@ -1496,3 +1496,63 @@ binds the certification to an instruction set whose prohibition is another.
 
 Not built, deliberately - it is its own decision. Recorded because it is live, it is measurable,
 and it is the venture-collision mechanism firing inside a single venture.
+
+---
+
+# Entry 14 - the name was never the candidate, and the local model cannot be read
+
+**2026-09-17.** Ivan ruled that certification runs on the model Village agents actually run, and
+that a certification counts only if it names the model, its file with size and quantization, and
+the generation settings ([ADR-0060](../adr/ADR-0060-a-certification-names-the-model-file.md)). The
+survey is in [local-model-certification-2026-09-17.md](../local-model-certification-2026-09-17.md).
+
+## The gap ADR-0054 left one level down
+
+ADR-0054 closed *"the provider we configured"* against *"the provider that answered"*. What it
+recorded was `ollama/llama3.1:8b` - **a label, and three different candidates produce it.** Re-pull
+the tag at another quantization: same string. Serve the same file at 0.7 instead of 0.0: same
+string. A certification earned under one reads as current under the other.
+
+Same shape as entries 8-13, at a finer grain: **a fact that looked recorded and was a name for
+one.**
+
+## Two drifts that were invisible and are now facts
+
+Village routes its agents to `phi4:latest` at temperature 0.7 with a 4000-token cap
+(`config.yaml`, `mate.ollama_model_routes.agent` -> `models.default_llm`). SimForge's battery runs
+`llama3.1:8b` at 0.0 with 2048. **Three axes, all different, none recorded before today.**
+
+And `phi4:latest` **is not installed on this machine.** `POST /api/show` answers
+`model 'phi4:latest' not found`. So the production model has never sat a SimForge exam at all.
+
+## The finding I did not go looking for
+
+A real battery on the local model, timed on this machine:
+
+    probes put 11 | unreadable 10 | protocol_conformance FAIL 0.09 | never_do_adherence NOT_RUN
+    => provisional | 37.8s, 3.4s per probe
+
+**`llama3.1:8b` does not answer in the grammar.** One probe of eleven was readable. The withholds
+did their job - the never-do coverage hole held it at `provisional`, so nothing certified on an
+exam nobody could read - which is why this is a finding and not an incident.
+
+But it puts the ruling and the machine in different places. ADR-0054 named `claude-sonnet-5` as
+examiner **because** it conformed 11 of 11; under ruling 4 that is now a practice run. Whether a
+14B `phi4` clears the grammar where an 8B model does not is open, and the answer costs one
+`ollama pull`.
+
+**And one number worth naming:** that run reported `score: 1.0`. The score is the pass rate over
+GRADED probes, so ten unreadable answers left one graded probe and a perfect rate. Legal, correct,
+and a reader seeing `1.0` is not being told the denominator. Its own decision, not fixed here.
+
+## A correction to make while it is small
+
+Mid-build I recorded, in a comment destined for the schema, that Pydantic had silently dropped
+`model_identity` because of its reserved `model_` namespace. **That is not what happened.** The
+field had been added to the wrong class - `OperationRubricResultItem` and `AgentRunOutcome` both
+end in `score` / `threshold`, and a one-shot replace took the first. Pydantic raised nothing.
+
+The explanation was plausible, it was about to be committed beside the fix, and the fix worked for
+an unrelated reason. That is entry 13's family again in the smallest possible form: **a true
+conclusion arriving with an invented mechanism.** Deleted before it shipped, and recorded here
+because the near-miss is the only evidence the check is worth running.

@@ -27,6 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
+from src.services.agent_runtime.model_identity import ModelIdentity
 from src.services.operation.gate_verdict import (
     GateVerdict,
     verdict_for_finished_state,
@@ -70,6 +71,9 @@ class UnitOutcome:
     threshold: float | None = None
     certified_tier: str | None = None
     agent_model: str | None = None
+    #: The candidate in full (ADR-0060), as `ModelIdentity.as_record()`. Travels with the rest of
+    #: the basis for the same reason: a verdict whose candidate is unknown cannot be re-sat.
+    model_identity: dict | None = None
 
 
 async def open_run(
@@ -134,6 +138,23 @@ def _one_model(outcomes: list[UnitOutcome]) -> str | None:
     return named.pop() if len(named) == 1 else None
 
 
+def _one_identity(outcomes: list[UnitOutcome]) -> dict | None:
+    """The model identity a run names, when its outcomes agree on one. `None` when they do not.
+
+    Agreement is on the FINGERPRINT, not on the dict: two records that differ only in key order
+    describe the same candidate, and comparing the mappings would report a disagreement that is
+    not one. Outcomes that genuinely disagree report none rather than a pick - the run cannot say
+    which model earned it, and a certification that names the wrong candidate is worse than one
+    that names none, because the wrong one is checkable and passes.
+    """
+    by_print = {
+        identity.fingerprint: o.model_identity
+        for o in outcomes
+        if (identity := ModelIdentity.from_record(o.model_identity)) is not None
+    }
+    return next(iter(by_print.values())) if len(by_print) == 1 else None
+
+
 async def close_run(
     session: AsyncSession,
     *,
@@ -191,6 +212,7 @@ async def close_run(
     # run that did not pass is the "looks like success" shape the collapse exists to prevent.
     run.certifiedTier = tier_for_state(state, weakest_tier([o.certified_tier for o in own]))
     run.agentModel = _one_model(own)
+    run.agentModelIdentity = _one_identity(own)
     if scenario_count is not None:
         run.scenarioCount = scenario_count
     if coverage_denominator is not None:
@@ -247,6 +269,7 @@ async def sweep_timed_out_runs(
         run.score = None
         run.threshold = None
         run.certifiedTier = None
+        run.agentModelIdentity = None
         # And no model: nothing answered. A run that names a candidate it never heard from is the
         # same invention as a zero, wearing provenance.
         run.agentModel = None
@@ -314,6 +337,11 @@ async def gate_result_for(
     # sending null keeps the same rule the numbers follow: absent means nothing answered.
     if run.agentModel:
         body["agent_model"] = run.agentModel
+    # The candidate in full. Declared in The Office's response manifest as provenance: model name,
+    # file digest, size, quantization and the generation settings - numbers, hashes and short
+    # enum-like strings, no scenario content, nothing an agent said.
+    if run.agentModelIdentity:
+        body["model_identity"] = run.agentModelIdentity
     if run.endedAt is not None:
         body["completed_at"] = run.endedAt.isoformat()
     return body

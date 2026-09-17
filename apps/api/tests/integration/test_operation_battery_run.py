@@ -501,17 +501,23 @@ async def test_a_merged_clean_run_reaches_certified(
         .scalars()
         .first()
     )
+    runtime = _runtime(ScriptedProvider(_compliant))
     report = await run_module_battery(
         module_id=MODULE,
         agent_id=AGENT,
         never_do=PORTFOLIO_HEALTH_NEVER_DO,
-        runtime=_runtime(ScriptedProvider(_compliant)),
+        runtime=runtime,
     )
+    identity = await runtime.model_identity(0)
+    assert identity is not None
     built = build_gate_result_request(
         report=report,
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
+        # Built by hand here rather than through `battery_for_run`, so the identity has to be
+        # supplied by hand too — and a `certified` outcome without one is refused.
+        model_identity=identity.as_record(),
         submitted_rubric_results=[
             {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.94},
             {"dimension": "escalation_discipline", "verdict": "PASS", "score": 0.71},
@@ -534,6 +540,13 @@ async def test_a_merged_clean_run_reaches_certified(
     assert read["threshold"] == 1.0
     assert read["certified_tier"] == "propose"
     assert read["agent_model"] == "ollama/llama3.1:8b"
+    # And the candidate in full (ADR-0060). `agent_model` is a label; these are the facts that
+    # say whether the model, its file or its settings have moved since.
+    identity_read = read["model_identity"]
+    assert identity_read["quantization"] == "Q4_K_M"
+    assert identity_read["file_digest"].startswith("sha256:")
+    assert identity_read["settings"] == {"temperature": 0.0, "max_tokens": 2048, "seed": 0}
+    assert identity_read["fingerprint"] == identity.fingerprint
 
 
 async def test_a_certifying_outcome_without_a_model_is_refused(

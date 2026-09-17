@@ -205,6 +205,20 @@ async def _gate_result(client: AsyncClient, *, passed: bool, run_ref: str = "op-
                 # here closed with a verdict and no score, and The Office refused the row.
                 "score": 1.0 if passed else 0.75,
                 "threshold": 1.0,
+                # The candidate. A certified outcome that cannot say which model file answered,
+                # at what quantization and under what settings, is refused (ADR-0060).
+                "model_identity": {
+                    "provider": "ollama",
+                    "model": "llama3.1:8b",
+                    "file_digest": (
+                        "sha256:46e0c10c039e01911933968"
+                        "7c3c1757cc81b9da49709a3b3924863ba87ca666e"
+                    ),
+                    "file_size_bytes": 4920753328,
+                    "parameter_size": "8.0B",
+                    "quantization": "Q4_K_M",
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "recovery", "verdict": "PASS", "score": 0.60},
@@ -342,6 +356,18 @@ async def test_one_failure_among_several_units_is_not_a_pass(
                 # on the state.
                 "score": 1.0 if passed else 0.75,
                 "threshold": 1.0,
+                "model_identity": {
+                    "provider": "ollama",
+                    "model": "llama3.1:8b",
+                    "file_digest": (
+                        "sha256:46e0c10c039e01911933968"
+                        "7c3c1757cc81b9da49709a3b3924863ba87ca666e"
+                    ),
+                    "file_size_bytes": 4920753328,
+                    "parameter_size": "8.0B",
+                    "quantization": "Q4_K_M",
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "recovery", "verdict": "PASS", "score": 0.60},

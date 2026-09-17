@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from src.services.agent_runtime.llm_client import LLMProvider, LLMResponse
+from src.services.agent_runtime.model_identity import ModelIdentity
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
     ACT_ESCALATE,
@@ -87,6 +88,24 @@ class ScriptedProvider(LLMProvider):
 
     async def health_check(self) -> dict:
         return {"provider": self.name, "ok": True}
+
+    async def identity(self, settings_sent: dict) -> ModelIdentity:
+        """Stands in for a LOCAL model, file and all.
+
+        A provider that cannot describe its candidate produces an outcome `gate_result` refuses to
+        certify (ADR-0060), so a scripted provider without this would make every end-to-end
+        certification test a test of the refusal instead. The digest is obviously fake and says so
+        — what is being stood in for is the SHAPE of a local model file, not a real one.
+        """
+        return ModelIdentity(
+            provider=self.name,
+            model=self.model,
+            file_digest="sha256:" + "5c" * 32,
+            file_size_bytes=4_920_753_328,
+            parameter_size="8.0B",
+            quantization="Q4_K_M",
+            settings=dict(settings_sent),
+        )
 
 
 def _runtime(answer_for) -> tuple[AgentRuntime, ScriptedProvider]:  # noqa: ANN001

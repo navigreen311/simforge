@@ -88,6 +88,18 @@ async def test_passing_with_healthy_spread_and_no_neverdo_is_certified(
                 # certified outcome without a score, a threshold and a tier is refused.
                 "score": 1.0,
                 "threshold": 1.0,
+                "model_identity": {
+                    "provider": "ollama",
+                    "model": "llama3.1:8b",
+                    "file_digest": (
+                        "sha256:46e0c10c039e01911933968"
+                        "7c3c1757cc81b9da49709a3b3924863ba87ca666e"
+                    ),
+                    "file_size_bytes": 4920753328,
+                    "parameter_size": "8.0B",
+                    "quantization": "Q4_K_M",
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
                 # Varied scores (healthy spread) and no never-do list persisted for this module.
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},

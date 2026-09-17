@@ -542,6 +542,7 @@ def build_gate_result_request(
     run: OperationRun,
     instruction_set: ForgeInstructionSet,
     agent_model: str,
+    model_identity: dict | None = None,
     submitted_rubric_results: list[dict] | None = None,
 ) -> GateResultRequest:
     """Turn one battery's report into the payload `POST /operation/gate-result` accepts.
@@ -593,6 +594,10 @@ def build_gate_result_request(
         # module having to know which of the three withholds fired.
         max_certified_trust_tier=BATTERY_TIER_CEILING,
         agent_model=agent_model,
+        # The candidate in full (ADR-0060). `agent_model` is the label a log line wants;
+        # this is what a re-certification check compares and what says whether the exam was
+        # sat on a model file at all.
+        model_identity=model_identity,
         operation_rubric_results=[OperationRubricResultItem(**item) for item in results],
         per_scenario_class_results=list(report.scenario_class_results),
         failure_modes_observed=list(report.failure_modes),
@@ -674,6 +679,7 @@ async def battery_for_run(
         runtime=runtime,
         seed=seed,
     )
+    identity = await runtime.model_identity(seed)
     log.info(
         "battery_ran",
         run_ref=run_ref,
@@ -696,6 +702,11 @@ async def battery_for_run(
         # Required rather than defaulted, so a future caller that forgets it fails at the
         # signature instead of writing a certification that cannot name its candidate.
         agent_model=provider_label(runtime.provider),
+        # Asked of the live provider AFTER the battery ran, so it describes what answered rather
+        # than what was configured - the same rule `agent_model` follows and for the same reason.
+        # `None` when the provider cannot describe itself, which the gate-result path refuses to
+        # certify rather than papering over here.
+        model_identity=identity.as_record() if identity else None,
     )
 
 

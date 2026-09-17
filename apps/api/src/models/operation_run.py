@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String
+from sqlalchemy import JSON, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -101,6 +101,11 @@ class OperationRun(Base):
     #: NULL where nothing answered: a run still open, a run that timed out, or a Unit-B run
     #: cleared by department state.
     agentModel: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: The same candidate, in full (ADR-0060): model name, the model FILE with its size and
+    #: quantization, the generation settings the exam was put under, and the fingerprint over all
+    #: of it. `agentModel` is the label a log line wants; this is what a re-certification check
+    #: compares. NULL wherever `agentModel` is NULL, and for the same three reasons.
+    agentModelIdentity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     scenarioCount: Mapped[int] = mapped_column(Integer, default=0)
     coverageDenominator: Mapped[int] = mapped_column(Integer, default=0)
 

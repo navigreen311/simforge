@@ -36,6 +36,7 @@ from src.schemas.operation_payloads import (
     TimedOutRun,
     TimeoutSweepResult,
 )
+from src.services.agent_runtime.model_identity import ModelIdentity, identity_is_complete
 from src.services.operation.battery_result import battery_result_for
 from src.services.operation.gating import (
     agent_module_assignability,
@@ -251,6 +252,23 @@ async def gate_result(
         else:
             state = OperationState.CERTIFIED.value
 
+        # THE FOURTH WITHHOLD (ADR-0060): the exam was not sat on a model file.
+        #
+        # Ivan's ruling is that a certification counts only if it was earned on the exact model the
+        # agent runs in production, and Village agents run on local models. A cloud provider stays
+        # available for practice runs - so a cloud-examined result is a real result that is not a
+        # certification, which is what `provisional` has meant here since the Rev-2 audit: not
+        # certified, not a failure.
+        #
+        # **This is a PROXY for the ruling and says so.** The real test is "the same model as
+        # production", and SimForge cannot read the Village's model configuration - it lives in
+        # another repository behind no seam. What is checkable here is narrower: whether anything
+        # with a model file on this machine answered at all. The rest of the rule is recorded,
+        # computable from `fingerprint`, and not enforced; see ADR-0060 and the report.
+        identity = ModelIdentity.from_record(outcome.model_identity)
+        if state == OperationState.CERTIFIED.value and identity and not identity.has_model_file:
+            state = OperationState.PROVISIONAL.value
+
         # A cert that says something PASSED must name what answered. Everything else on
         # this row describes the exam — the instructions, the Forge version, the rubric —
         # and without the model it reads as *this agent passed* rather than *this agent,
@@ -274,6 +292,30 @@ async def gate_result(
                     "`ollama/llama3.1:8b`."
                 ),
             )
+
+        # ...and it must say WHICH model, in the detail that lets the exam be re-sat and drift
+        # be seen. `agent_model` above is a label: the same tag re-pulled at a different
+        # quantization, or served at a different temperature, produces the same string and a
+        # different candidate. ADR-0060 is the ruling; this is where "a result with no model
+        # identity is never reported as a pass" is true rather than hoped for.
+        #
+        # Reached only for `certified`. A `provisional` hold has no certification to qualify, and
+        # the withhold above has already caught the one case - no model file - that a complete
+        # record could still be wrong about.
+        if state == OperationState.CERTIFIED.value:
+            missing_identity = identity_is_complete(outcome.model_identity)
+            if missing_identity:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"agent_operation outcome for {outcome.agent_id}/{outcome.module_id} "
+                        f"resolves to 'certified' and its model identity is missing "
+                        f"{', '.join(missing_identity)}. A certification counts only if it was "
+                        "earned on the exact model the agent runs in production - the model name, "
+                        "the model file with its size and quantization, and the generation "
+                        "settings. A name alone cannot say which of those changed."
+                    ),
+                )
 
         # The tier is CAPPED here rather than trusted from the outcome. A battery declares the
         # ceiling its exam can justify before the state is known; whether the unit reached it is
@@ -331,6 +373,10 @@ async def gate_result(
             functionsInModule=outcome.functions_in_module,
             maxCertifiedTrustTier=tier,
             agentModel=outcome.agent_model,
+            # Recorded on EVERY result, certified or not. A failed run's candidate is the fact
+            # that makes the failure reproducible, and a provisional hold's is what says why it
+            # was held.
+            agentModelIdentity=identity.as_record() if identity else None,
             perScenarioClass={
                 r.scenario_class: r.verdict for r in outcome.per_scenario_class_results
             },
@@ -348,6 +394,7 @@ async def gate_result(
                 forge_id=outcome.forge_id,
                 state=state,
                 max_certified_trust_tier=tier,
+                model_identity=identity.as_record() if identity else None,
                 operation_rubric_results=outcome.operation_rubric_results,
                 rubric_dimension_spread=spread,
                 per_scenario_class_results=outcome.per_scenario_class_results,
@@ -364,6 +411,7 @@ async def gate_result(
                 threshold=outcome.threshold,
                 certified_tier=tier,
                 agent_model=outcome.agent_model,
+                model_identity=identity.as_record() if identity else None,
             )
         )
 

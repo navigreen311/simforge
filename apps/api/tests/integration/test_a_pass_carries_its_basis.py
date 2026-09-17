@@ -24,6 +24,7 @@ from __future__ import annotations
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.agent_runtime.model_identity import ModelIdentity, identity_is_complete
 from src.services.operation.gate_verdict import GateVerdict
 from src.services.operation.run_registry import UnitOutcome, close_run, gate_result_for, open_run
 from src.services.operation.state_machine import OperationState
@@ -54,6 +55,19 @@ START = {
 }
 
 
+#: A local model's identity, shaped as `ModelIdentity.as_record()` produces one. Real values from
+#: this machine's `llama3.1:8b`, so the record is the shape a live Ollama actually returns.
+LOCAL_IDENTITY: dict = {
+    "provider": "ollama",
+    "model": "llama3.1:8b",
+    "file_digest": "sha256:46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e",
+    "file_size_bytes": 4920753328,
+    "parameter_size": "8.0B",
+    "quantization": "Q4_K_M",
+    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+}
+
+
 def _outcome(**over: object) -> dict:
     """One agent outcome, shaped the way `build_gate_result_request` shapes a real battery's."""
     outcome: dict = {
@@ -68,6 +82,7 @@ def _outcome(**over: object) -> dict:
         "max_certified_trust_tier": BATTERY_TIER_CEILING,
         "score": 1.0,
         "threshold": 1.0,
+        "model_identity": LOCAL_IDENTITY,
         "operation_rubric_results": [
             # Two competence dimensions far enough apart that the rubric discriminated -
             # `protocol_conformance` is excluded from the spread, so it cannot supply it.
@@ -338,3 +353,190 @@ def test_a_tier_survives_only_a_certified_state() -> None:
     assert tier_for_state(OperationState.PROVISIONAL.value, "propose") is None
     assert tier_for_state(OperationState.FAILED.value, "propose") is None
     assert tier_for_state(OperationState.REVOKED.value, "auto_execute") is None
+
+
+# --- ADR-0060: the candidate, and the pass that cannot name it ---------------------------------
+
+
+async def test_a_passing_battery_reports_the_model_identity(client: AsyncClient) -> None:
+    """The ruling's three facts on the body The Office reads: name, file, settings.
+
+    `agent_model` was already there and it is a LABEL. `ollama/llama3.1:8b` is the same string
+    whether the tag was re-pulled at Q4_K_M or Q8_0, and whether the exam ran at temperature 0.0
+    or 0.7. These are the fields that can tell those apart.
+    """
+    await client.post("/api/operation/run/start", json=START)
+    assert await _post(client, _outcome()) == 200
+
+    body = (await client.get("/api/operation/gate-result/op-basis")).json()
+    identity = body["model_identity"]
+
+    assert body["verdict"] == GateVerdict.PASS.value
+    assert identity["model"] == "llama3.1:8b"
+    assert identity["file_digest"].startswith("sha256:")
+    assert identity["file_size_bytes"] == 4920753328
+    assert identity["quantization"] == "Q4_K_M"
+    assert identity["settings"]["temperature"] == 0.0
+    # The hash over all of it - what a re-certification check compares, rather than arguing field
+    # by field about which of six values moved.
+    assert identity["fingerprint"] == ModelIdentity.from_record(LOCAL_IDENTITY).fingerprint
+
+
+async def test_a_result_with_no_model_identity_is_never_a_pass(client: AsyncClient) -> None:
+    """**The test the ruling asked for.**
+
+    Refused at the gate-result path rather than filtered later, so the run never reaches PASS at
+    all: there is no window in which a verdict exists that nobody can attribute to a model.
+    """
+    await client.post("/api/operation/run/start", json=START)
+    assert await _post(client, _outcome(model_identity=None)) == 422
+
+    body = (await client.get("/api/operation/gate-result/op-basis")).json()
+    assert body["verdict"] != GateVerdict.PASS.value
+    assert body["verdict"] == GateVerdict.IN_PROGRESS.value
+    assert "model_identity" not in body
+
+
+async def test_a_half_described_candidate_is_refused_and_named(client: AsyncClient) -> None:
+    """A record is not an identity. Each missing fact is named, because the three come from three
+    different places and a caller told only "incomplete" has to go and find out which."""
+    await client.post("/api/operation/run/start", json=START)
+    res = await client.post(
+        "/api/operation/gate-result",
+        json={
+            "instruction_set_ref": REF,
+            "run_content_hash": "sha256:si",
+            "run_ref": "op-basis",
+            "agent_outcomes": [
+                _outcome(
+                    model_identity={
+                        **LOCAL_IDENTITY,
+                        "quantization": None,
+                        "settings": {},
+                    }
+                )
+            ],
+        },
+    )
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert "quantization" in detail and "settings" in detail
+
+
+async def test_a_cloud_run_is_a_practice_run_and_not_a_certification(
+    client: AsyncClient,
+) -> None:
+    """A cloud provider stays available, and what it produces is a rehearsal.
+
+    Village agents run on local models, so a certification counts only if it was earned on one.
+    The identity here is complete in every other respect - it is a real result about a real
+    candidate - and it carries no model FILE, because the weights are not here. Held at
+    `provisional`: not certified, not a failure, which is what that state has meant since the
+    Rev-2 audit.
+    """
+    await client.post("/api/operation/run/start", json=START)
+    assert (
+        await _post(
+            client,
+            _outcome(
+                agent_model="anthropic/claude-sonnet-5",
+                model_identity={
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-5",
+                    "file_digest": None,
+                    "file_size_bytes": None,
+                    "parameter_size": None,
+                    "quantization": None,
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
+            ),
+        )
+        == 200
+    )
+
+    body = (await client.get("/api/operation/gate-result/op-basis")).json()
+    assert body["verdict"] == GateVerdict.PROVISIONAL.value
+    assert "certified_tier" not in body
+    # The record still travels. What the absent file costs is the certification, not the fact.
+    assert body["model_identity"]["model"] == "claude-sonnet-5"
+    assert body["model_identity"]["file_digest"] is None
+
+
+async def test_a_failing_run_still_records_its_candidate(client: AsyncClient) -> None:
+    """Recorded on EVERY result, not only a certified one - a failure nobody can attribute to a
+    model is a failure nobody can reproduce."""
+    await client.post("/api/operation/run/start", json=START)
+    assert (
+        await _post(
+            client,
+            _outcome(
+                passed=False,
+                score=0.9,
+                operation_rubric_results=[
+                    {"dimension": "never_do_adherence", "verdict": "FAIL", "score": 0.9},
+                ],
+            ),
+        )
+        == 200
+    )
+
+    body = (await client.get("/api/operation/gate-result/op-basis")).json()
+    assert body["verdict"] == GateVerdict.FAIL.value
+    assert body["model_identity"]["model"] == "llama3.1:8b"
+
+
+# --- the identity record itself -----------------------------------------------------------------
+
+
+def test_the_fingerprint_moves_when_any_of_the_three_facts_moves() -> None:
+    """Model, file and settings are all IN the hash, which is the whole of the re-certification
+    rule: a change to any of the three means the certification is against a different candidate."""
+    from dataclasses import replace
+
+    base = ModelIdentity.from_record(LOCAL_IDENTITY)
+    assert base is not None
+
+    same = ModelIdentity.from_record(dict(reversed(list(LOCAL_IDENTITY.items()))))
+    assert same is not None and same.fingerprint == base.fingerprint  # key order is not a change
+
+    assert replace(base, model="phi4:latest").fingerprint != base.fingerprint
+    assert replace(base, quantization="Q8_0").fingerprint != base.fingerprint
+    assert replace(base, file_digest="sha256:other").fingerprint != base.fingerprint
+    # The one a name-only record could never catch: same tag, same file, different exam.
+    assert (
+        replace(base, settings={**base.settings, "temperature": 0.7}).fingerprint
+        != base.fingerprint
+    )
+
+
+def test_a_record_carrying_its_own_fingerprint_does_not_get_to_assert_it() -> None:
+    """`from_record` recomputes. A stored hash that disagreed with its fields would otherwise be
+    believed on the strength of the one field nobody checks."""
+    lying = {**LOCAL_IDENTITY, "fingerprint": "sha256:whatever-i-say"}
+    rebuilt = ModelIdentity.from_record(lying)
+    assert rebuilt is not None
+    assert rebuilt.fingerprint == ModelIdentity.from_record(LOCAL_IDENTITY).fingerprint
+
+
+def test_the_missing_facts_are_named_one_by_one() -> None:
+    assert identity_is_complete(LOCAL_IDENTITY) == []
+    assert identity_is_complete(None) == ["model_identity"]
+    # An empty settings map is the accidental empty this repo refuses everywhere: it cannot be
+    # told from "nothing was sent", and something is always sent.
+    assert identity_is_complete({**LOCAL_IDENTITY, "settings": {}}) == ["model_identity.settings"]
+    assert "model_identity.file_digest" in identity_is_complete(
+        {**LOCAL_IDENTITY, "file_digest": None}
+    )
+
+
+def test_a_stub_cannot_describe_a_candidate_and_so_cannot_certify() -> None:
+    """The base `identity()` returns None, and that default is the safe one.
+
+    A provider added later that forgets to describe itself fails closed: its outcomes are refused
+    at `certified` rather than certifying something nobody can name.
+    """
+    import asyncio
+
+    from src.services.agent_runtime.llm_client import StubProvider
+
+    assert asyncio.run(StubProvider().identity({"temperature": 0.0})) is None

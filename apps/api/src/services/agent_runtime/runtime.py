@@ -10,7 +10,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.services.agent_runtime.llm_client import LLMProvider, LLMResponse, get_agent_llm
+from src.services.agent_runtime.model_identity import ModelIdentity
 from src.services.village.reader import VillageReader, VillageReaderError
+
+#: The generation settings every examined turn is put under. Named constants rather than call-site
+#: defaults, because ADR-0060 requires a certification to RECORD what it was earned under, and a
+#: default that is only implied cannot be recorded without somebody copying it into a second place.
+#:
+#: `top_p` is deliberately NOT here. The runtime never sends one - `OllamaProvider` fixes it at 1.0
+#: in its own options block - so listing it here would be this module asserting a value it does not
+#: control, which is the shape of every drift this repo has recorded.
+EXAM_TEMPERATURE = 0.0
+EXAM_MAX_TOKENS = 2048
 
 
 def build_agent_runtime(village_reader: VillageReader) -> AgentRuntime:
@@ -100,5 +111,29 @@ class AgentRuntime:
         if extra_system:
             system_prompt = f"{system_prompt}\n\n{extra_system}"
         return await self.provider.complete(
-            system=system_prompt, messages=conversation_history, seed=seed
+            system=system_prompt,
+            messages=conversation_history,
+            # Passed explicitly rather than left to the provider's defaults, so the values
+            # `generation_settings` records are the values this call sends. One source, not two
+            # that agree today.
+            temperature=EXAM_TEMPERATURE,
+            max_tokens=EXAM_MAX_TOKENS,
+            seed=seed,
         )
+
+    def generation_settings(self, seed: int) -> dict:
+        """What `turn` sends, as the record ADR-0060 requires. The same constants, once."""
+        return {
+            "temperature": EXAM_TEMPERATURE,
+            "max_tokens": EXAM_MAX_TOKENS,
+            "seed": seed,
+        }
+
+    async def model_identity(self, seed: int) -> ModelIdentity | None:
+        """The candidate that answered this runtime's turns, settings included.
+
+        Asked of the provider rather than assembled here: only the provider can say what file it
+        is serving, and only this runtime knows what it asked for. The two halves meet here and
+        nowhere else.
+        """
+        return await self.provider.identity(self.generation_settings(seed))

@@ -56,6 +56,14 @@ class OperationCertification(Base):
     #: enforced where the verdict class is known, in the gate-result path, not by a
     #: NOT NULL that would be wrong for two real row shapes.
     agentModel: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: The candidate in full (ADR-0060) - model name, the model FILE with its size and
+    #: quantization, the generation settings, and the fingerprint over all of it.
+    #:
+    #: Recorded on EVERY result, not only a certified one: a failed run's candidate is what makes
+    #: the failure reproducible, and a provisional hold's is often the reason it was held. The
+    #: version matrix above describes the EXAM and `agentModel` names the candidate; this is the
+    #: only column that can say the candidate CHANGED.
+    agentModelIdentity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # --- Unit A: agent operation (nullable for Unit B rows) ---
     agentId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
