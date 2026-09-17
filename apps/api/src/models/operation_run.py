@@ -89,6 +89,18 @@ class OperationRun(Base):
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     certifiedTier: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: provider/model that ANSWERED this run's battery, e.g. `ollama/llama3.1:8b`.
+    #:
+    #: The Office requires it on every answered verdict — `certified_records_its_basis` refuses a
+    #: certification that cannot name the candidate — and it reads a run's verdict from
+    #: `gate_result_for`, so the fact has to live on the RUN and not only on the certification row
+    #: it produced. `battery_result_for`'s own docstring says why the other direction does not
+    #: work: the join from a run to its certs is a lookup on a natural key, not an identity, and a
+    #: required field must not be reconstructed from one.
+    #:
+    #: NULL where nothing answered: a run still open, a run that timed out, or a Unit-B run
+    #: cleared by department state.
+    agentModel: Mapped[str | None] = mapped_column(String, nullable=True)
     scenarioCount: Mapped[int] = mapped_column(Integer, default=0)
     coverageDenominator: Mapped[int] = mapped_column(Integer, default=0)
 

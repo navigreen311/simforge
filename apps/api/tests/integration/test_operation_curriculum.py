@@ -264,6 +264,8 @@ async def test_gate_result_named_list_round_trip_and_spread(client: AsyncClient)
                 "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
+                "score": 1.0,
+                "threshold": 1.0,
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "failure_recognition", "verdict": "PASS", "score": 0.40},

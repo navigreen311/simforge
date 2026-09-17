@@ -20,6 +20,7 @@ WHAT THE SWEEP DOES AND DELIBERATELY DOES NOT DO
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -36,6 +37,7 @@ from src.services.operation.run_window import (
     assess_run_window,
     timed_out_run_filter,
 )
+from src.services.operation.trust_tier import tier_for_state, weakest_tier
 from src.utils.time import utcnow
 
 
@@ -46,6 +48,28 @@ def _naive_utc(moment: datetime | None) -> datetime:
     if moment is None:
         return utcnow()
     return moment.replace(tzinfo=None) if moment.tzinfo is not None else moment
+
+
+@dataclass(frozen=True, slots=True)
+class UnitOutcome:
+    """One certification unit's outcome, as the run needs to read it.
+
+    **Why a record and not four parallel lists.** `close_run` used to take the states alone, and
+    everything else a verdict is made of - the score, the bar it cleared, the tier it earned, the
+    model that answered - stopped at the gate-result handler. The run then reported a PASS with no
+    basis, and The Office's `record_result` refuses exactly that: a `certified` row without a tier
+    is one it will not write. The fields travel together because they are one observation, and
+    splitting them is how three of the four came to be dropped without anything failing.
+
+    Every field but `state` is optional, and `None` is never a zero: an outcome with no score is
+    one nothing graded.
+    """
+
+    state: str
+    score: float | None = None
+    threshold: float | None = None
+    certified_tier: str | None = None
+    agent_model: str | None = None
 
 
 async def open_run(
@@ -97,15 +121,25 @@ async def open_run(
     return run
 
 
+def _one_model(outcomes: list[UnitOutcome]) -> str | None:
+    """The model a run names, when its outcomes agree on one. `None` when they do not.
+
+    A battery has one examiner, so the ordinary case is one distinct value. Outcomes that disagree
+    report NONE rather than a pick: the run cannot say which model earned it, and The Office's
+    `record_result` will refuse the row for want of one - which is the correct refusal, arriving
+    where the fact is missing instead of a guess arriving where it is not.
+    """
+    named = {(o.agent_model or "").strip() for o in outcomes}
+    named.discard("")
+    return named.pop() if len(named) == 1 else None
+
+
 async def close_run(
     session: AsyncSession,
     *,
     run_ref: str,
-    agent_states: list[str],
-    department_states: list[str],
-    score: float | None = None,
-    threshold: float | None = None,
-    certified_tier: str | None = None,
+    agent_outcomes: list[UnitOutcome],
+    department_outcomes: list[UnitOutcome],
     scenario_count: int | None = None,
     coverage_denominator: int | None = None,
     ended_at: datetime | None = None,
@@ -117,6 +151,12 @@ async def close_run(
     Several units can certify under one `run_ref`, and The Office reads a single verdict
     for it, so the weakest wins: a run that certified four agents and failed the fifth is
     not a PASS. Ranking is `gate_verdict.weakest_state`.
+
+    **The basis travels with the verdict, and the collapse is weakest-wins throughout.** The
+    score is the LOWEST its own outcomes reported, the threshold the STRICTEST, the tier the
+    weakest (`trust_tier.weakest_tier`) — the same argument in three places: The Office reads one
+    of each per `run_ref` and caps a real grant with it, so the strongest of several would hand
+    the weakest unit something its own battery never earned.
 
     A result arriving for a run already stamped TIMEOUT is still recorded — the verdict
     becomes the real outcome, because a result that ARRIVED is better evidence than a
@@ -132,16 +172,25 @@ async def close_run(
     if run is None:
         return None
 
-    own_states = agent_states if run.unit == "A" else department_states
-    state = weakest_state(own_states)
+    own = agent_outcomes if run.unit == "A" else department_outcomes
+    state = weakest_state([o.state for o in own])
     if state is None:
         return run
 
+    scores = [o.score for o in own if o.score is not None]
+    thresholds = [o.threshold for o in own if o.threshold is not None]
+
     run.endedAt = _naive_utc(ended_at)
     run.verdict = verdict_for_finished_state(state)
-    run.score = score
-    run.threshold = threshold
-    run.certifiedTier = certified_tier
+    run.score = min(scores) if scores else None
+    run.threshold = max(thresholds) if thresholds else None
+    # The collapsed state gates the tier a SECOND time, and the second time is not redundant.
+    # Each unit's tier was already capped by its OWN state, so a run of five units where four
+    # certified carries four tiers - and `weakest_tier` over them would report `propose` on a run
+    # whose verdict is FAIL. The Office caps a real grant with this value; handing it one from a
+    # run that did not pass is the "looks like success" shape the collapse exists to prevent.
+    run.certifiedTier = tier_for_state(state, weakest_tier([o.certified_tier for o in own]))
+    run.agentModel = _one_model(own)
     if scenario_count is not None:
         run.scenarioCount = scenario_count
     if coverage_denominator is not None:
@@ -196,7 +245,11 @@ async def sweep_timed_out_runs(
         run.timedOutAt = moment
         # No score. Zero would be a claim about the agent rather than about the run.
         run.score = None
+        run.threshold = None
         run.certifiedTier = None
+        # And no model: nothing answered. A run that names a candidate it never heard from is the
+        # same invention as a zero, wearing provenance.
+        run.agentModel = None
         timed_out.append(run)
 
     if timed_out:
@@ -256,6 +309,11 @@ async def gate_result_for(
         body["threshold"] = run.threshold
     if run.certifiedTier is not None:
         body["certified_tier"] = run.certifiedTier
+    # Provenance, never content — it names the candidate, not what it said. The Office requires it
+    # on every answered verdict (`certified_records_its_basis`), and omitting it rather than
+    # sending null keeps the same rule the numbers follow: absent means nothing answered.
+    if run.agentModel:
+        body["agent_model"] = run.agentModel
     if run.endedAt is not None:
         body["completed_at"] = run.endedAt.isoformat()
     return body

@@ -138,7 +138,21 @@ class AgentRunOutcome(BaseModel):
     functions_certified: int
     functions_in_module: int  # DENOMINATOR
     passed: bool = True  # did the battery pass → certified vs failed (never a low score)
+    #: The tier this exam can justify at MOST — a ceiling, not a measurement. The gate-result path
+    #: caps it by state (`trust_tier.tier_for_state`), so a caller declaring `auto_execute` on a
+    #: failed outcome does not thereby record one.
     max_certified_trust_tier: str | None = None  # auto_execute | propose | suggest
+    #: The run-level score and the bar it was judged against. BOTH optional and both meaningless
+    #: alone: a score without a threshold is a number nobody can place, and The Office is entitled
+    #: to read the bar (`simforge_response_manifest.json`). Optional on the wire and NOT optional
+    #: in a certification — `gate_result` refuses to persist a `certified` agent_operation row
+    #: without them, for the reason it already refuses one that names no `agent_model`: a pass
+    #: whose basis is absent is one nobody can check.
+    #:
+    #: `None` is never 0.0 here. A battery that graded no probe has no score, and a zero would be
+    #: a claim about the agent rather than about the run.
+    score: float | None = None
+    threshold: float | None = None
     #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
     #:
     #: Optional on the wire and NOT optional in a certification: `gate_result` refuses to

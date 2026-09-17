@@ -84,6 +84,10 @@ async def test_passing_with_healthy_spread_and_no_neverdo_is_certified(
                 "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
+                # The basis. This is the one outcome in this file that reaches `certified`, and a
+                # certified outcome without a score, a threshold and a tier is refused.
+                "score": 1.0,
+                "threshold": 1.0,
                 # Varied scores (healthy spread) and no never-do list persisted for this module.
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},

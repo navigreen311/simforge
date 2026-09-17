@@ -47,6 +47,11 @@ from src.services.operation.state_machine import (
     OperationState,
     is_assignable,
 )
+from src.services.operation.trust_tier import (
+    BATTERY_TIER_CEILING,
+    TIER_RANK,
+    TRUST_TIERS,
+)
 
 CONTRACT_FILE = (
     Path(__file__).resolve().parents[4] / "docs" / "contracts" / "office-simforge-contract.json"
@@ -168,8 +173,25 @@ def test_the_office_holds_the_timeout_deadline(contract: dict) -> None:
 
 def test_trust_tiers_match(contract: dict) -> None:
     """SimForge sets `max_certified_trust_tier`; the Office caps the declared tier with
-    it. A tier one side can send and the other cannot rank is an uncappable grant."""
+    it. A tier one side can send and the other cannot rank is an uncappable grant.
+
+    Asserted against SimForge's OWN constant rather than a literal. The literal made this a check
+    that the contract file still said what it said - true of any file nobody edited - while the
+    ranking SimForge actually collapses a multi-unit run with lived in no constant at all.
+    """
     assert contract["trust_tiers"]["values"] == ["suggest", "propose", "auto_execute"]
+    assert list(TRUST_TIERS) == contract["trust_tiers"]["values"]
+    # Weakest to strongest, and the ORDER is the contract: `cap_tier` compares ranks, so a rank
+    # table that disagreed would cap a grant the wrong way round and refuse nothing.
+    assert [TIER_RANK[t] for t in TRUST_TIERS] == sorted(TIER_RANK[t] for t in TRUST_TIERS)
+
+
+def test_the_battery_ceiling_is_a_tier_the_office_can_rank(contract: dict) -> None:
+    """A held-out battery asks for `propose` and never `auto_execute` — it exercises obligations
+    and no module function, so the tier that lets an agent complete an act unattended is one it
+    has no evidence for. Asserted here because an unrankable ceiling is an uncappable grant."""
+    assert BATTERY_TIER_CEILING in contract["trust_tiers"]["values"]
+    assert BATTERY_TIER_CEILING != "auto_execute"
 
 
 def test_the_nine_scenario_classes_are_still_nine() -> None:

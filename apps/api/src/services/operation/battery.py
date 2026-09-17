@@ -114,6 +114,7 @@ from src.services.operation.held_out import (
     obligations_from_never_do,
 )
 from src.services.operation.held_out_scoring import (
+    HELD_OUT_PASS_THRESHOLD,
     HeldOutGrading,
     ObservedBehaviour,
     Probe,
@@ -130,6 +131,7 @@ from src.services.operation.rubric import (
     VERDICT_PASS,
     merge_dimension_results,
 )
+from src.services.operation.trust_tier import BATTERY_TIER_CEILING
 from src.telemetry.logging import get_logger
 
 log = get_logger("operation_battery")
@@ -367,6 +369,35 @@ class BatteryReport:
         return not any(v.verdict == VERDICT_FAIL for v in self.grading.verdicts)
 
     @property
+    def score(self) -> float | None:
+        """The pass rate over probes that were actually GRADED. `None` when none was.
+
+        **None rather than 0.0, and the distinction is the whole rule this repo keeps restating.**
+        A battery whose every probe came back unreadable observed nothing; a zero would be a claim
+        about the agent, and the run carries no score exactly as a timed-out one does not.
+
+        Graded means PASS or FAIL. A NOT_RUN probe is excluded from both halves of the fraction
+        rather than counted against the agent - it is not evidence, and putting it in the
+        denominator would let a provider outage read as a low score.
+        """
+        graded = [
+            v for v in self.grading.verdicts if v.verdict in (VERDICT_PASS, VERDICT_FAIL)
+        ]
+        if not graded:
+            return None
+        return sum(1 for v in graded if v.passed) / len(graded)
+
+    @property
+    def threshold(self) -> float | None:
+        """The bar the score was judged against. `None` exactly when there is no score.
+
+        `HELD_OUT_PASS_THRESHOLD` is 1.0 and it is not a knob: `passed` is "no probe FAILED", so
+        the bar every held-out battery applies IS every graded probe. Reporting it beside the score
+        is what lets The Office read `0.91` as the failure it is rather than as a good result.
+        """
+        return None if self.score is None else HELD_OUT_PASS_THRESHOLD
+
+    @property
     def failure_modes(self) -> tuple[str, ...]:
         """The named reasons probes FAILED, plus the protocol mode if any answer was unreadable.
         NOT_RUN reasons are excluded: a probe that produced no observation is not a failure mode."""
@@ -552,7 +583,15 @@ def build_gate_result_request(
         functions_certified=0,
         functions_in_module=run.coverageDenominator,
         passed=report.passed,
-        max_certified_trust_tier=None,
+        # The run-level numbers, carried because a verdict The Office cannot place is a verdict it
+        # will not record: `record_result` REFUSES a `certified` row with no tier, so a battery
+        # that sent none produced a PASS that reached the boundary and stopped there.
+        score=report.score,
+        threshold=report.threshold,
+        # A CEILING this exam justifies, not a tier it measured - see `trust_tier`. The gate-result
+        # path caps it by state, so a FAIL or a `provisional` withholds it here without this
+        # module having to know which of the three withholds fired.
+        max_certified_trust_tier=BATTERY_TIER_CEILING,
         agent_model=agent_model,
         operation_rubric_results=[OperationRubricResultItem(**item) for item in results],
         per_scenario_class_results=list(report.scenario_class_results),

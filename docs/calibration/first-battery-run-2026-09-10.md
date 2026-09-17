@@ -1440,3 +1440,59 @@ curriculum has ever been submitted.
 **Worth naming anyway**: a list published as "what would be needed" was carried forward as "what is
 ready". The entry's own conclusion was one paragraph below the table, and the table travelled
 without it.
+
+---
+
+# Entry 13 - a pass had never crossed the boundary, and nothing failed when it didn't
+
+**2026-09-17.** Ivan ruled on authorship ([ADR-0058](../adr/ADR-0058-the-venture-authors-the-answer-key.md))
+and asked for one thing built: a real PASS reaching The Office
+([ADR-0059](../adr/ADR-0059-a-pass-carries-its-basis.md)). The survey that came with it is in
+[certification-gaps-2026-09-17.md](../certification-gaps-2026-09-17.md).
+
+## The shape, for the sixth time
+
+`OperationRun` has carried `score`, `threshold` and `certifiedTier` since the run window was built.
+`close_run` has accepted all three as keyword arguments since the same day. **Its only caller passed
+the states and nothing else.** So the columns were written by nothing, `gate_result_for` omitted
+all three keys - correctly, it omits rather than nulls - and The Office's `record_result` refused
+the resulting `certified` row for want of a tier.
+
+This is entry 8-12's family again and it is the clearest instance yet: **a join between two halves
+that were each correct, failing by returning a legal empty answer.** The keyword arguments were the
+tell. A function that accepts four facts and is called with two does not fail; it succeeds,
+quietly, with two NULLs.
+
+**A fourth fact was missing and nobody had named it.** `certified_records_its_basis` demands the
+model on every answered verdict, and The Office reads the model off the RUN. `OperationCertification`
+got `agentModel` in September; `OperationRun` never did. So even a scored run would have been
+refused - for a different reason, one field over.
+
+## The one thing that makes it a rule rather than plumbing
+
+A `certified` outcome carrying no score, threshold or tier is now **refused at the gate-result
+path**, 422, naming every missing fact at once. Before it, the refusal existed only in The Office,
+four steps downstream, where it reads as an Office problem. A rule enforced only on the far side of
+a boundary is not this system's rule.
+
+## What the test caught that the design missed
+
+`weakest_tier` collapses a multi-unit run to its weakest tier. Written that way it reported
+`propose` on a run whose verdict was `FAIL` - four units had certified, each carrying its own capped
+tier, and the collapse had nothing to say about the run as a whole. The tier is now gated a second
+time on the collapsed state. **The assertion was written before the code and failed on the first
+run**, which is the only reason it is not in main.
+
+## And one finding nobody was looking for
+
+Two `capital-forge/statement_ingest` instruction sets exist: `1.2.0` seeded by hand in August with
+`['overwrite_prior_statement']`, and `1.0.0` written through the Office bridge on 7 September with
+`['never post to the ledger']`.
+
+**`module_never_do_lists` scans unordered and keeps the first; `battery_for_run` picks by
+`createdAt DESC`.** Two different selection rules over the same ambiguity, and on this data they
+select different rows. A battery on that module today authors its probes from one prohibition and
+binds the certification to an instruction set whose prohibition is another.
+
+Not built, deliberately - it is its own decision. Recorded because it is live, it is measurable,
+and it is the venture-collision mechanism firing inside a single venture.

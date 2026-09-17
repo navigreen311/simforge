@@ -523,10 +523,17 @@ async def test_a_merged_clean_run_reaches_certified(
         await client.post("/api/operation/gate-result", json=built.model_dump(mode="json"))
     ).json()
     assert body["agent_operation_certs"][0]["state"] == "certified"
-    assert (
-        (await client.get("/api/operation/gate-result/op-run-battery-13")).json()["verdict"]
-        == GateVerdict.PASS.value
-    )
+    read = (await client.get("/api/operation/gate-result/op-run-battery-13")).json()
+    assert read["verdict"] == GateVerdict.PASS.value
+
+    # THE BASIS, FROM A REAL BATTERY RATHER THAN A HAND-BUILT PAYLOAD. Everything above this line
+    # passed before the run carried one, and The Office still could not record the result: its
+    # `record_result` refuses a `certified` row that names no tier. These four fields are what
+    # make this a pass that crosses the boundary instead of one that stops at it.
+    assert read["score"] == 1.0
+    assert read["threshold"] == 1.0
+    assert read["certified_tier"] == "propose"
+    assert read["agent_model"] == "ollama/llama3.1:8b"
 
 
 async def test_a_certifying_outcome_without_a_model_is_refused(

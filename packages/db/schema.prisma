@@ -1015,6 +1015,9 @@ model OperationRun {
   score               Float?
   threshold           Float?
   certifiedTier       String?
+  /// provider/model that ANSWERED this run's battery. NULL where nothing answered: still
+  /// open, timed out, or a Unit-B run cleared by department state.
+  agentModel          String?
   scenarioCount       Int     @default(0)
   coverageDenominator Int     @default(0)
 

@@ -58,6 +58,7 @@ from src.services.operation.rubric import (
     is_spread_collapsed,
 )
 from src.services.operation.run_registry import (
+    UnitOutcome,
     close_run,
     gate_result_for,
     open_run,
@@ -66,6 +67,7 @@ from src.services.operation.run_registry import (
 from src.services.operation.run_window import DEFAULT_RUN_WINDOW_MINUTES
 from src.services.operation.scenarios import GATE_9_5_FLAG, validate_curriculum_submission
 from src.services.operation.state_machine import OperationState, is_assignable
+from src.services.operation.trust_tier import tier_for_state
 from src.utils.time import utcnow
 
 router = APIRouter()
@@ -209,6 +211,10 @@ async def gate_result(
         )
 
     agent_results: list[AgentOperationCertResult] = []
+    #: What the RUN is closed with, kept beside the outbound results because the two carry
+    #: different things: the Office-facing result shape is a contract and says nothing about the
+    #: model or the bar, while the run has to record both.
+    agent_units: list[UnitOutcome] = []
     for outcome in body.agent_outcomes:
         results_dicts = [_out_dim(r) for r in outcome.operation_rubric_results]
         spread = compute_rubric_dimension_spread(results_dicts)
@@ -269,6 +275,48 @@ async def gate_result(
                 ),
             )
 
+        # The tier is CAPPED here rather than trusted from the outcome. A battery declares the
+        # ceiling its exam can justify before the state is known; whether the unit reached it is
+        # decided above, from the rubric, the spread and the coverage holes. Trusting the declared
+        # value would write `propose` onto a `failed` row - which `views.py` already has to hide
+        # at render time, a symptom of the cap living nowhere.
+        tier = tier_for_state(state, outcome.max_certified_trust_tier)
+
+        # A pass must carry the basis it was earned on, for the same reason it must name the model.
+        #
+        # THIS IS THE REFUSAL THAT MAKES "an ungraded run never reports a pass" TRUE. The Office's
+        # `record_result` will not write a `certified` row without a tier, so before this check a
+        # PASS with no basis was not rejected anywhere - it was produced, reported, polled, and
+        # refused at the far side of the boundary, where the reason reads as an Office problem.
+        # Refusing it here means the run never reaches PASS at all, and the message names which
+        # fact is missing.
+        #
+        # `certified` only. A `provisional` hold has no certified tier BY DEFINITION - the
+        # certification was withheld - and demanding one would invite the placeholder The Office's
+        # own comment refuses.
+        if state == OperationState.CERTIFIED.value:
+            missing = [
+                name
+                for name, value in (
+                    ("score", outcome.score),
+                    ("threshold", outcome.threshold),
+                    ("certified_tier", tier),
+                )
+                if value is None
+            ]
+            if missing:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"agent_operation outcome for {outcome.agent_id}/{outcome.module_id} "
+                        f"resolves to 'certified' and carries no {', '.join(missing)}. A pass "
+                        "nobody can place is not a pass: The Office caps a declared tier with "
+                        "the certified one and refuses a certification without it, and a score "
+                        "with no threshold beside it is a number with no bar. Send what the "
+                        "battery measured, or report the outcome it actually reached."
+                    ),
+                )
+
         cert = OperationCertification(
             unitType="agent_operation",
             state=state,
@@ -281,7 +329,7 @@ async def gate_result(
             moduleId=outcome.module_id,
             functionsCertified=outcome.functions_certified,
             functionsInModule=outcome.functions_in_module,
-            maxCertifiedTrustTier=outcome.max_certified_trust_tier,
+            maxCertifiedTrustTier=tier,
             agentModel=outcome.agent_model,
             perScenarioClass={
                 r.scenario_class: r.verdict for r in outcome.per_scenario_class_results
@@ -299,7 +347,7 @@ async def gate_result(
                 module_id=outcome.module_id,
                 forge_id=outcome.forge_id,
                 state=state,
-                max_certified_trust_tier=outcome.max_certified_trust_tier,
+                max_certified_trust_tier=tier,
                 operation_rubric_results=outcome.operation_rubric_results,
                 rubric_dimension_spread=spread,
                 per_scenario_class_results=outcome.per_scenario_class_results,
@@ -309,8 +357,18 @@ async def gate_result(
                 expires_at=outcome.expires_at,
             )
         )
+        agent_units.append(
+            UnitOutcome(
+                state=state,
+                score=outcome.score,
+                threshold=outcome.threshold,
+                certified_tier=tier,
+                agent_model=outcome.agent_model,
+            )
+        )
 
     dept_results: list[DepartmentContextCertResult] = []
+    dept_units: list[UnitOutcome] = []
     for d_outcome in body.department_outcomes:
         if void:
             d_state = OperationState.REVOKED.value
@@ -343,6 +401,10 @@ async def gate_result(
                 compliance_coupling_verified=d_outcome.compliance_coupling_verified,
             )
         )
+        # A department context carries no score, no tier and no model, and that is not an omission
+        # to fix later: Unit B is cleared by whether the escalation path and the compliance
+        # coupling were verified, and nothing sat an exam. See the Unit-B note in `battery.py`.
+        dept_units.append(UnitOutcome(state=d_state))
 
     # Close the run this result answers, if one was opened for it. Nothing is created
     # here: a gate-result for a run SimForge never saw start is still recorded as certs,
@@ -352,8 +414,8 @@ async def gate_result(
         await close_run(
             session,
             run_ref=body.run_ref,
-            agent_states=[r.state for r in agent_results],
-            department_states=[r.state for r in dept_results],
+            agent_outcomes=agent_units,
+            department_outcomes=dept_units,
         )
 
     await session.commit()
