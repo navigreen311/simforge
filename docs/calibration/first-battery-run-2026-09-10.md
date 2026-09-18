@@ -2028,3 +2028,74 @@ The per-attempt seeds stay in `examAttempts`, where they are true.
 settings map that included a seed, so they will not compare equal to a new one for the same model.
 They are left as they are - rewriting a recorded certification's basis is not a correction, and
 re-running would replace verdicts Ivan is about to ingest.
+
+---
+
+# Entry 23 - eight failures to zero, and the ceiling is now the only thing left
+
+**2026-09-18.** The RECORD wording corrected
+([ADR-0068](../adr/ADR-0068-the-record-wording-is-corrected.md)); `ACT: ESCALATE <n>` deferred, one
+change at a time. Ceiling sized in
+[the-unreachable-ceiling-2026-09-18.md](../the-unreachable-ceiling-2026-09-18.md).
+
+## The same defect, one field over
+
+2.0.0's RECORD rule paraphrased its own template and dropped the separator:
+
+    - On RECORD, quote the subject exactly as the request stated it, then state the claim ...
+
+phi4 did exactly that, backticks and all:
+
+    RECORD: `asking_price` is a listing figure entered by a person.
+
+**Obeying the rule precisely and failing the parser.** And the single worked example used
+`RECORD: NONE`, so the only complete answer an agent ever saw never demonstrated the `=` form at
+all - ADR-0064's finding, surviving in the branch it did not cover.
+
+    unreadable RECORD lines, same 81 probes:  8  ->  0
+
+And the exams, dry-run at three attempts each: **all four clean, 3 for 3, score 1.0.** Five FAILs
+became four clean passes.
+
+## And every one of them is `provisional`
+
+The fix moved the results and did not move the ceiling. Worth writing down plainly, because it is
+now provable rather than observed:
+
+  1. `_dimension_item` gives a PASS dimension the score `passes/graded`, which for a PASS is
+     exactly **1.0**.
+  2. The held-out battery scores exactly **two** competence dimensions.
+  3. Two dimensions both at 1.0 is variance 0.0, which is below `COLLAPSE_SPREAD_THRESHOLD`.
+
+**A clean held-out run with two scored dimensions cannot certify.** Not usually - cannot. (With
+ONE scored dimension the check short-circuits and it can; none of the live modules is that shape.)
+
+## Where the other half was supposed to come from
+
+Following `submitted_rubric_results` back, the chain breaks three steps before the parameter:
+
+    The Office authors seven classes  ->  sends them on /operation/curriculum
+    SimForge validates them           ->  AND STORES NOTHING
+    nothing can run them              ->  nothing produces results
+    the parameter has no caller       <- the symptom everybody sees
+
+**The answer key The Office sends is discarded on arrival.** There is no model for it.
+
+And the producer has a name. `routers/office.py`: *"The Burkham Pack declares `modules_expected:
+[run_scenario_pack, gate_result]`. `gate_result` is bound and `run_scenario_pack` is deliberately
+not, so V32 FAILs on that name."*
+
+So the module that would run a submitted pack is declared in a Pack, named in a manifest, checked
+by a validator, and unimplemented **on purpose**. The seventh instance of this journal's oldest
+shape - except that this one is documented, and what nobody noticed is that its absence is a hard
+ceiling on every certification in the system.
+
+## The question I would settle before any of it
+
+The collapse rule calls a low-spread pass *"measuring one thing five times"*, and on two dimensions
+that is precisely what a held-out battery does. So either the ceiling is a gap to wire, or
+**`provisional` is the honest top of what a refusal-and-concealment battery can justify** - in
+which case nothing needs wiring and the thing to fix is that `provisional` is not assignable.
+
+Those are different rulings leading to different work, and the sizing is worth nothing until one of
+them is made.
