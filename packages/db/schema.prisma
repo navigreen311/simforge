@@ -1105,7 +1105,13 @@ model OperationCertification {
   maxCertifiedTrustTier String? // auto_execute | propose | suggest
   perScenarioClass      Json? // { scenario_class: verdict }
   operationRubricResults Json? // NAMED LIST: [{dimension, verdict, score?, threshold?}]
-  rubricDimensionSpread Float? // collapse check
+  rubricDimensionSpread Float? // collapse check - a VARIANCE under v1, a RANGE under v2
+  /// Which rule produced rubricDimensionSpread (ADR-0070). The measure is versioned, not
+  /// migrated: pre-v2 rows keep their variance and are labelled population_variance_v1.
+  /// Nullable only where there is no number to label (a Unit B row). The invariant - a number
+  /// never travels without its rule - is a CHECK constraint in the migration, which Prisma
+  /// cannot express: operation_cert_spread_has_a_measure.
+  rubricSpreadMeasure   String?
   failureModesObserved  Json?
   versionSensitivity    Json? // {module: [major|minor|patch]} (Rev 2 Q4)
   expiresAt             DateTime?

@@ -6,6 +6,7 @@ import type {
 } from "@/lib/api/client";
 import {
   dimensionLabel,
+  SPREAD_MEASURE_RANGE_V2,
   isSpreadCollapsed,
   OPERATION_STATE_META,
   scenarioClassLabel,
@@ -199,10 +200,28 @@ function OperationPanel({
     );
   }
 
-  const numericDims = op.operation_rubric_results.filter(
+  const scored = op.operation_rubric_results.filter(
+    (r) => r.verdict === "PASS" || r.verdict === "FAIL",
+  );
+  const numericDims = scored.length;
+  // ADR-0070 — the v2 reading needs two facts the spread alone cannot carry: how far the LOWEST
+  // dimension sits from the ceiling, and how many scenario classes the dimensions were drawn
+  // from. A v1 row ignores both, which is correct: it was not computed with them.
+  const scores = scored.map((r) => r.score).filter((v): v is number => typeof v === "number");
+  const classesExercised = op.per_scenario_class_results.filter(
     (r) => r.verdict === "PASS" || r.verdict === "FAIL",
   ).length;
-  const collapsed = isSpreadCollapsed(op.state, op.rubric_dimension_spread, numericDims);
+  const collapsed = isSpreadCollapsed(op.state, op.rubric_dimension_spread, numericDims, {
+    measure: op.rubric_spread_measure,
+    lowestScore: scores.length ? Math.min(...scores) : null,
+    classesExercised,
+  });
+  // The number is named for what it IS, never just "spread": the same 0.000 is a collapsed
+  // variance under v1 and a clean sweep under v2.
+  const spreadLabel =
+    op.rubric_spread_measure === SPREAD_MEASURE_RANGE_V2 ? "range" : "variance";
+  const undersourced =
+    op.rubric_spread_measure === SPREAD_MEASURE_RANGE_V2 && classesExercised < 2;
   const neverDoHole = op.never_do_status === "untested"; // list exists but the dimension was n/a
 
   return (
@@ -234,15 +253,19 @@ function OperationPanel({
       {collapsed &&
         (op.state === "provisional" ? (
           <div className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-[11px] text-accent">
-            ⚠ Full certification withheld (provisional). The rubric dimensions collapsed (spread{" "}
-            <span className="font-mono">{op.rubric_dimension_spread?.toFixed(3)}</span>) — the
-            dimensions returned near-identical results, so the rubric didn&apos;t discriminate. This
-            is <strong>not a low score</strong>; certification is held until real signal separates
-            the dimensions. Not assignable.
+            ⚠ Full certification withheld (provisional). The rubric didn&apos;t discriminate (
+            <span className="font-mono">{spreadLabel}</span>{" "}
+            <span className="font-mono">{op.rubric_dimension_spread?.toFixed(3)}</span>) —{" "}
+            {undersourced
+              ? "the dimensions were drawn from fewer than two scenario classes, so their agreement says nothing about the module"
+              : "the dimensions agreed, and agreed short of the ceiling"}
+            . This is <strong>not a low score</strong>; certification is held until real signal
+            separates the dimensions. Not assignable.
           </div>
         ) : (
           <div className="rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-warning">
-            ⚠ Low-information PASS — rubric dimensions collapsed (spread{" "}
+            ⚠ Low-information PASS — the rubric didn&apos;t discriminate (
+            <span className="font-mono">{spreadLabel}</span>{" "}
             <span className="font-mono">{op.rubric_dimension_spread?.toFixed(3)}</span>). Advisory
             only; does not change the verdict.
           </div>

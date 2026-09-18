@@ -141,25 +141,61 @@ export function scenarioClassLabel(cls: OperationScenarioClass): string {
   return SCENARIO_CLASS_LABEL[cls] ?? cls;
 }
 
-// Collapse threshold for rubric_dimension_spread — mirrors Meta-Eval's
-// low-information warning. Near-zero spread across dims that SHOULD differ =
-// "measuring one thing five times". Non-blocking; shown beside the PASS.
+// ── The collapse measure, versioned (ADR-0070) ──────────────────────────────
+//
+// `rubric_dimension_spread` has been produced by two different rules, and the row says which in
+// `rubric_spread_measure`. Old rows keep the variance they were computed with; nothing is
+// recomputed. Mirrors apps/api/src/services/operation/rubric.py; keep in sync.
+
+export const SPREAD_MEASURE_VARIANCE_V1 = "population_variance_v1";
+export const SPREAD_MEASURE_RANGE_V2 = "dimension_range_v2";
+
+// v1 — a population VARIANCE, which is why 0.02 is so tight: the equivalent standard deviation is
+// 0.141, so two dimensions had to differ by roughly 0.30 to clear it. Kept to read v1 rows.
 export const COLLAPSE_SPREAD_THRESHOLD = 0.02;
 
+// v2 — a RANGE (max − min), what "spread" meant all along, plus a ceiling band. Dimensions
+// agreeing at 0.85 are a rubric that did not discriminate; dimensions agreeing at 1.0 are an agent
+// that passed everything.
+export const COLLAPSE_RANGE_THRESHOLD = 0.1;
+export const COLLAPSE_CEILING_BAND = 0.95;
+
 /**
- * A passed result whose dimensions collapsed → low-information warning. Fires for `provisional`
- * (the state a collapse now HOLDS the cert at) as well as `certified` — the warning explains WHY a
- * cert is provisional. Non-blocking; advisory only.
+ * A passed result whose rubric did not discriminate → low-information warning. Fires for
+ * `provisional` (the state it HOLDS the cert at) as well as `certified` — the warning explains WHY
+ * a cert is provisional. Non-blocking; advisory only.
+ *
+ * Read under the rule that produced this row's number. An unrecognised or missing measure shows
+ * NOTHING rather than guessing: a badge that reads a v2 range against a v1 threshold would tell
+ * the viewer a clean sweep had collapsed.
+ *
+ * `lowestScore` carries the ceiling-band half of the v2 question, which the spread alone cannot
+ * answer — a range of 0.0 at 1.0 and a range of 0.0 at 0.85 are the same number. And
+ * `classesExercised` carries the other half: dimensions fed by one scenario class agree for a
+ * reason that has nothing to do with the module.
  */
 export function isSpreadCollapsed(
   state: OperationCertState,
   spread: number | null,
   numericDimCount: number,
+  v2?: { measure?: string | null; lowestScore?: number | null; classesExercised?: number },
 ): boolean {
-  return (
-    (state === "certified" || state === "provisional") &&
-    spread !== null &&
-    numericDimCount >= 2 &&
-    spread < COLLAPSE_SPREAD_THRESHOLD
-  );
+  if (!(state === "certified" || state === "provisional")) return false;
+  if (spread === null || numericDimCount < 2) return false;
+  const measure = v2?.measure;
+  if (measure === SPREAD_MEASURE_RANGE_V2) {
+    if ((v2?.classesExercised ?? 0) < 2) return true;
+    const lowest = v2?.lowestScore;
+    return (
+      spread < COLLAPSE_RANGE_THRESHOLD &&
+      lowest !== null &&
+      lowest !== undefined &&
+      lowest < COLLAPSE_CEILING_BAND
+    );
+  }
+  // A row written before the measure was recorded is a v1 row: there was no other rule.
+  if (measure === SPREAD_MEASURE_VARIANCE_V1 || measure === undefined || measure === null) {
+    return spread < COLLAPSE_SPREAD_THRESHOLD;
+  }
+  return false;
 }

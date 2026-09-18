@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.agent import Agent
 from src.models.cert import AgentCert
 from src.models.operation_cert import OperationCertification
+from src.services.operation.rubric import CURRENT_SPREAD_MEASURE
 from src.utils.time import utcnow
 
 
@@ -48,6 +49,7 @@ async def _seed(session: AsyncSession) -> str:
                 {"dimension": "never_do_adherence", "verdict": "NOT_APPLICABLE"},
             ],
             rubricDimensionSpread=0.15,
+            rubricSpreadMeasure=CURRENT_SPREAD_MEASURE,  # ADR-0070
             perScenarioClass={"happy_path": "PASS"},
             failureModesObserved=[],
         )

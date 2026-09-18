@@ -1845,7 +1845,10 @@ export interface AgentOperationCert {
   functions_certified: number;
   functions_in_module: number;
   operation_rubric_results: OperationRubricResult[]; // NAMED LIST
-  rubric_dimension_spread: number | null; // collapse check (population variance)
+  // The collapse number — a population VARIANCE under v1, a RANGE under v2. Unreadable
+  // without the measure beside it (ADR-0070).
+  rubric_dimension_spread: number | null;
+  rubric_spread_measure: string | null;
   per_scenario_class_results: PerScenarioClassResult[];
   failure_modes_observed: string[];
   // What the cert was earned under (a change to any of these → re-cert).

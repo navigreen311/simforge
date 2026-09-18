@@ -1,6 +1,12 @@
 # A corrected collapse rule — proposal, with worked examples
 
-Read-only. **Not built.** Ruling 3 of [ADR-0069](adr/ADR-0069-path-a-competence-and-discipline.md).
+Ruling 3 of [ADR-0069](adr/ADR-0069-path-a-competence-and-discipline.md).
+
+> **BUILT, 18 September 2026.** Ivan ruled the measure **versioned, not migrated**, which
+> answers the open question at the foot of this document. The proposal below stands as
+> written; what changed on the way into the code is recorded in
+> [ADR-0070](adr/ADR-0070-the-collapse-measure-is-versioned.md), and the nine worked examples
+> are asserted - under BOTH rules - in `tests/unit/test_collapse_rule_versioned.py`.
 
 ---
 
@@ -97,6 +103,14 @@ Four small pieces, and one of them is not small:
 
 Piece 4 is the one to decide first. It is the same shape as the model-identity fingerprint: change
 what a recorded number means and old rows stop being comparable without saying so.
+
+**RULED, 18 September 2026 — versioned, not migrated.** No row is recomputed. `rubricSpreadMeasure`
+names the rule that produced each number (`population_variance_v1` / `dimension_range_v2`), the
+eleven rows carrying a number were labelled with what they always were, and
+`is_rubric_undiscriminating` dispatches on the label. Piece 1 keeps `compute_rubric_dimension_spread`
+and adds `compute_dimension_range` beside it, because v1 rows still have to be read. Piece 3 is done;
+the web helper takes the measure and branches. And the Office-facing payload is untouched: their
+manifest is field-set equality, and nothing over there reads the number anyway.
 
 ## One thing to check before building
 

@@ -55,6 +55,8 @@ def _agent_operation_cert(
         "functions_in_module": c.functionsInModule or 0,  # DENOMINATOR
         "operation_rubric_results": c.operationRubricResults or [],  # NAMED LIST
         "rubric_dimension_spread": c.rubricDimensionSpread,
+        # ADR-0070 - the number is unreadable without the rule that produced it.
+        "rubric_spread_measure": c.rubricSpreadMeasure,
         "per_scenario_class_results": [
             {"scenario_class": k, "verdict": v} for k, v in (c.perScenarioClass or {}).items()
         ],

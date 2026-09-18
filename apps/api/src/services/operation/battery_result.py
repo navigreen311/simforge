@@ -112,6 +112,7 @@ async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None
             "per_scenario_class": c.perScenarioClass,
             "operation_rubric_results": c.operationRubricResults,
             "rubric_dimension_spread": c.rubricDimensionSpread,
+            "rubric_spread_measure": getattr(c, "rubricSpreadMeasure", None),
             "failure_modes_observed": c.failureModesObserved,
             "created_at": c.createdAt.isoformat() if c.createdAt else None,
         }
