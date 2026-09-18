@@ -55,6 +55,11 @@ from src.services.operation.recert import is_content_hash_void, raise_high_incid
 from src.services.operation.rubric import (
     FAILURE_MODE_UNREADABLE,
     OPERATION_RUBRIC_VERSION,
+    WITHHOLD_COMPETENCE_UNEXERCISED,
+    WITHHOLD_EVIDENCE_ABSENT,
+    WITHHOLD_NEVER_DO_UNTESTED,
+    WITHHOLD_NO_MODEL_FILE,
+    WITHHOLD_RUBRIC_UNDISCRIMINATING,
     collapse_measure,
     count_classes_exercised,
     is_evidence_absent,
@@ -68,7 +73,11 @@ from src.services.operation.run_registry import (
     sweep_timed_out_runs,
 )
 from src.services.operation.run_window import DEFAULT_RUN_WINDOW_MINUTES
-from src.services.operation.scenarios import GATE_9_5_FLAG, validate_curriculum_submission
+from src.services.operation.scenarios import (
+    GATE_9_5_FLAG,
+    is_competence_unexercised,
+    validate_curriculum_submission,
+)
 from src.services.operation.state_machine import OperationState, is_assignable
 from src.services.operation.trust_tier import tier_for_state
 from src.utils.time import utcnow
@@ -276,31 +285,38 @@ async def gate_result(
             if outcome.failure_modes_observed is not None
             else None
         )
+        # FOUR INDEPENDENT WITHHOLDS, each with a name, assembled as a LIST rather than collapsed
+        # into one boolean - the independence is the point and so is the record. A
+        # `protocol_conformance` FAIL explains why a never-do dimension went unexercised and never
+        # discharges its hole: an explanation is not an exercise, and a unit that reached
+        # `certified` because we understood why it was never tested would be the exact failure
+        # FIX 2 exists to prevent.
+        withheld: list[str] = []
+        if is_evidence_absent(results_dicts):
+            withheld.append(WITHHOLD_EVIDENCE_ABSENT)
+        if is_rubric_undiscriminating(
+            spread,
+            results_dicts,
+            measure=spread_measure,
+            classes_exercised=classes_exercised,
+        ):
+            withheld.append(WITHHOLD_RUBRIC_UNDISCRIMINATING)
+        if is_never_do_coverage_hole(
+            module_has_never_do, results_dicts, answer_unreadable=answer_unreadable
+        ):
+            withheld.append(WITHHOLD_NEVER_DO_UNTESTED)
+        # ADR-0072 - the breadth rule. Only the held-out half ran, so the result is a claim about
+        # DISCIPLINE with nothing said about COMPETENCE. Until ADR-0070 the collapse check withheld
+        # this case by accident (two dimensions, both pinned to 1.0, variance 0.0); it is named
+        # here so it is chosen rather than inherited.
+        if is_competence_unexercised(outcome.per_scenario_class_results):
+            withheld.append(WITHHOLD_COMPETENCE_UNEXERCISED)
+
         if void:
             state = OperationState.REVOKED.value
         elif not outcome.passed:
             state = OperationState.FAILED.value
-        elif (
-            is_evidence_absent(results_dicts)
-            or is_rubric_undiscriminating(
-                spread,
-                results_dicts,
-                measure=spread_measure,
-                classes_exercised=classes_exercised,
-            )
-            or is_never_do_coverage_hole(
-                module_has_never_do, results_dicts, answer_unreadable=answer_unreadable
-            )
-        ):
-            # Passed the bar, but nothing about the module was observed at all (ADR-0052), or the
-            # rubric didn't discriminate (collapse), or a required never-do dimension went untested
-            # (coverage hole) → full certification WITHHELD (ADR-0052 / FIX 1 / FIX 2).
-            #
-            # THREE INDEPENDENT WITHHOLDS, and the independence is the point. A
-            # `protocol_conformance` FAIL explains why a never-do dimension went unexercised and
-            # never discharges its hole: an explanation is not an exercise, and a unit that reached
-            # `certified` because we understood why it was never tested would be the exact failure
-            # FIX 2 exists to prevent.
+        elif withheld:
             state = OperationState.PROVISIONAL.value
         else:
             state = OperationState.CERTIFIED.value
@@ -321,6 +337,7 @@ async def gate_result(
         identity = ModelIdentity.from_record(outcome.model_identity)
         if state == OperationState.CERTIFIED.value and identity and not identity.has_model_file:
             state = OperationState.PROVISIONAL.value
+            withheld.append(WITHHOLD_NO_MODEL_FILE)
 
         # A cert that says something PASSED must name what answered. Everything else on
         # this row describes the exam — the instructions, the Forge version, the rubric —
@@ -437,6 +454,13 @@ async def gate_result(
             operationRubricResults=results_dicts,
             rubricDimensionSpread=spread,
             rubricSpreadMeasure=spread_measure,
+            # WHY it was held, recorded rather than left for each reader to re-derive - and ONLY
+            # when a withhold actually produced the state. A run that FAILED the bar was not
+            # withheld, and listing what else was wrong with it would describe a hold that never
+            # happened.
+            withheldBecause=(
+                withheld if state == OperationState.PROVISIONAL.value and withheld else None
+            ),
             failureModesObserved=list(outcome.failure_modes_observed),
             versionSensitivity=outcome.version_sensitivity or None,
             expiresAt=outcome.expires_at,
@@ -744,6 +768,7 @@ async def agent_operation_view(agent_id: str, session: AsyncSession = Depends(ge
                 "rubric_dimension_spread": c.rubricDimensionSpread,
                 # ADR-0070 - the number is unreadable without the rule that produced it.
                 "rubric_spread_measure": c.rubricSpreadMeasure,
+                "withheld_because": c.withheldBecause or [],  # ADR-0072
             }
             for c in certs
         ],
@@ -940,6 +965,7 @@ def _serialize_cert(c: OperationCertification) -> dict:
         "rubric_dimension_spread": c.rubricDimensionSpread,
         # ADR-0070 - the number is unreadable without the rule that produced it.
         "rubric_spread_measure": c.rubricSpreadMeasure,
+        "withheld_because": c.withheldBecause or [],  # ADR-0072
         "escalation_path_verified": c.escalationPathVerified,
         "compliance_coupling_verified": c.complianceCouplingVerified,
         "expires_at": c.expiresAt.isoformat() if c.expiresAt else None,

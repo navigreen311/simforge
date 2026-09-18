@@ -8,6 +8,7 @@ import {
   dimensionLabel,
   SPREAD_MEASURE_RANGE_V2,
   isSpreadCollapsed,
+  withholdLabel,
   OPERATION_STATE_META,
   scenarioClassLabel,
   trustTierLabel,
@@ -211,7 +212,8 @@ function OperationPanel({
   const classesExercised = op.per_scenario_class_results.filter(
     (r) => r.verdict === "PASS" || r.verdict === "FAIL",
   ).length;
-  const collapsed = isSpreadCollapsed(op.state, op.rubric_dimension_spread, numericDims, {
+  const recordedItsReasons = op.withheld_because.length > 0;
+  const collapsed = !recordedItsReasons && isSpreadCollapsed(op.state, op.rubric_dimension_spread, numericDims, {
     measure: op.rubric_spread_measure,
     lowestScore: scores.length ? Math.min(...scores) : null,
     classesExercised,
@@ -248,8 +250,25 @@ function OperationPanel({
         <span className="font-mono text-ink-200">{op.module_id}</span>
       </div>
 
+      {/* ADR-0072 — the row says why it was held. Shown ABOVE the re-derived notes below, because
+          this is the recorded reason and those are a reader's reconstruction. */}
+      {op.withheld_because.length > 0 && (
+        <div className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-[11px] text-accent">
+          <div className="font-semibold">
+            ⚠ Full certification withheld (provisional). Not assignable.
+          </div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {op.withheld_because.map((reason) => (
+              <li key={reason}>{withholdLabel(reason)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* FIX 1 — collapse: for a provisional cert this explains the HOLD; for certified it is a
-          non-blocking low-information note beside the pass. */}
+          non-blocking low-information note beside the pass. A row that RECORDED its reasons says
+          so above; this stays for rows written before the column existed, and for the advisory
+          note beside a certified pass. */}
       {collapsed &&
         (op.state === "provisional" ? (
           <div className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-[11px] text-accent">

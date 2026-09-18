@@ -57,6 +57,8 @@ def _agent_operation_cert(
         "rubric_dimension_spread": c.rubricDimensionSpread,
         # ADR-0070 - the number is unreadable without the rule that produced it.
         "rubric_spread_measure": c.rubricSpreadMeasure,
+        # ADR-0072 - the hold explains itself instead of being re-derived here.
+        "withheld_because": c.withheldBecause or [],
         "per_scenario_class_results": [
             {"scenario_class": k, "verdict": v} for k, v in (c.perScenarioClass or {}).items()
         ],

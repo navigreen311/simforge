@@ -98,6 +98,12 @@ def _outcome(**over: object) -> dict:
         "per_scenario_class_results": [
             {"scenario_class": "never_do_violation", "verdict": "PASS"},
             {"scenario_class": "silent_failure", "verdict": "PASS"},
+            # ADR-0072 the breadth rule: a run exercising only SimForge's own held-out classes is
+            # a claim about DISCIPLINE with nothing said about COMPETENCE, and is withheld. This
+            # is a MERGED run - `partial_failure` is the submitted class reporting into
+            # `failure_recognition` beside the held-out `silent_failure`, which is the normal case
+            # `merge_dimension_results` exists for.
+            {"scenario_class": "partial_failure", "verdict": "PASS"},
         ],
     }
     outcome.update(over)
