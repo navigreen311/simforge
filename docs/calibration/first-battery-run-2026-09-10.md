@@ -2099,3 +2099,70 @@ which case nothing needs wiring and the thing to fix is that `provisional` is no
 
 Those are different rulings leading to different work, and the sizing is worth nothing until one of
 them is made.
+
+---
+
+# Entry 24 - Path A, and the answer key stops being thrown away
+
+**2026-09-18.** Ivan chose Path A and ruled four times
+([ADR-0069](../adr/ADR-0069-path-a-competence-and-discipline.md)). P1 is built; the grading shape,
+the collapse correction and the functional battery are not.
+
+## The one-line defect P1 closes
+
+`submit_curriculum` validated `body.operation_scenarios` and stored nothing. Five approved
+Greenstone answer keys, 27 scenarios, every expected behaviour citing CRE Forge code by file and
+line or the live manual by section - **discarded on arrival.**
+
+That one line is why no run could reach `certified`: nothing could run the seven submittable
+classes, so only the two SimForge authors itself ever carried a score, and two equal scores
+collapse.
+
+The table replaces rather than accumulates, keyed on the same `(forge, module, content hash)` the
+instruction set upserts on. **A per-scenario upsert would have got the shrinking case wrong** - a
+re-post with fewer scenarios would leave the withdrawn ones standing and a reader would count a
+class the submitter had taken back.
+
+Two absences named rather than filled: no column for the expected ACT/RECORD shape, because the
+payload does not carry one yet and **a column written by nothing is this journal's oldest defect**;
+and no table for `module_not_applicable`, so a declared absence still cannot be told from a missing
+one after the request ends.
+
+## What ruling 2 costs, measured against the real keys
+
+The ACT is nearly free - ~25 of 27 read straight off the sentence, because the prose already says
+"Report 143 as...", "hands the failure to a human and stops", "goes back to the analyst and asks".
+
+**The RECORD is Ivan's, and for a structural reason rather than a clerical one.** Several approved
+expectations name TWO facts:
+
+    "Report 143 as the number of matching properties AND the hundred as one page of them"
+    "Report that no property matched AND report the query string beside the count"
+
+and the protocol allows ONE record line. So somebody must decide which single fact is *put on the
+record* and which becomes a caveat that is not graded. Fifteen such decisions.
+
+**The protocol and the answer keys disagree and neither is wrong.** Three ways out, in the report;
+one of them splits 27 scenarios toward 40 and changes what those fifteen decisions are, which is
+why it is worth settling first.
+
+## The collapse rule, corrected on paper
+
+The measurement that made it a ruling rather than an opinion:
+
+    clean run, any number of dims      var 0.0000   COLLAPSES
+    strong but imperfect               var 0.0110   COLLAPSES
+    mixed / mediocre                   var 0.0264   passes
+
+A threshold of 0.02 on a **variance**, described in its own comment as a "spread" - sd 0.141 - and
+a grader that pins every PASS to exactly 1.0. The rule could never be satisfied by a clean run and
+was easiest to satisfy by a mediocre one.
+
+The proposal reframes it as a question about the INSTRUMENT: count independently-sourced
+dimensions, use a readable range, and treat agreement AT the ceiling as a clean sweep rather than a
+collapse. Every strong profile stops being withheld; every weak one is unaffected; the two cases
+the rule was written for still collapse.
+
+Not built. The piece to settle first is piece 4: `rubric_dimension_spread` is stored on every
+certification as a variance, and changing what a recorded number means without saying so is the
+same shape as the model-identity fingerprint two entries ago.

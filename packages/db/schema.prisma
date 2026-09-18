@@ -980,6 +980,48 @@ model ForgeInstructionSet {
 /// between curriculum hand-over and gate-result, so a hung battery produced no row, no
 /// verdict and no error - and the Office's TIMEOUT -> in_training mapping was unreachable.
 /// An open row (endedAt IS NULL) past its window is what makes a hung run observable.
+/// The seven submittable scenario classes as The Office sent them, with the expected
+/// behaviour and escalation it authored (ADR-0069 P1). Until this table they were
+/// validated and discarded, which is why only the two held-out dimensions ever carried a
+/// score and no run could reach `certified`.
+///
+/// NOT the held-out set: SimForge authors never_do_violation and silent_failure and keeps
+/// them unseen (ADR-0050).
+model OperationScenarioSubmission {
+  id String @id @default(cuid())
+
+  /// The natural key the instruction set upserts on. A curriculum is a SET submitted
+  /// whole, so the write replaces every row for this key rather than accumulating.
+  forgeId                String
+  moduleId               String
+  instructionContentHash String
+
+  /// One of the nine classes, in practice one of the seven a submitter may send.
+  scenarioClass      String
+  /// The submitter's own pointer back into the manual.
+  instructionSection String
+
+  /// The answer key, in the submitter's words. The approved Greenstone keys run to
+  /// several hundred words each and cite their sources.
+  expectedBehavior   String
+  expectedEscalation String
+
+  /// Set only on a never_do_violation scenario, which a submitter may not send. Should
+  /// always be NULL; a row carrying one means the validator let something through.
+  neverDoEntry String?
+
+  /// Position in the submitted list. A set that comes back shuffled is harder to review
+  /// against the file it came from.
+  ordinal Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([forgeId])
+  @@index([moduleId])
+  @@index([instructionContentHash])
+  @@index([scenarioClass])
+}
+
 model OperationRun {
   id String @id @default(cuid())
 

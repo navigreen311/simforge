@@ -15,7 +15,7 @@ result, and the domain cert tables are never touched.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_session
@@ -23,6 +23,7 @@ from src.deps import Principal, get_current_principal, require_role
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
+from src.models.operation_scenario import OperationScenarioSubmission
 from src.schemas.operation_payloads import (
     AgentOperationCertResult,
     DepartmentContextCertResult,
@@ -115,6 +116,43 @@ async def submit_curriculum(
         )
 
     ref = body.instruction_set_ref
+
+    # ADR-0069 P1: THE ANSWER KEY IS KEPT.
+    #
+    # Until this, `body.operation_scenarios` was validated and discarded - so nothing could re-read
+    # what a venture said its agent should do, nothing could RUN the seven submittable classes, and
+    # therefore only the two held-out dimensions ever carried a score. Both at 1.0 on a clean run
+    # is a collapsed spread, which is why no run could reach `certified`.
+    #
+    # DELETE-THEN-INSERT, not an upsert per scenario. A curriculum is a SET submitted whole: a
+    # re-post of the same one must not double it, and a re-post of a CHANGED one must not leave
+    # last time's scenarios standing beside this time's. The key is the same natural key the
+    # instruction set upserts on, so the two halves of one submission agree about what "the same
+    # submission" means without either asserting it.
+    await session.execute(
+        delete(OperationScenarioSubmission).where(
+            OperationScenarioSubmission.forgeId == ref.forge_id,
+            OperationScenarioSubmission.moduleId == ref.module_id,
+            OperationScenarioSubmission.instructionContentHash == ref.content_hash,
+        )
+    )
+    for ordinal, scenario in enumerate(body.operation_scenarios):
+        session.add(
+            OperationScenarioSubmission(
+                forgeId=ref.forge_id,
+                # The SCENARIO's module, not the ref's: a curriculum may carry scenarios for
+                # several modules and `requested_modules` above is built from exactly that.
+                moduleId=scenario.module_id,
+                instructionContentHash=ref.content_hash,
+                scenarioClass=scenario.scenario_class,
+                instructionSection=scenario.instruction_section,
+                expectedBehavior=scenario.expected_behavior,
+                expectedEscalation=scenario.expected_escalation,
+                neverDoEntry=scenario.never_do_entry,
+                ordinal=ordinal,
+            )
+        )
+
     existing = (
         await session.execute(
             select(ForgeInstructionSet).where(
@@ -141,6 +179,11 @@ async def submit_curriculum(
     elif never_do and not existing.neverDo:
         # Backfill the never-do list if this submission declares one and the set didn't carry it.
         existing.neverDo = never_do
+        await session.commit()
+    else:
+        # The instruction set was already correct, and the SCENARIOS still need committing: the
+        # delete-then-insert above is in this transaction, and a re-submission that changed only
+        # its scenarios would otherwise be rolled back at the end of the request.
         await session.commit()
 
     return {
