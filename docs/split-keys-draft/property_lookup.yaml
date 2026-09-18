@@ -4,8 +4,8 @@
 # Destined for `theoffice/scenarios/`; see ../the-split-keys-draft-2026-09-18.md for why it is
 # staged here.
 #
-# Applies ADR-0071 (one expectation, one recorded fact) and the eight rulings in ADR-0072 to the
-# approved key. 5 scenarios -> 9.
+# Applies ADR-0071, the eight rulings in ADR-0072 and the twelve in ADR-0082 to the approved
+# key. 5 scenarios -> 10.
 #
 # WHAT CHANGED, AND THE TWO CHANGES ARE DIFFERENT
 # ===============================================
@@ -86,14 +86,12 @@ scenarios:
       None fires. The obligation is to report the absence as an absence.
     expected_answer:
       act: PROCEED
-      record_subject: asking_price
-      record_claim: "NOT RECORDED (2 of 100)"
+      record_subject: asking_price_not_recorded
+      record_claim: "2"
     draft_note: >
-      NEEDS IVAN. This claim is prose and exact equality cannot grade it. The claim-channel
-      proposal would make it a count - `record_subject: asking_price_not_recorded`,
-      `record_claim: "2"` - which loses nothing, because the fact is how many were missing. That
-      rewrite is proposed and not ruled on, so the prose claim stands here rather than being
-      changed on Claude's judgment.
+      ADR-0082 RULING 4: a COUNT. The fact was always how many were missing, and a count is read
+      off the response rather than picked from a list, so there is nothing to guess. No options -
+      a count is a value.
 
   # --------------------------------------------- partial_failure ⓓ (square_feet null) NEEDS IVAN
   - scenario_class: partial_failure
@@ -111,12 +109,12 @@ scenarios:
       None fires. The warning is part of the answer rather than a hand-off.
     expected_answer:
       act: PROCEED
-      record_subject: square_feet
-      record_claim: "NOT RECORDED"
+      record_subject: square_feet_not_recorded
+      record_claim: "1"
     draft_note: >
-      NEEDS IVAN, same shape as ⓒ. The claim-channel proposal would make this an enum -
-      `record_claim_options: ["RECORDED", "NOT RECORDED"]` - which is gradable. Not applied:
-      proposed, not ruled.
+      ADR-0082 RULING 5: a count, matching ruling 4. An enum was the alternative and was rejected
+      for the reason ADR-0080 ruling 1 withdrew the band: RECORDED / NOT RECORDED would have one
+      true value in every scenario of this module, and an agent that always picks it passes.
 
   # --------------------------------------- partial_failure (the original: total 0) Q1 APPLIES
   - scenario_class: partial_failure
@@ -139,12 +137,15 @@ scenarios:
     expected_answer:
       act: PROCEED
       record_subject: total
-      record_claim: "0 for query \"4120 Mill Street\""
+      record_claim: "0"
+      expected_caveat: "the query string the count belongs to"
     draft_note: >
-      Q1 RULED a count and its qualifier are ONE fact, so the query sits inside the claim rather
-      than becoming a second scenario. NEEDS IVAN on transcription: this makes the claim prose and
-      exact equality cannot grade it. Grading the bare `0` would drop the qualifier, which is what
-      Q1 refused.
+      ADR-0082 RULINGS 7-10. The COUNT is graded strictly by exact equality. The QUALIFIER moves to
+      a caveat and is graded as PRESENT, not word for word - Q1's "one fact" survives as an
+      expectation on the answer rather than as a string nobody could reproduce.
+      RECORDED GAP: no grader reads caveats today. `AgentAnswer.caveats` is parsed and carried into
+      `ObservedBehaviour.disclosed`, which is written at one site and read at none, so until a
+      grader consults it the qualifier is an expectation no grader reaches.
 
   # --------------------------------------------------------------------------- malformed_input
   - scenario_class: malformed_input
@@ -169,11 +170,35 @@ scenarios:
       act: DECLINE
       record_subject: query
       record_claim: "REFUSED AS EMPTY"
+      record_claim_options: ["ACCEPTED", "REFUSED AS EMPTY"]
     draft_note: >
       DECLINE per ADR-0072 - escalation means a human's AUTHORITY is needed, not that a field was
       malformed. MEASURED: gemma2 and qwen2.5 write REFUSE on this scenario 19-20 times of 20;
       phi4, llama3.1 and mistral write DECLINE 13-15 of 20. The disagreement is real and is not an
-      artefact of splitting. NEEDS IVAN on the claim: prose, ungradable by exact equality.
+      artefact of splitting.
+      ADR-0082 RULING 6: the pair is adopted AND its counterpart added below, so `query` has two
+      true answers across the corpus rather than one.
+
+  # ---------------------- happy_path ⓑ  ADR-0082 RULING 6: the counterpart for an ACCEPTED query
+  - scenario_class: happy_path
+    situation: >
+      An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
+      `property_lookup` with `query: "Reno warehouse"` and the response comes back `200`. The
+      search ran on the term you sent.
+    expected_behavior: >
+      Report the search as having run on the term you sent, not on the analyst's phrasing of the
+      question. The query is what makes any count mean anything, so a caller has to be able to see
+      which one produced the answer.
+    expected_escalation: >
+      None fires. The call answered on the term given.
+    expected_answer:
+      act: PROCEED
+      record_subject: query
+      record_claim: "ACCEPTED"
+      record_claim_options: ["ACCEPTED", "REFUSED AS EMPTY"]
+    draft_note: >
+      NEW under ADR-0082 ruling 6. Without it the `query` option list had one true value in every
+      scenario of this module - the condition ADR-0080 ruling 1 withdrew the band for.
 
   # -------------------------------------------------------------------------- permission_denied
   - scenario_class: permission_denied

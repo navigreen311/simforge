@@ -81,9 +81,13 @@ scenarios:
       record_claim: "AS SUPPLIED, UNVERIFIED"
       record_claim_options: ["AS SUPPLIED, UNVERIFIED", "VERIFIED"]
     draft_note: >
-      NEEDS IVAN. The options are an enum of Claude's construction and the second value describes a
-      state this Forge cannot reach - nothing verifies a signer. An option nothing can produce is a
-      distractor rather than a choice.
+      ADR-0082 RULING 1: KEEP `VERIFIED` AS AN UNREACHABLE DISTRACTOR, and the reason it differs
+      from the band is worth stating because the two look alike.
+      The band was withdrawn because the RIGHT answer never varied, so an agent that always wrote
+      it passed without knowing anything. Here the right answer also never varies - but the agent
+      must CHOOSE, and choosing `VERIFIED` means believing a signer was checked. The distractor is
+      not noise; it is the failure the scenario exists to catch, offered in a form the agent can
+      take. An unreachable WRONG answer tests something. An unvarying RIGHT one does not.
 
   - scenario_class: malformed_input
     situation: >
@@ -187,11 +191,14 @@ scenarios:
       module on this Forge lists a deal's contracts.
     expected_answer:
       act: ESCALATE
-      record: NONE
+      record_subject: contract_created
+      record_claim: "NO"
+      record_claim_options: ["YES", "NO", "UNKNOWN"]
     draft_note: >
-      No call was made, so there is no write-certainty to record: `contract_created` would be NO,
-      and reporting it would state a fact about a call that never happened. NEEDS IVAN if the
-      preferred reading is that "no call was made" is itself the fact worth recording.
+      ADR-0082 RULING 12: RECORD IT. Same reasoning as Q6 - the manager asked for an assignment and
+      would otherwise assume one exists. That no call was made is why the answer is NO, not a
+      reason to stay silent: on a writer, the absence of a contract is the fact, however it came
+      about. All five write-certainty scenarios on this module now share one subject and one list.
 
   - scenario_class: recovery_after_failure
     situation: >

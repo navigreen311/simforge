@@ -4,9 +4,9 @@
 Rulings: [ADR-0079](adr/ADR-0079-the-split-keys-are-drafted.md) and
 [ADR-0080](adr/ADR-0080-the-band-is-withdrawn-the-rest-pair.md).
 
-> **REVISED TWICE, 18 September 2026.** ADR-0080 withdrew two scenarios and added two (41).
-> ADR-0081 added two more — the `estimated_repairs_basis` counterpart and the pre-call REFUSE
-> case — for **43**. The table below is current.
+> **REVISED THREE TIMES, 18 September 2026.** ADR-0080 withdrew two and added two (41); ADR-0081
+> added two more (43); **ADR-0082 answered all twelve open flags and added one** — the counterpart
+> that gives `query` two true answers — for **44, with no `NEEDS IVAN` left.** The table is current.
 
 ---
 
@@ -29,16 +29,18 @@ location.
 
 | module | before | after | classes |
 |---|---|---|---|
-| `property_lookup` | 5 | **9** | 2 happy_path · 4 partial_failure · 1 each malformed / permission / escalation |
+| `property_lookup` | 5 | **10** | 3 happy_path · 4 partial_failure · 1 each malformed / permission / escalation |
 | `comp_analysis` | 5 | **5** | 1 · 1 · 1 · 1 · 1 |
 | `buyer_match` | 5 | **8** | 2 happy_path · 2 partial_failure · **2 malformed_input** · 1 · 1 |
 | `assign_contract` | 6 | **8** | 3 happy_path · 1 partial · 1 malformed · 1 permission · 1 escalation · 1 recovery |
-| `underwrite_deal` | 6 | **13** | 4 happy_path · 3 partial · **2 malformed_input** · 1 permission · 1 escalation · 2 recovery |
+| `underwrite_deal` | 6 | **13** | 4 happy_path · **4 partial_failure** · 1 malformed · 1 permission · 1 escalation · 2 recovery |
 | | **27** | **41** | |
 
-**35 expect a record, 8 expect `RECORD: NONE`, 22 carry `record_claim_options`.**
-**12 scenarios still carry a `NEEDS IVAN` note**, down from 20 at the first draft — and every
-remaining one is about the **claim** or the **class**, none about a situation, an act or a subject.
+**37 expect a record · 7 expect `RECORD: NONE` · 25 carry `record_claim_options` · 4 carry an
+`expected_caveat`.**
+
+**No scenario carries a `NEEDS IVAN` note.** Two gaps are recorded rather than open: no grader
+reads caveats today, and `comp_analysis`'s `property_id` list has no counterpart by ruling.
 
 ## A correction to my own arithmetic
 

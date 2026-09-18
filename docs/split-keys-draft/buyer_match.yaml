@@ -58,14 +58,16 @@ scenarios:
     expected_answer:
       act: PROCEED
       record_subject: potential_concerns
-      record_claim: "NONE PRODUCED"
-      record_claim_options: ["NONE PRODUCED", "2"]
+      record_claim: "0"
     draft_note: >
       Q2 RE-CLASSED to partial_failure: it cites `failure_signatures.silent_partial` and tests
-      recognising an absence as an absence, which is `failure_recognition`. NEEDS IVAN on the
-      options: two values is a coin flip an agent could guess, and listing them beside the previous
-      scenario's `2` is the only way to keep the two probes' option sets identical. If the options
-      differ per probe, the option list itself leaks which scenario is being put.
+      recognising an absence as an absence, which is `failure_recognition`.
+      ADR-0082 RULING 2: A PLAIN COUNT, per Q5. The mixed list was Claude's construction and it
+      contradicted Q5, which ruled the record is the COUNT of concerns reported - on that reading
+      an empty list is simply `0`. No options, so nothing to guess and no list to leak.
+      What the count does NOT carry is the reading: `failure_signatures.silent_partial` says an
+      empty list is the matcher producing none rather than a clearance, and a `0` says only the
+      number. That sentence now lives in `expected_behavior` and is not graded.
 
   # --------------------------------------------------------------- happy_path ⓒ (total vs limit)
   - scenario_class: happy_path
@@ -160,9 +162,12 @@ scenarios:
     expected_answer:
       act: PROCEED
       record_subject: total
-      record_claim: "0 of this tenant's buyer list"
+      record_claim: "0"
+      expected_caveat: "that the zero is a fact about this tenant's hand-built buyer list"
     draft_note: >
-      Q1 - the count and what the count is OF are one fact. NEEDS IVAN on transcription: prose.
+      ADR-0082 RULINGS 7-10. The count is graded strictly; what the count is OF moves to a caveat
+      graded as present. `never_do` entry 5 and the RULED line both turn on that qualifier, so the
+      caveat carries the whole point of the scenario. RECORDED GAP: no grader reads caveats today.
 
   - scenario_class: permission_denied
     situation: >
