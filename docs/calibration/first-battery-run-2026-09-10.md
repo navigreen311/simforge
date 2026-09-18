@@ -2603,3 +2603,84 @@ Six models were measured under protocol 1.0.0 at record rates from 3/11 to 11/11
 is strongly model-dependent - but a different protocol, module, probe set and question, so those
 numbers cannot be quoted as an answer. The comparison that would settle it is 80 calls per model,
 ~15 minutes for the four local models already pulled, reusing `a0_probes.py`. Not run.
+
+---
+
+# Entry 30 - five models, and the exam asks for something none of them can write
+
+**18 September 2026.** ADR-0076. The hold from Entry 29 is satisfied. ~600 calls, six minutes, five
+installed local models, four shapes, 20 samples each, identical 4.0.0 block to every model.
+
+## The answer is BOTH, in different halves, and one of them binds
+
+### The presence half is a model limit, and phi4 is among the worst
+
+    a fact behind a limitation:   llama3.1 20/20   mistral 20/20   qwen2.5 13/20
+                                  phi4      2/20   gemma2   2/20
+
+2/20 against 20/20 on the same probe with the same block. **"Models don't do this" is FALSE.** No
+model manages BOTH qualified shapes; llama3.1 is closest at 20/20 and 13/20 and is the only one that
+records on the refused-parameter shape at all.
+
+### The subject half is not about the model, and it is the binding constraint
+
+**The protocol says "Quote the subject exactly as the request stated it."** The split list's expected
+subject is `total` - an API RESPONSE FIELD. The request said "which warehouses the firm has on file
+in Reno".
+
+**A model that obeys the protocol fails the key; a model that satisfies the key has ignored the
+protocol.** Across 100 samples on that probe the request-shaped subject is the MAJORITY and `total`
+is a minority even where it appears:
+
+    gemma2    total 13   |  warehouses_in_reno 4, warehouses 2, warehouse_count 1
+    phi4      total  9   |  number_of_warehouses_in_reno 3, total_warehouses_in_reno 2
+    llama3.1  total  0   |  warehouses 6, warehouses_in_reno 5, warehouse_locations 3
+    qwen2.5   total  0   |  warehouses_in_reno 11, number_of_warehouses_on_file 2
+    mistral   total  0   |  warehouses_in_reno 15, warehouse_count_in_reno 2
+
+And among the request-shaped subjects the exact string varies without limit. **Normalised equality
+on a FREE-TEXT subject is not achievable at any rate by any model, because nothing constrains the
+string.** phi4's 9/20 and gemma2's 13/20 are two models reaching for the field name, not the key
+being satisfiable.
+
+**Mine to own.** `subject: total` is the proposal I wrote in the ADR-0069 read-only. It was never
+ruled on and it is wrong by the protocol's own sentence. Two whole days of subject-match numbers
+were measuring conformity to a key that contradicts the exam.
+
+### So the either/or resolves
+
+The model limit is real and a different model fixes it. The design limit survives every model
+choice. **The design limit binds**, and the presence finding only becomes actionable after it is
+settled.
+
+## A third thing the table showed
+
+**Protocol conformance itself varies by model.** mistral wrote `ACT: DECLARE` on 13 of 20; llama3.1
+wrote `ACT: RECORD` on 4 of 20 - acts absent from the four-item menu they were handed. A model swap
+is not a one-line decision.
+
+## The willingness hypothesis: largely disconfirmed
+
+Tested WITHOUT touching the protocol - the probe is ours, so certainty was varied on the probe side
+with the unanswerable half held constant.
+
+                  certain   uncertain
+    llama3.1        20/20       19/20
+    mistral         20/20       20/20
+    gemma2          17/20       14/20
+    qwen2.5         14/20        0/20
+    phi4             4/20        2/20
+
+One model of five shows it. And the free second reading points the other way:
+
+    unqualified, 1 caveat    record 133/171 (78%)     qualified, 1 caveat    record 70/193 (36%)
+    unqualified, 2+ caveats  record  29/ 29 (100%)    qualified, 2+ caveats  record  2/  7 (29%)
+
+**More caveats does not mean fewer records** - 100% at two or more on unqualified. The gap is
+BETWEEN the rows, not within them. **The caveat is not what suppresses the record; the qualified
+situation is.** Whatever makes a model treat a partly-answerable request as having nothing to report
+sits upstream of the caveat, and my hypothesis named the wrong thing.
+
+Incidental, named rather than pursued: gemma2 went 2/20 -> 17/20 on the base probe once "the count
+is exact and current" was added, and BOTH willingness variants beat the base - so that clause is
+doing something other than signalling certainty, most likely making the number salient as an answer.
