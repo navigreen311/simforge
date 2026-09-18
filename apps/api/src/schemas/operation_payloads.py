@@ -138,7 +138,21 @@ class AgentRunOutcome(BaseModel):
     functions_certified: int
     functions_in_module: int  # DENOMINATOR
     passed: bool = True  # did the battery pass → certified vs failed (never a low score)
+    #: The tier this exam can justify at MOST — a ceiling, not a measurement. The gate-result path
+    #: caps it by state (`trust_tier.tier_for_state`), so a caller declaring `auto_execute` on a
+    #: failed outcome does not thereby record one.
     max_certified_trust_tier: str | None = None  # auto_execute | propose | suggest
+    #: The run-level score and the bar it was judged against. BOTH optional and both meaningless
+    #: alone: a score without a threshold is a number nobody can place, and The Office is entitled
+    #: to read the bar (`simforge_response_manifest.json`). Optional on the wire and NOT optional
+    #: in a certification — `gate_result` refuses to persist a `certified` agent_operation row
+    #: without them, for the reason it already refuses one that names no `agent_model`: a pass
+    #: whose basis is absent is one nobody can check.
+    #:
+    #: `None` is never 0.0 here. A battery that graded no probe has no score, and a zero would be
+    #: a claim about the agent rather than about the run.
+    score: float | None = None
+    threshold: float | None = None
     #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
     #:
     #: Optional on the wire and NOT optional in a certification: `gate_result` refuses to
@@ -147,6 +161,25 @@ class AgentRunOutcome(BaseModel):
     #: naming the shape — the two need different responses, and only the first says what
     #: is actually wrong.
     agent_model: str | None = None
+    #: WHAT answered, not just what it was called (ADR-0060). `agent_model` above is a label; the
+    #: same tag re-pulled at a different quantization, or served at a different temperature,
+    #: produces that identical string and a different candidate. This is the candidate: model
+    #: name, the model FILE with its size and quantization, and the generation settings the exam
+    #: was actually put under.
+    #:
+    #: Optional on the wire and NOT optional in a certification, for the reason every other fact
+    #: here is: the refusal has to name which fact is missing, and a 422 about the shape cannot.
+    #: `gate_result` refuses to certify an outcome whose identity is absent or incomplete, and
+    #: holds one carrying no model FILE at `provisional` — a cloud provider is for practice runs,
+    #: and a practice run is not a certification.
+    model_identity: dict | None = None
+    #: Every attempt at this exam, in the order they were sat (ADR-0062). A pass means passed
+    #: EVERY attempt, so this is what lets a reader tell a clean three-of-three from a lucky
+    #: two-of-three - and on a FAIL, which attempt failed and how.
+    #:
+    #: Small and deliberately not transcripts: verdict, score, probes put, unreadable answers and
+    #: failure modes per attempt. None of it is scenario content.
+    attempts: list[dict] = Field(default_factory=list)
     operation_rubric_results: list[OperationRubricResultItem] = Field(default_factory=list)
     per_scenario_class_results: list[ScenarioClassResult] = Field(default_factory=list)
     failure_modes_observed: list[str] = Field(default_factory=list)
@@ -185,6 +218,7 @@ class AgentOperationCertResult(BaseModel):
     # certified | failed | not_run — plus `revoked` on a content-hash VOID (superset, documented).
     state: str
     max_certified_trust_tier: str | None = None
+    model_identity: dict | None = None
     operation_rubric_results: list[OperationRubricResultItem]  # NAMED LIST
     rubric_dimension_spread: float  # required — collapse check
     per_scenario_class_results: list[ScenarioClassResult] = Field(default_factory=list)

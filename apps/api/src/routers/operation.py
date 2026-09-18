@@ -36,6 +36,7 @@ from src.schemas.operation_payloads import (
     TimedOutRun,
     TimeoutSweepResult,
 )
+from src.services.agent_runtime.model_identity import ModelIdentity, identity_is_complete
 from src.services.operation.battery_result import battery_result_for
 from src.services.operation.gating import (
     agent_module_assignability,
@@ -58,6 +59,7 @@ from src.services.operation.rubric import (
     is_spread_collapsed,
 )
 from src.services.operation.run_registry import (
+    UnitOutcome,
     close_run,
     gate_result_for,
     open_run,
@@ -66,6 +68,7 @@ from src.services.operation.run_registry import (
 from src.services.operation.run_window import DEFAULT_RUN_WINDOW_MINUTES
 from src.services.operation.scenarios import GATE_9_5_FLAG, validate_curriculum_submission
 from src.services.operation.state_machine import OperationState, is_assignable
+from src.services.operation.trust_tier import tier_for_state
 from src.utils.time import utcnow
 
 router = APIRouter()
@@ -209,6 +212,10 @@ async def gate_result(
         )
 
     agent_results: list[AgentOperationCertResult] = []
+    #: What the RUN is closed with, kept beside the outbound results because the two carry
+    #: different things: the Office-facing result shape is a contract and says nothing about the
+    #: model or the bar, while the run has to record both.
+    agent_units: list[UnitOutcome] = []
     for outcome in body.agent_outcomes:
         results_dicts = [_out_dim(r) for r in outcome.operation_rubric_results]
         spread = compute_rubric_dimension_spread(results_dicts)
@@ -245,6 +252,23 @@ async def gate_result(
         else:
             state = OperationState.CERTIFIED.value
 
+        # THE FOURTH WITHHOLD (ADR-0060): the exam was not sat on a model file.
+        #
+        # Ivan's ruling is that a certification counts only if it was earned on the exact model the
+        # agent runs in production, and Village agents run on local models. A cloud provider stays
+        # available for practice runs - so a cloud-examined result is a real result that is not a
+        # certification, which is what `provisional` has meant here since the Rev-2 audit: not
+        # certified, not a failure.
+        #
+        # **This is a PROXY for the ruling and says so.** The real test is "the same model as
+        # production", and SimForge cannot read the Village's model configuration - it lives in
+        # another repository behind no seam. What is checkable here is narrower: whether anything
+        # with a model file on this machine answered at all. The rest of the rule is recorded,
+        # computable from `fingerprint`, and not enforced; see ADR-0060 and the report.
+        identity = ModelIdentity.from_record(outcome.model_identity)
+        if state == OperationState.CERTIFIED.value and identity and not identity.has_model_file:
+            state = OperationState.PROVISIONAL.value
+
         # A cert that says something PASSED must name what answered. Everything else on
         # this row describes the exam — the instructions, the Forge version, the rubric —
         # and without the model it reads as *this agent passed* rather than *this agent,
@@ -269,6 +293,72 @@ async def gate_result(
                 ),
             )
 
+        # ...and it must say WHICH model, in the detail that lets the exam be re-sat and drift
+        # be seen. `agent_model` above is a label: the same tag re-pulled at a different
+        # quantization, or served at a different temperature, produces the same string and a
+        # different candidate. ADR-0060 is the ruling; this is where "a result with no model
+        # identity is never reported as a pass" is true rather than hoped for.
+        #
+        # Reached only for `certified`. A `provisional` hold has no certification to qualify, and
+        # the withhold above has already caught the one case - no model file - that a complete
+        # record could still be wrong about.
+        if state == OperationState.CERTIFIED.value:
+            missing_identity = identity_is_complete(outcome.model_identity)
+            if missing_identity:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"agent_operation outcome for {outcome.agent_id}/{outcome.module_id} "
+                        f"resolves to 'certified' and its model identity is missing "
+                        f"{', '.join(missing_identity)}. A certification counts only if it was "
+                        "earned on the exact model the agent runs in production - the model name, "
+                        "the model file with its size and quantization, and the generation "
+                        "settings. A name alone cannot say which of those changed."
+                    ),
+                )
+
+        # The tier is CAPPED here rather than trusted from the outcome. A battery declares the
+        # ceiling its exam can justify before the state is known; whether the unit reached it is
+        # decided above, from the rubric, the spread and the coverage holes. Trusting the declared
+        # value would write `propose` onto a `failed` row - which `views.py` already has to hide
+        # at render time, a symptom of the cap living nowhere.
+        tier = tier_for_state(state, outcome.max_certified_trust_tier)
+
+        # A pass must carry the basis it was earned on, for the same reason it must name the model.
+        #
+        # THIS IS THE REFUSAL THAT MAKES "an ungraded run never reports a pass" TRUE. The Office's
+        # `record_result` will not write a `certified` row without a tier, so before this check a
+        # PASS with no basis was not rejected anywhere - it was produced, reported, polled, and
+        # refused at the far side of the boundary, where the reason reads as an Office problem.
+        # Refusing it here means the run never reaches PASS at all, and the message names which
+        # fact is missing.
+        #
+        # `certified` only. A `provisional` hold has no certified tier BY DEFINITION - the
+        # certification was withheld - and demanding one would invite the placeholder The Office's
+        # own comment refuses.
+        if state == OperationState.CERTIFIED.value:
+            missing = [
+                name
+                for name, value in (
+                    ("score", outcome.score),
+                    ("threshold", outcome.threshold),
+                    ("certified_tier", tier),
+                )
+                if value is None
+            ]
+            if missing:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"agent_operation outcome for {outcome.agent_id}/{outcome.module_id} "
+                        f"resolves to 'certified' and carries no {', '.join(missing)}. A pass "
+                        "nobody can place is not a pass: The Office caps a declared tier with "
+                        "the certified one and refuses a certification without it, and a score "
+                        "with no threshold beside it is a number with no bar. Send what the "
+                        "battery measured, or report the outcome it actually reached."
+                    ),
+                )
+
         cert = OperationCertification(
             unitType="agent_operation",
             state=state,
@@ -281,8 +371,13 @@ async def gate_result(
             moduleId=outcome.module_id,
             functionsCertified=outcome.functions_certified,
             functionsInModule=outcome.functions_in_module,
-            maxCertifiedTrustTier=outcome.max_certified_trust_tier,
+            maxCertifiedTrustTier=tier,
             agentModel=outcome.agent_model,
+            # Recorded on EVERY result, certified or not. A failed run's candidate is the fact
+            # that makes the failure reproducible, and a provisional hold's is what says why it
+            # was held.
+            agentModelIdentity=identity.as_record() if identity else None,
+            examAttempts=list(outcome.attempts) or None,
             perScenarioClass={
                 r.scenario_class: r.verdict for r in outcome.per_scenario_class_results
             },
@@ -299,7 +394,8 @@ async def gate_result(
                 module_id=outcome.module_id,
                 forge_id=outcome.forge_id,
                 state=state,
-                max_certified_trust_tier=outcome.max_certified_trust_tier,
+                max_certified_trust_tier=tier,
+                model_identity=identity.as_record() if identity else None,
                 operation_rubric_results=outcome.operation_rubric_results,
                 rubric_dimension_spread=spread,
                 per_scenario_class_results=outcome.per_scenario_class_results,
@@ -309,15 +405,45 @@ async def gate_result(
                 expires_at=outcome.expires_at,
             )
         )
+        agent_units.append(
+            UnitOutcome(
+                state=state,
+                score=outcome.score,
+                threshold=outcome.threshold,
+                certified_tier=tier,
+                agent_model=outcome.agent_model,
+                model_identity=identity.as_record() if identity else None,
+            )
+        )
 
     dept_results: list[DepartmentContextCertResult] = []
+    dept_units: list[UnitOutcome] = []
     for d_outcome in body.department_outcomes:
+        # UNIT B, OPTION A (ADR-0062). Until this, `passed` alone decided, and
+        # `escalation_path_verified` / `compliance_coupling_verified` both default to FALSE - so a
+        # department certified on a payload that verified nothing, which is to say it passed
+        # because nobody ticked "no".
+        #
+        # Both must now be true for `certified`; either missing holds the unit at `provisional`.
+        #
+        # **This is a stop-gap and Ivan named it one.** The two fields are still ASSERTIONS by the
+        # submitter, not measurements - nothing here put a scenario to a department and watched
+        # where the hand-over went. Option B, a real escalation-path test, is the answer and is not
+        # built. What this buys is that a department can no longer pass in silence, and the
+        # difference between "verified" and "nobody said otherwise" is now visible in the state.
+        verified = (
+            d_outcome.escalation_path_verified and d_outcome.compliance_coupling_verified
+        )
         if void:
             d_state = OperationState.REVOKED.value
-        elif d_outcome.passed:
+        elif not d_outcome.passed:
+            d_state = OperationState.FAILED.value
+        elif verified:
             d_state = OperationState.CERTIFIED.value
         else:
-            d_state = OperationState.FAILED.value
+            # Not a failure: nothing was shown to be wrong. Not a certification either: nothing
+            # was shown to be right. That is what `provisional` has meant since the Rev-2 audit.
+            d_state = OperationState.PROVISIONAL.value
         session.add(
             OperationCertification(
                 unitType="department_context",
@@ -343,6 +469,10 @@ async def gate_result(
                 compliance_coupling_verified=d_outcome.compliance_coupling_verified,
             )
         )
+        # A department context carries no score, no tier and no model, and that is not an omission
+        # to fix later: Unit B is cleared by whether the escalation path and the compliance
+        # coupling were verified, and nothing sat an exam. See the Unit-B note in `battery.py`.
+        dept_units.append(UnitOutcome(state=d_state))
 
     # Close the run this result answers, if one was opened for it. Nothing is created
     # here: a gate-result for a run SimForge never saw start is still recorded as certs,
@@ -352,8 +482,8 @@ async def gate_result(
         await close_run(
             session,
             run_ref=body.run_ref,
-            agent_states=[r.state for r in agent_results],
-            department_states=[r.state for r in dept_results],
+            agent_outcomes=agent_units,
+            department_outcomes=dept_units,
         )
 
     await session.commit()

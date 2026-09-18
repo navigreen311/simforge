@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass
 
 from src.config import settings
 from src.services.agent_runtime.cache import LLMResponseCache
+from src.services.agent_runtime.model_identity import ModelIdentity
 from src.telemetry.logging import get_logger
 from src.telemetry.metrics import TOKENS_TOTAL
 
@@ -57,6 +58,20 @@ class LLMProvider(ABC):
 
     @abstractmethod
     async def health_check(self) -> dict: ...
+
+    async def identity(self, settings_sent: dict) -> ModelIdentity | None:
+        """What answered, in the detail a certification has to record (ADR-0060).
+
+        `None` by default, and the default is the SAFE answer: a provider that cannot describe its
+        own candidate produces a result that the gate-result path refuses to certify. A provider
+        added later that forgets to override this fails closed.
+
+        `settings_sent` is passed IN rather than read off the provider because it is a property of
+        the CALL, not of the provider - the same Ollama provider answers at whatever temperature
+        and token cap the runner asked for, and recording the provider's defaults would record a
+        request nobody made.
+        """
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -273,6 +288,48 @@ class OllamaProvider(LLMProvider):
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
 
+    async def identity(self, settings_sent: dict) -> ModelIdentity | None:
+        """Ask the server what it is serving. Two calls, because neither answers the whole thing.
+
+        `/api/show` carries the quantization, the parameter size and the Modelfile (which names the
+        blob); `/api/tags` carries the digest and the file's size in bytes. Ollama splits the facts
+        and this is the join, done here rather than left to a caller who would have to know that.
+
+        Returns `None` on any failure rather than a partial record. A half-described candidate is
+        the shape the gate-result guard refuses, and it should refuse it for the honest reason -
+        nothing described the model - not because a record arrived with two fields filled in.
+        """
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                shown = await client.post(f"{self.base_url}/api/show", json={"name": self.model})
+                shown.raise_for_status()
+                show = shown.json()
+                tagged = await client.get(f"{self.base_url}/api/tags")
+                tagged.raise_for_status()
+                tags = tagged.json()
+        except Exception as exc:  # noqa: BLE001 - an undescribable model is not a crash
+            log.warning("model_identity_unavailable", model=self.model, error=str(exc))
+            return None
+
+        details = show.get("details") or {}
+        # Matched on the name the server itself lists, not on `self.model`: the two differ the
+        # moment a tag is an alias, and the digest must belong to what actually answered.
+        row = next(
+            (m for m in (tags.get("models") or []) if m.get("model") == self.model), None
+        ) or next((m for m in (tags.get("models") or []) if m.get("name") == self.model), None)
+        digest = (row or {}).get("digest")
+        return ModelIdentity(
+            provider=self.name,
+            model=self.model,
+            file_digest=f"sha256:{digest}" if digest else None,
+            file_size_bytes=(row or {}).get("size"),
+            parameter_size=details.get("parameter_size"),
+            quantization=details.get("quantization_level"),
+            settings=dict(settings_sent),
+        )
+
     async def health_check(self) -> dict:
         import httpx
 
@@ -313,6 +370,20 @@ class AnthropicProvider(LLMProvider):
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
+
+    async def identity(self, settings_sent: dict) -> ModelIdentity | None:
+        """Name and settings, and **no file, on purpose.**
+
+        The weights are not here and cannot be. `file_digest` is left `None` rather than filled
+        with a version string or an API model id dressed up as a digest, and that absence is what
+        `has_model_file` reads to hold a cloud-examined result short of certification (ADR-0060).
+
+        A record is still returned, because a practice run is a real run and its candidate is a
+        real fact. What the absence costs is the certification, not the record.
+        """
+        return ModelIdentity(
+            provider=self.name, model=self.model, settings=dict(settings_sent)
+        )
 
     async def complete(
         self,
@@ -394,6 +465,11 @@ class CachedLLMProvider(LLMProvider):
         self.purpose = purpose
         self.name = inner.name
         self.model = inner.model
+
+    async def identity(self, settings_sent: dict) -> ModelIdentity | None:
+        """Straight through to the inner provider, for `provider_label`'s reason: the cache is not
+        a candidate. It returns what some model said, and the identity belongs to that model."""
+        return await self.inner.identity(settings_sent)
 
     def _request(self, system, messages, temperature, max_tokens, seed) -> dict:
         return {
@@ -553,6 +629,28 @@ def get_agent_llm() -> LLMProvider:
         settings.ollama_agent_model if provider == "ollama" else settings.anthropic_agent_model
     )
     inner = _concrete(provider, agent_model=agent_model, judge_model="", is_judge=False)
+    return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
+
+
+def get_exam_llm() -> LLMProvider:
+    """The EXAMINER (ADR-0061): the model Village agents run on, by tag, always via Ollama.
+
+    **Not routed through `LLM_PROVIDER`, deliberately.** That setting answers "what should a
+    scenario run use", and its `auto` resolves to ollama-or-stub while its `anthropic` branch is a
+    cloud model. The examiner is a local model file by ruling, so a provider switch is not one of
+    the things this call is allowed to obey - a setting turned for a demo must not silently change
+    who sits a certification.
+
+    The cloud provider is still reachable for practice runs, through the ordinary agent runtime,
+    and ADR-0060 already holds anything it produces short of a certification for want of a model
+    file.
+    """
+    inner = OllamaProvider(
+        settings.ollama_base_url,
+        settings.exam_model_tag,
+        settings.llm_request_timeout_seconds,
+        settings.llm_max_retries,
+    )
     return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
 
 

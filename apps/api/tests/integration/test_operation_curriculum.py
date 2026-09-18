@@ -264,6 +264,20 @@ async def test_gate_result_named_list_round_trip_and_spread(client: AsyncClient)
                 "agent_model": "ollama/llama3.1:8b",
                 "passed": True,
                 "max_certified_trust_tier": "propose",
+                "score": 1.0,
+                "threshold": 1.0,
+                "model_identity": {
+                    "provider": "ollama",
+                    "model": "llama3.1:8b",
+                    "file_digest": (
+                        "sha256:46e0c10c039e01911933968"
+                        "7c3c1757cc81b9da49709a3b3924863ba87ca666e"
+                    ),
+                    "file_size_bytes": 4920753328,
+                    "parameter_size": "8.0B",
+                    "quantization": "Q4_K_M",
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "failure_recognition", "verdict": "PASS", "score": 0.40},

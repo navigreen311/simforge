@@ -104,6 +104,11 @@ async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None
             "operation_rubric_version": c.operationRubricVersion,
             "instruction_content_hash": c.instructionContentHash,
             "agent_model": getattr(c, "agentModel", None),
+            "model_identity": getattr(c, "agentModelIdentity", None),
+            # ADR-0062. THE SECOND READ IS WHERE THE ATTEMPTS LIVE, and that placement is the
+            # decision: The Office is entitled to whether an agent passed and by how much, not to
+            # how many times it sat the exam. This read is SimForge's own.
+            "exam_attempts": getattr(c, "examAttempts", None),
             "per_scenario_class": c.perScenarioClass,
             "operation_rubric_results": c.operationRubricResults,
             "rubric_dimension_spread": c.rubricDimensionSpread,

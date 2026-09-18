@@ -114,18 +114,22 @@ async def battery_sweep(session: AsyncSession | None = None) -> dict:
     Hourly leaves a run at worst 60 minutes of its 180 waiting, and at least 120 for a battery
     that the sweep's own docstring warns "can take minutes".
 
-    **The examiner is named in the result because it is not always the one you assume.**
-    `LLM_PROVIDER` defaults to `stub`, and `auto` resolves to ollama-if-reachable-else-stub - never
-    anthropic. A scheduled pass therefore scores with whatever that resolution produced, unattended.
-    The certification itself already records it (`agent_model=provider_label(...)` in
-    `battery_for_run`), so this is not silent; surfacing it here means the operator reading the job
-    log sees it without opening a cert.
+    **The examiner is pinned, and a pass that cannot verify the pin scores nothing.** ADR-0061:
+    the examiner is the model Village agents run on, by digest. This sweep builds its runtime from
+    `EXAM_MODEL_TAG` rather than from `LLM_PROVIDER`, and `check_examiner` refuses a run whose
+    model is unpinned, unreachable, moved under its tag, or not what the Village declares. Those
+    arrive here as ordinary skips with named reasons - the sweep decides nothing and reports what
+    it was told.
+
+    Before that pin existed this docstring warned that `LLM_PROVIDER`'s `auto` resolves to
+    ollama-if-reachable-else-stub, so a scheduled pass scored with whatever that produced,
+    unattended. That is the hole the pin closes.
 
     Degrades the way `daily_snapshot` does: no Village data, no runtime, no pass - a skip rather
     than a 500, because an unreachable reader is a deployment fact and not a sweep failure.
     """
     from src.services.agent_runtime.llm_client import provider_label
-    from src.services.agent_runtime.runtime import build_agent_runtime
+    from src.services.agent_runtime.runtime import build_exam_runtime
     from src.workers.battery_sweep import battery_sweep_lock, sweep_unscored_runs
 
     try:
@@ -134,7 +138,10 @@ async def battery_sweep(session: AsyncSession | None = None) -> dict:
         log.warning("cadence_battery_sweep_skipped", error=str(exc))
         return {"job": "battery_sweep", "skipped": "village_data_unavailable"}
 
-    runtime = build_agent_runtime(reader)
+    # The EXAMINER, not the agent runtime (ADR-0061). `build_agent_runtime` obeys LLM_PROVIDER,
+    # whose `auto` resolves to ollama-or-stub and whose `anthropic` branch is a cloud model - none
+    # of which is a decision this sweep should inherit from a setting turned for a demo.
+    runtime = build_exam_runtime(reader)
     # The lock gets its OWN session, and this is not tidiness.
     #
     # `battery_sweep_lock` pins itself to one connection because `pg_advisory_lock` is held by the

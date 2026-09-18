@@ -200,6 +200,25 @@ async def _gate_result(client: AsyncClient, *, passed: bool, run_ref: str = "op-
                 "agent_model": "ollama/llama3.1:8b",
                 "passed": passed,
                 "max_certified_trust_tier": "propose",
+                # A pass carries the basis it was earned on. Added when the gate-result path
+                # started refusing a `certified` outcome without one — before that, every run
+                # here closed with a verdict and no score, and The Office refused the row.
+                "score": 1.0 if passed else 0.75,
+                "threshold": 1.0,
+                # The candidate. A certified outcome that cannot say which model file answered,
+                # at what quantization and under what settings, is refused (ADR-0060).
+                "model_identity": {
+                    "provider": "ollama",
+                    "model": "llama3.1:8b",
+                    "file_digest": (
+                        "sha256:46e0c10c039e01911933968"
+                        "7c3c1757cc81b9da49709a3b3924863ba87ca666e"
+                    ),
+                    "file_size_bytes": 4920753328,
+                    "parameter_size": "8.0B",
+                    "quantization": "Q4_K_M",
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "recovery", "verdict": "PASS", "score": 0.60},
@@ -331,6 +350,24 @@ async def test_one_failure_among_several_units_is_not_a_pass(
                 "functions_in_module": 4,
                 "agent_model": "ollama/llama3.1:8b",
                 "passed": passed,
+                "max_certified_trust_tier": "propose",
+                # Five units, five bases. The four that passed report 1.0 and the fifth 0.75, so
+                # the run's collapse is observable: weakest wins on the score exactly as it does
+                # on the state.
+                "score": 1.0 if passed else 0.75,
+                "threshold": 1.0,
+                "model_identity": {
+                    "provider": "ollama",
+                    "model": "llama3.1:8b",
+                    "file_digest": (
+                        "sha256:46e0c10c039e01911933968"
+                        "7c3c1757cc81b9da49709a3b3924863ba87ca666e"
+                    ),
+                    "file_size_bytes": 4920753328,
+                    "parameter_size": "8.0B",
+                    "quantization": "Q4_K_M",
+                    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+                },
                 "operation_rubric_results": [
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "recovery", "verdict": "PASS", "score": 0.60},
@@ -341,9 +378,15 @@ async def test_one_failure_among_several_units_is_not_a_pass(
     }
     assert (await client.post("/api/operation/gate-result", json=body)).status_code == 200
 
-    assert (await client.get("/api/operation/gate-result/op-multi")).json()[
-        "verdict"
-    ] == GateVerdict.FAIL.value
+    read = (await client.get("/api/operation/gate-result/op-multi")).json()
+    assert read["verdict"] == GateVerdict.FAIL.value
+    # The basis collapses the same way the verdict does: the run reports the LOWEST score its own
+    # units reported, not the four that cleared. A run reporting 1.0 beside a FAIL would be a
+    # number contradicting the verdict it travels with.
+    assert read["score"] == 0.75
+    # And no tier at all. Four units certified at `propose`; the run did not, and a tier here
+    # would be a cap The Office applies to a grant this run never earned.
+    assert "certified_tier" not in read
 
 
 # --- the service layer, without the HTTP -----------------------------------------------------

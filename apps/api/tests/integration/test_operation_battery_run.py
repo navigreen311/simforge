@@ -14,25 +14,33 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
+from src.schemas.operation_payloads import GateResultRequest
+from src.services.agent_runtime.examiner import EXAMINER_UNREACHABLE
 from src.services.agent_runtime.llm_client import StubProvider
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
+    SKIP_AGENT_IDENTITY_BLANK,
+    SKIP_AGENT_NOT_IN_VILLAGE,
     SKIP_BOOTSTRAP_FORGE,
     SKIP_NO_NEVER_DO,
     SKIP_NOT_UNIT_A,
     SKIP_UNKNOWN_RUN,
     BatterySkipped,
+    ExamReport,
     battery_for_run,
     submit_battery_result,
 )
 from src.services.operation.gate_verdict import GateVerdict
+from src.services.operation.held_out_scoring import REASON_PROTOCOL_NO_ACT
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
 from src.services.operation.run_registry import open_run
 from src.services.village.reader import VillageReader
@@ -45,9 +53,44 @@ AGENT = "taylor_zhang"
 DECLARED_HASH = "sha256:declared"
 
 
+#: The committed Village fixture, which carries `taylor_zhang` with a name and a role.
+#:
+#: **It used to point at `no-such-village` on purpose** - every layered read raised, `_safe`
+#: swallowed it, and the agent ran on a minimal identity prompt, which was fine while the battery
+#: was allowed to examine an agent it could not name. ADR-0061 ruling 2 refuses that, so the
+#: fixture now has to be real: a test that examined a blank would be testing the thing the ruling
+#: forbids. `test_a_battery_refuses_an_agent_it_cannot_identify` keeps the old path, deliberately.
+VILLAGE_FIXTURE = Path(__file__).parent.parent / "fixtures" / "village" / "VillageData"
+
+
 def _runtime(provider) -> AgentRuntime:  # noqa: ANN001
-    reader = VillageReader(village_data_path=Path(__file__).parent / "no-such-village")
-    return AgentRuntime(village_reader=reader, provider=provider)
+    return AgentRuntime(village_reader=VillageReader(VILLAGE_FIXTURE), provider=provider)
+
+
+@pytest.fixture(autouse=True)
+def _examiner_pinned(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """Pin the examiner to whatever `ScriptedProvider` serves, and give it a Village to match.
+
+    ADR-0061 refuses a battery whose examiner is unpinned, moved, or not the model the Village
+    declares. Every end-to-end test here runs a battery, so every one of them needs a pin - and
+    writing the Village's declaration to a tmp file is what makes the match REAL rather than
+    stubbed out: the same `read_village_agent_model` parses it, two hops and all.
+    """
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "mate:\n"
+        "  ollama_model_routes:\n"
+        "    agent: default_llm\n"
+        "  models:\n"
+        "    default_llm:\n"
+        "      model_id: scripted\n"
+        "      temperature: 0.0\n"
+        "      max_tokens: 2048\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "exam_model_tag", "scripted")
+    monkeypatch.setattr(settings, "exam_model_digest", "sha256:" + "5c" * 32)
+    monkeypatch.setattr(settings, "village_config_path", str(config))
 
 
 async def _seed(
@@ -310,55 +353,82 @@ async def test_a_unit_b_run_and_an_unknown_ref_are_named_skips_not_empty_results
 # =================================================================================================
 
 
-async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
+async def test_the_repo_stub_provider_fails_explicitly_and_certifies_nothing(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """**`StubProvider` was deliberately NOT taught to answer the protocol.**
 
-    It returns conversational prose, so the battery reads every answer as unreadable and every
-    COMPETENCE dimension is NOT_RUN. Teaching the hermetic default to pass its own exam would have
+    It returns conversational prose. Teaching the hermetic default to pass its own exam would have
     made the green in this file self-fulfilling, and a stub that certifies itself is exactly the
-    shape of result this subsystem exists to refuse. What it proves instead is the fail-safe:
-    NOT_RUN is not a FAIL (the agent is not blamed for the harness) and it is not a PASS either —
-    the never-do dimension is unexercised, `is_never_do_coverage_hole` reports a hole, and the unit
-    holds at `provisional`.
+    shape of result this subsystem exists to refuse.
 
-    **ADR-0052 is visible here, and this run is why it exists.** `protocol_conformance` is the one
-    dimension that does NOT come back NOT_RUN: the probes were put, the answers came back, and they
-    could not be read — which is a measurement, not an absence of one. So the report now separates
-    *nothing was observed about the module* from *the agent would not speak the protocol*, where
-    before there was one NOT_RUN carrying both. The state is unchanged and that is the point: making
-    a failure legible must not make it cheaper. A conformance FAIL never discharges the never-do
-    hole, because an explanation is not an exercise.
+    **ADR-0063 changed what that produces, and this test is where the change is loudest.** The
+    prose used to grade NOT_RUN on every competence dimension, the never-do dimension stayed
+    unexercised, `is_never_do_coverage_hole` reported a hole, and the unit held at `provisional` -
+    indefinitely, and without anything ever saying the agent had done something wrong.
+
+    Now every probe FAILS, naming `answered_with_no_act_line`, and the state is `failed`. The
+    safety property that mattered is untouched: **nothing certifies**. What changed is that the
+    result stopped being a blank and became an accusation with a rule attached.
+
+    **ADR-0052 still holds underneath.** `protocol_conformance` measures the CHANNEL and says so
+    separately; it is not the same row as the competence dimensions and never discharges them.
+    What ADR-0063 removed is the case where the channel was the only thing that had an opinion.
     """
-    await _seed(db_session, run_ref="op-run-battery-9")
+    from src.services.operation.battery import build_gate_result_request, run_module_battery
 
-    built = await battery_for_run(
-        db_session, "op-run-battery-9", runtime=_runtime(StubProvider())
+    run = await _seed(db_session, run_ref="op-run-battery-9")
+    instruction_set = (
+        (
+            await db_session.execute(
+                select(ForgeInstructionSet).where(ForgeInstructionSet.moduleId == MODULE)
+            )
+        )
+        .scalars()
+        .first()
     )
-    assert not isinstance(built, BatterySkipped)
+
+    # Built through the RUNNER rather than through `battery_for_run`, since ADR-0061 refuses a
+    # stub at the examiner gate before a probe is put - see the test below. What is asserted here
+    # is what a provider that will not speak the protocol produces: an explicit FAIL per probe,
+    # and nothing certified.
+    report = await run_module_battery(
+        module_id=MODULE,
+        agent_id=AGENT,
+        never_do=PORTFOLIO_HEALTH_NEVER_DO,
+        runtime=_runtime(StubProvider()),
+    )
+    built = build_gate_result_request(
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
+        run=run,
+        instruction_set=instruction_set,
+        agent_model="stub",
+        model_identity=None,
+    )
     outcome = built.agent_outcomes[0]
-    assert outcome.passed is True  # not blamed
+    assert outcome.passed is False
     competence = [
         r for r in outcome.operation_rubric_results if r.dimension != "protocol_conformance"
     ]
     assert competence, "the competence dimensions must still be reported, not omitted"
-    assert all(r.verdict == "NOT_RUN" for r in competence)
-    assert all(r.verdict == "NOT_RUN" for r in outcome.per_scenario_class_results)
+    assert all(r.verdict == "FAIL" for r in competence)
+    assert all(r.verdict == "FAIL" for r in outcome.per_scenario_class_results)
+    # And the failure NAMES THE RULE rather than saying the answer was unreadable.
+    assert REASON_PROTOCOL_NO_ACT in outcome.failure_modes_observed
     # The channel, scored rather than skipped: every probe was put and none came back readable.
     conformance = next(
         r for r in outcome.operation_rubric_results if r.dimension == "protocol_conformance"
     )
     assert conformance.verdict == "FAIL"
     assert conformance.score == 0.0
-    # A FAIL on the channel does not become a FAIL on the agent — `passed` is computed from the
-    # grading, and an unreadable answer is not evidence the agent did the forbidden thing.
-    assert outcome.passed is True
 
     body = (
         await client.post("/api/operation/gate-result", json=built.model_dump(mode="json"))
     ).json()
-    assert body["agent_operation_certs"][0]["state"] == "provisional"  # not certified
+    # `failed`, not `provisional`: the agent answered and the answers broke a stated rule. Still
+    # not certified, which was always the property that mattered.
+    assert body["agent_operation_certs"][0]["state"] == "failed"
 
 
 # =================================================================================================
@@ -464,7 +534,8 @@ async def test_a_held_out_FAIL_is_never_softened_by_the_submitted_battery(
         {"dimension": "recovery", "verdict": "PASS", "score": 0.62},
     ]
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
@@ -501,17 +572,24 @@ async def test_a_merged_clean_run_reaches_certified(
         .scalars()
         .first()
     )
+    runtime = _runtime(ScriptedProvider(_compliant))
     report = await run_module_battery(
         module_id=MODULE,
         agent_id=AGENT,
         never_do=PORTFOLIO_HEALTH_NEVER_DO,
-        runtime=_runtime(ScriptedProvider(_compliant)),
+        runtime=runtime,
     )
+    identity = await runtime.model_identity(0)
+    assert identity is not None
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
+        # Built by hand here rather than through `battery_for_run`, so the identity has to be
+        # supplied by hand too — and a `certified` outcome without one is refused.
+        model_identity=identity.as_record(),
         submitted_rubric_results=[
             {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.94},
             {"dimension": "escalation_discipline", "verdict": "PASS", "score": 0.71},
@@ -523,10 +601,24 @@ async def test_a_merged_clean_run_reaches_certified(
         await client.post("/api/operation/gate-result", json=built.model_dump(mode="json"))
     ).json()
     assert body["agent_operation_certs"][0]["state"] == "certified"
-    assert (
-        (await client.get("/api/operation/gate-result/op-run-battery-13")).json()["verdict"]
-        == GateVerdict.PASS.value
-    )
+    read = (await client.get("/api/operation/gate-result/op-run-battery-13")).json()
+    assert read["verdict"] == GateVerdict.PASS.value
+
+    # THE BASIS, FROM A REAL BATTERY RATHER THAN A HAND-BUILT PAYLOAD. Everything above this line
+    # passed before the run carried one, and The Office still could not record the result: its
+    # `record_result` refuses a `certified` row that names no tier. These four fields are what
+    # make this a pass that crosses the boundary instead of one that stops at it.
+    assert read["score"] == 1.0
+    assert read["threshold"] == 1.0
+    assert read["certified_tier"] == "propose"
+    assert read["agent_model"] == "ollama/llama3.1:8b"
+    # And the candidate in full (ADR-0060). `agent_model` is a label; these are the facts that
+    # say whether the model, its file or its settings have moved since.
+    identity_read = read["model_identity"]
+    assert identity_read["quantization"] == "Q4_K_M"
+    assert identity_read["file_digest"].startswith("sha256:")
+    assert identity_read["settings"] == {"temperature": 0.0, "max_tokens": 2048, "seed": 0}
+    assert identity_read["fingerprint"] == identity.fingerprint
 
 
 async def test_a_certifying_outcome_without_a_model_is_refused(
@@ -561,7 +653,8 @@ async def test_a_certifying_outcome_without_a_model_is_refused(
         runtime=_runtime(ScriptedProvider(_compliant)),
     )
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
@@ -613,7 +706,8 @@ async def test_a_failing_outcome_needs_no_model_to_be_recorded(
         runtime=_runtime(ScriptedProvider(_violating)),
     )
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
@@ -625,3 +719,69 @@ async def test_a_failing_outcome_needs_no_model_to_be_recorded(
     res = await client.post("/api/operation/gate-result", json=payload)
     assert res.status_code == 200, res.text
     assert res.json()["agent_operation_certs"][0]["state"] == "failed"
+
+
+async def test_a_stub_cannot_sit_an_exam_because_it_cannot_be_pinned(
+    db_session: AsyncSession,
+) -> None:
+    """ADR-0061 ruling 1, at its cheapest edge.
+
+    `StubProvider` inherits the base `identity()`, which returns None: it has no model file and no
+    name to pin. The examiner check refuses it before a single probe is put, and names the reason
+    rather than producing eleven NOT_RUNs and a `provisional` nobody asked for.
+    """
+    await _seed(db_session, run_ref="op-run-battery-stub")
+
+    result = await battery_for_run(
+        db_session, "op-run-battery-stub", runtime=_runtime(StubProvider())
+    )
+    assert isinstance(result, BatterySkipped)
+    assert result.reason == EXAMINER_UNREACHABLE
+
+
+async def test_a_battery_refuses_an_agent_it_cannot_identify(db_session: AsyncSession) -> None:
+    """ADR-0061 ruling 2. **The failure this closes made no noise at all.**
+
+    `assemble_system_prompt` swallows a missing agent and falls back to the id as the name, so the
+    battery used to put every probe to "You are <id>, a Village agent", grade the answers, and
+    record a certification about nobody. Nothing raised, nothing was NOT_RUN, and the pass looked
+    exactly like a real one.
+
+    The empty Village path here is the one `_runtime` used to use for every test in this file.
+    """
+    await _seed(db_session, run_ref="op-run-battery-noagent")
+    empty = AgentRuntime(
+        village_reader=VillageReader(Path(__file__).parent / "no-such-village"),
+        provider=ScriptedProvider(_compliant),
+    )
+
+    result = await battery_for_run(db_session, "op-run-battery-noagent", runtime=empty)
+
+    assert isinstance(result, BatterySkipped)
+    assert result.reason == SKIP_AGENT_NOT_IN_VILLAGE
+    # A skip posts NO outcome - that is what makes this a refusal rather than a failing grade.
+    assert not isinstance(result, GateResultRequest)
+
+
+async def test_an_agent_whose_identity_is_blank_is_refused_separately(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """Two reasons, not one: a missing agent and a nameless one have different fixes.
+
+    A single `unidentified` would send somebody looking for a missing directory when the directory
+    is there and its identity file was never filled in.
+    """
+    agent_dir = tmp_path / "VillageData" / "agents" / AGENT
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "identity.json").write_text('{"village_agent_id": "taylor_zhang"}', "utf-8")
+
+    await _seed(db_session, run_ref="op-run-battery-blank")
+    blank = AgentRuntime(
+        village_reader=VillageReader(tmp_path / "VillageData"),
+        provider=ScriptedProvider(_compliant),
+    )
+
+    result = await battery_for_run(db_session, "op-run-battery-blank", runtime=blank)
+
+    assert isinstance(result, BatterySkipped)
+    assert result.reason == SKIP_AGENT_IDENTITY_BLANK
