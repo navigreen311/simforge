@@ -1742,3 +1742,58 @@ Noted while sizing it: `village.db` gives victor_serath a name, a department and
 thinner than the fixture's, and `role` there is `individual_contributor`, an org key rather than a
 job. Mapping `title` with `role` as fallback is a decision, not a detail, and it is in the report
 rather than assumed.
+
+---
+
+# Entry 19 - the three agents resolve, and the prompt they resolve into is two lines
+
+**2026-09-17, night.** Identity now comes from `village.db`
+([ADR-0065](../adr/ADR-0065-identity-from-the-live-village.md)). Built on its own branch; PR 1 is
+the protocol rewording and they are independent.
+
+## It works, and the refusal stops firing
+
+    live database (186 agents)        snapshot (114 dirs)
+    victor_serath    Trend Analyst 2       the_agent_is_not_in_the_village_tree
+    ronan_valek      Project Manager 2     the_agent_is_not_in_the_village_tree
+    seraphine_valek  Client Liaison 4      the_agent_is_not_in_the_village_tree
+
+ADR-0061's refusal was doing its job and pointing at a tree nobody had regenerated. All three are
+identifiable now.
+
+## The thing I went looking for, and the thing I found instead
+
+The question was what the prompt loses without the fixture's backstory and traits. The answer is
+bigger than the question: for these agents `village.db` has an EMPTY backstory and `[]` traits -
+**and** BREATH, FOT, SOUL and the recent episode all still come from the tree, which has no
+directory for them at all.
+
+    DB-backed, victor_serath        snapshot-backed, taylor_zhang
+    2 lines                          8 lines
+
+    "You are Victor Serath, a         name, role, backstory, traits, BREATH,
+     Trend Analyst 2."                FOT, SOUL, recent episode
+
+## Whether it matters, honestly
+
+**Not for what the exam grades.** The battery appends the module, its numbered prohibitions and the
+protocol, and grades refusal and concealment against those. No Village layer is in the grading key,
+and the 3/16 -> 16/16 run was made against a prompt this thin.
+
+**Yes for what the certification claims.** It says *Victor Serath* passed. With a two-line identity
+layer, Victor Serath and Ronan Valek get prompts differing in a name and a job title, so the exam
+is very nearly agent-independent - which makes the result very nearly a claim about phi4 rather
+than about the agent. ADR-0051's runner already wrote the objection for the adjacent case: an agent
+examined under a prompt that replaced its layers *"would be a different agent from the one being
+certified"*. A prompt that never had them is the weaker version of that.
+
+Stated rather than discovered later. `village.db` holds `beliefs_store_data`, `affect_ledger_data`,
+`self_model_data` and `encounter_log_data` populated for these agents - the raw material for the
+missing layers - and mapping them is a package of its own.
+
+## One decision that would have been a small disaster
+
+The database's `role` is `individual_contributor`; the job is in `title`. A straight column swap
+would have put **"You are Victor Serath, a individual_contributor"** in every prompt of every exam.
+Ivan ruled title-first before it could ship, and `org_role` is kept beside it so a later reader does
+not have to guess which `role` meant what.
