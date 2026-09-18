@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.config import settings
+from src.services.village.agent_db import VillageAgentDb, VillageAgentDbError
 
 
 class VillageReaderError(Exception):
@@ -30,6 +31,14 @@ _FINGERPRINT_SUBDIRS = ("knowledge", "emotional_ledger", "memory", "tasks")
 @dataclass(frozen=True)
 class VillageReader:
     village_data_path: Path
+    #: The live Village database (ADR-0065). When set, IDENTITY is read from it and the tree is
+    #: used only for the frameworks the database does not hold.
+    #:
+    #: `None` means identity falls back to `agents/<id>/identity.json` - a SNAPSHOT, and the
+    #: snapshot has been wrong before: the tree and the database shared one agent out of 114 and
+    #: 186. That path is kept for test harnesses and for a caller that deliberately points at a
+    #: fixture, and `identity_source` says which one is in use so it is never a silent question.
+    village_db_path: Path | None = None
 
     @classmethod
     def from_settings(cls) -> VillageReader:
@@ -38,7 +47,24 @@ class VillageReader:
             raise VillageReaderError(f"VILLAGE_DATA_PATH does not exist: {path}")
         if not path.is_dir():
             raise VillageReaderError(f"VILLAGE_DATA_PATH is not a directory: {path}")
-        return cls(village_data_path=path)
+        # Configured by default, so a real deployment is database-backed unless somebody empties
+        # the setting on purpose. A path that is set and missing is NOT quietly ignored - the
+        # first identity read raises and names it.
+        configured = (settings.village_db_path or "").strip()
+        return cls(
+            village_data_path=path,
+            village_db_path=Path(configured) if configured else None,
+        )
+
+    @property
+    def identity_source(self) -> str:
+        """`village_db` or `snapshot`. Surfaced rather than inferred: which one is in use decides
+        whether an identity describes the population that is running."""
+        return "village_db" if self.village_db_path is not None else "snapshot"
+
+    @property
+    def agent_db(self) -> VillageAgentDb | None:
+        return VillageAgentDb(self.village_db_path) if self.village_db_path else None
 
     # -- helpers ----------------------------------------------------------
 
@@ -68,7 +94,40 @@ class VillageReader:
     # -- identity ---------------------------------------------------------
 
     def get_agent_identity(self, agent_village_id: str) -> dict:
-        return self._read_json(self.agent_root(agent_village_id) / "identity.json")
+        """Who this agent is. Raises `VillageReaderError` when nobody of that id exists.
+
+        **From the live database when one is configured** (ADR-0065). A miss there is a miss: the
+        database is the population, so an agent it does not have is an agent that does not exist,
+        and falling through to the tree would answer from the snapshot that caused this ruling.
+
+        A lookup that finds nothing RAISES rather than returning `{}`. It used to return `{}` for
+        an agent with no `identity.json`, which `AgentRuntime._safe` swallowed and the prompt
+        papered over with the id as a name - the blank pass ADR-0061 closed. The raise is what
+        `check_agent_identity` turns into a named refusal.
+        """
+        db = self.agent_db
+        if db is not None:
+            # Re-raised as a Village read failure rather than left as its own type:
+            # `AgentRuntime._safe` catches `VillageReaderError` and nothing else, and a database
+            # outage must not become an uncaught 500 in a scenario run.
+            try:
+                identity = db.identity(agent_village_id)
+            except VillageAgentDbError as exc:
+                raise VillageReaderError(str(exc)) from exc
+            if identity is None:
+                raise VillageReaderError(
+                    f"Agent not found: {agent_village_id} (not in {self.village_db_path})"
+                )
+            return identity
+
+        # No database configured: the snapshot, and `agent_root` already raises on a miss.
+        identity = self._read_json(self.agent_root(agent_village_id) / "identity.json")
+        if not identity:
+            raise VillageReaderError(
+                f"Agent not found: {agent_village_id} (no identity.json under "
+                f"{self.village_data_path})"
+            )
+        return identity
 
     # -- BREATH -----------------------------------------------------------
 

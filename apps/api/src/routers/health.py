@@ -127,11 +127,36 @@ async def system_status(session: AsyncSession = Depends(get_session)) -> dict:
     except Exception:  # noqa: BLE001 — fingerprint is best-effort, never fails the status call
         fingerprint_status = "unavailable"
 
+    # WHICH SOURCE IDENTITY COMES FROM, AND WHETHER IT ANSWERS (ADR-0065).
+    #
+    # Surfaced here because the failure it reports is the one that hid for three weeks: a stale
+    # snapshot answers every lookup confidently and describes a population that is not running.
+    # `snapshot` on this line is the thing to notice, and `village_db_unreadable` is a deployment
+    # that has silently stopped being able to say who it would examine.
+    identity_source = "unknown"
+    population: int | None = None
+    try:
+        from src.services.village.agent_db import VillageAgentDbError
+        from src.services.village.reader import VillageReader, VillageReaderError
+
+        try:
+            reader = VillageReader.from_settings()
+            identity_source = reader.identity_source
+            db = reader.agent_db
+            if db is not None:
+                population = db.count()
+        except (VillageReaderError, VillageAgentDbError):
+            identity_source = "village_db_unreadable"
+    except Exception:  # noqa: BLE001 - a status call never fails on a status field
+        identity_source = "unknown"
+
     return {
         "llm_provider": settings.llm_provider,
         "llm_judge_provider": settings.llm_judge_provider,
         "llm_judge_effective": resolve_provider(settings.llm_judge_provider),
         "village_fingerprint": fingerprint_status,
+        "village_identity_source": identity_source,
+        "village_population": population,
         "constitution_version": current.version if current else None,
         "hsm_provider": settings.hsm_provider,  # stub | file | yubihsm | cloudhsm
         "hsm_status": "connected" if settings.hsm_provider != "stub" else "stub",
