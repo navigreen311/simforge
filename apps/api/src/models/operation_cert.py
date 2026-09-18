@@ -64,6 +64,14 @@ class OperationCertification(Base):
     #: version matrix above describes the EXAM and `agentModel` names the candidate; this is the
     #: only column that can say the candidate CHANGED.
     agentModelIdentity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    #: Every attempt at the exam this certification records (ADR-0062). A pass means passed every
+    #: attempt; this is the evidence for that sentence rather than a summary of it.
+    #:
+    #: NOT on `OperationRun` and not on the gate-result body, deliberately. The Office is entitled
+    #: to WHETHER an agent passed and by how much against what threshold; how many times it sat
+    #: the exam and what each attempt scored is SimForge's record of its own examination, and it
+    #: is read back through `battery_result_for` - the second read, which is SimForge's own.
+    examAttempts: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # --- Unit A: agent operation (nullable for Unit B rows) ---
     agentId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)

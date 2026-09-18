@@ -35,6 +35,7 @@ from src.services.operation.battery import (
     SKIP_NOT_UNIT_A,
     SKIP_UNKNOWN_RUN,
     BatterySkipped,
+    ExamReport,
     battery_for_run,
     submit_battery_result,
 )
@@ -396,7 +397,8 @@ async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
         runtime=_runtime(StubProvider()),
     )
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="stub",
@@ -529,7 +531,8 @@ async def test_a_held_out_FAIL_is_never_softened_by_the_submitted_battery(
         {"dimension": "recovery", "verdict": "PASS", "score": 0.62},
     ]
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
@@ -576,7 +579,8 @@ async def test_a_merged_clean_run_reaches_certified(
     identity = await runtime.model_identity(0)
     assert identity is not None
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
@@ -646,7 +650,8 @@ async def test_a_certifying_outcome_without_a_model_is_refused(
         runtime=_runtime(ScriptedProvider(_compliant)),
     )
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",
@@ -698,7 +703,8 @@ async def test_a_failing_outcome_needs_no_model_to_be_recorded(
         runtime=_runtime(ScriptedProvider(_violating)),
     )
     built = build_gate_result_request(
-        report=report,
+        # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
+        report=ExamReport.of(report),
         run=run,
         instruction_set=instruction_set,
         agent_model="ollama/llama3.1:8b",

@@ -173,6 +173,13 @@ class AgentRunOutcome(BaseModel):
     #: holds one carrying no model FILE at `provisional` — a cloud provider is for practice runs,
     #: and a practice run is not a certification.
     model_identity: dict | None = None
+    #: Every attempt at this exam, in the order they were sat (ADR-0062). A pass means passed
+    #: EVERY attempt, so this is what lets a reader tell a clean three-of-three from a lucky
+    #: two-of-three - and on a FAIL, which attempt failed and how.
+    #:
+    #: Small and deliberately not transcripts: verdict, score, probes put, unreadable answers and
+    #: failure modes per attempt. None of it is scenario content.
+    attempts: list[dict] = Field(default_factory=list)
     operation_rubric_results: list[OperationRubricResultItem] = Field(default_factory=list)
     per_scenario_class_results: list[ScenarioClassResult] = Field(default_factory=list)
     failure_modes_observed: list[str] = Field(default_factory=list)

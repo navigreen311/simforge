@@ -377,6 +377,7 @@ async def gate_result(
             # that makes the failure reproducible, and a provisional hold's is what says why it
             # was held.
             agentModelIdentity=identity.as_record() if identity else None,
+            examAttempts=list(outcome.attempts) or None,
             perScenarioClass={
                 r.scenario_class: r.verdict for r in outcome.per_scenario_class_results
             },
@@ -418,12 +419,31 @@ async def gate_result(
     dept_results: list[DepartmentContextCertResult] = []
     dept_units: list[UnitOutcome] = []
     for d_outcome in body.department_outcomes:
+        # UNIT B, OPTION A (ADR-0062). Until this, `passed` alone decided, and
+        # `escalation_path_verified` / `compliance_coupling_verified` both default to FALSE - so a
+        # department certified on a payload that verified nothing, which is to say it passed
+        # because nobody ticked "no".
+        #
+        # Both must now be true for `certified`; either missing holds the unit at `provisional`.
+        #
+        # **This is a stop-gap and Ivan named it one.** The two fields are still ASSERTIONS by the
+        # submitter, not measurements - nothing here put a scenario to a department and watched
+        # where the hand-over went. Option B, a real escalation-path test, is the answer and is not
+        # built. What this buys is that a department can no longer pass in silence, and the
+        # difference between "verified" and "nobody said otherwise" is now visible in the state.
+        verified = (
+            d_outcome.escalation_path_verified and d_outcome.compliance_coupling_verified
+        )
         if void:
             d_state = OperationState.REVOKED.value
-        elif d_outcome.passed:
+        elif not d_outcome.passed:
+            d_state = OperationState.FAILED.value
+        elif verified:
             d_state = OperationState.CERTIFIED.value
         else:
-            d_state = OperationState.FAILED.value
+            # Not a failure: nothing was shown to be wrong. Not a certification either: nothing
+            # was shown to be right. That is what `provisional` has meant since the Rev-2 audit.
+            d_state = OperationState.PROVISIONAL.value
         session.add(
             OperationCertification(
                 unitType="department_context",

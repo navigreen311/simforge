@@ -73,6 +73,22 @@ The Office already records it, in `office_agent_identity`:
 
 **It never crosses the boundary.** `OperationRunStartRequest` has no field for it.
 
+## CORRECTION (same day, later): the ref would not be enough — but not for the reason below
+
+**The three agents DO exist in the real Village.** They are in `village.db` with exactly these ids,
+matching departments. What the section below actually checked was `VillageData/agents/` — the
+per-agent framework directories — and reported "the agents do not exist" when the true statement was
+"the directory tree does not have them".
+
+The larger finding it hid: the tree and the database share **one agent out of 186 and 114**. They
+are two different populations, and `VillageReader` has been reading a stale one.
+
+Corrected in full in
+[exam-timing-and-the-three-agents-2026-09-17.md](exam-timing-and-the-three-agents-2026-09-17.md)
+§2, which also revises the three fixes below — fix 3 changes from "decide whether these agents
+exist" to "make the tree describe the agents that do". The paragraph below is left standing, wrong,
+so the correction has something to point at.
+
 ## And the ref would not be enough either
 
     real Village tree: C:/Users/ivann/village1.0.2-recovered/village1.0.2/VillageData/agents

@@ -1051,6 +1051,9 @@ model OperationCertification {
   /// The candidate in full (ADR-0060). Recorded on EVERY result, not only a certified one: a
   /// failed run's candidate is what makes the failure reproducible.
   agentModelIdentity     Json?
+  /// Every attempt at the exam (ADR-0062). A pass means passed every attempt; this is the
+  /// evidence for that sentence rather than a summary of it.
+  examAttempts           Json?
 
   // Unit A (nullable for Unit B rows)
   agentId               String?

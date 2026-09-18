@@ -38,14 +38,21 @@ nobody made is permanent.
 CI is unaffected: no battery runs there (ADR-0050 — there is no endpoint), so nothing in the test
 suite reaches this check by accident.
 
-WHAT IS DELIBERATELY *NOT* REFUSED
-==================================
+THE SETTINGS, AND THE RULING THAT CHANGED THEM
+==============================================
 
-**A settings difference.** The Village runs its agents at temperature 0.7; the battery examines at
-0.0, because an exam whose answers move between runs is not a certification. Those are genuinely
-different requirements and the ruling does not resolve them, so this module SURFACES the difference
-on the check result and refuses nothing. Recording it was ADR-0060's job and it is done; deciding
-it is Ivan's, and a silent refusal here would decide it by implication.
+ADR-0061 left this open: the Village runs its agents at temperature 0.7, the battery examined at
+0.0, and the difference was SURFACED and not refused. Ivan settled it on 17 September (ADR-0062):
+
+    The exam runs at production settings, temperature and token limit included. An exam at a
+    steadier setting than production certifies an agent that isn't the one doing the work.
+
+So the divergence stopped being a report and became a REFUSAL. The battery now takes its
+generation settings from the Village's own declaration, which means a difference here can only be
+a bug — and a guard that can only fire on a bug is exactly the one worth keeping.
+
+An exam at 0.7 does not repeat, and that cost is real; it is paid by running the exam three times
+and failing on any attempt, not by examining at a setting nobody works at.
 """
 
 from __future__ import annotations
@@ -63,6 +70,12 @@ EXAMINER_UNREACHABLE = "the_exam_model_could_not_be_described"
 EXAMINER_TAG_MOVED = "the_pinned_digest_is_not_what_the_tag_serves_now"
 EXAMINER_NOT_PRODUCTION_MODEL = "the_exam_model_is_not_the_model_the_village_runs"
 EXAMINER_PRODUCTION_UNKNOWN = "simforge_cannot_read_which_model_the_village_runs"
+#: ADR-0062. The Village names a model and no settings for it - an ambiguous tag, or a `models`
+#: block that declares neither. An exam cannot run "at production settings" that nobody stated.
+EXAMINER_PRODUCTION_SETTINGS_UNKNOWN = "the_village_declares_no_settings_for_its_agent_model"
+#: ADR-0062. The exam is not running at what the Village declares. Reachable only as a bug, since
+#: the battery sources its settings from that declaration.
+EXAMINER_SETTINGS_NOT_PRODUCTION = "the_exam_is_not_running_at_production_settings"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +86,11 @@ class ExaminerCheck:
     detail: str
     #: Present when the Village's declaration was readable, whatever the verdict.
     village_tag: str | None = None
-    #: Settings the Village declares that the exam does not use. Reported, never a refusal.
+    #: The settings the Village declares for its agent model. Carried so a caller that needs to
+    #: RUN at them has one place to read them from.
+    village_settings: dict | None = None
+    #: Settings the exam does not match. Since ADR-0062 this is a refusal rather than a note, so on
+    #: an accepted check it is always None.
     settings_divergence: dict | None = None
 
     @property
@@ -148,17 +165,43 @@ def check_examiner(identity: ModelIdentity | None) -> ExaminerCheck:
             village_tag=village.tag,
         )
 
+    if not village.settings:
+        return ExaminerCheck(
+            EXAMINER_PRODUCTION_SETTINGS_UNKNOWN,
+            f"{village.source_path} names {village.tag!r} for agent-mode calls and declares no "
+            "temperature or token limit for it. ADR-0062 runs the exam AT production settings, "
+            "and settings nobody stated cannot be matched. Declare them, or say which "
+            "`mate.models` block this tag belongs to - two blocks naming one tag is reported as "
+            "an absence rather than guessed at.",
+            village_tag=village.tag,
+        )
+
+    divergence = _settings_divergence(village.settings, identity.settings)
+    if divergence:
+        return ExaminerCheck(
+            EXAMINER_SETTINGS_NOT_PRODUCTION,
+            f"the exam is not running at what the Village declares: {divergence}. An exam at a "
+            "steadier setting than production certifies an agent that is not the one doing the "
+            "work (ADR-0062). The battery sources these from the Village, so this is a bug "
+            "rather than a configuration choice.",
+            village_tag=village.tag,
+            village_settings=dict(village.settings),
+            settings_divergence=divergence,
+        )
+
     return ExaminerCheck(
         None,
         f"examiner {identity.model} pinned at {pinned_digest[:19]}..., matching the Village's "
-        f"declared agent model in {village.source_path}",
+        f"declared agent model in {village.source_path}, at its declared {village.settings}",
         village_tag=village.tag,
-        settings_divergence=_settings_divergence(village.settings, identity.settings),
+        village_settings=dict(village.settings),
     )
 
 
 __all__ = [
     "EXAMINER_NOT_PINNED",
+    "EXAMINER_PRODUCTION_SETTINGS_UNKNOWN",
+    "EXAMINER_SETTINGS_NOT_PRODUCTION",
     "EXAMINER_NOT_PRODUCTION_MODEL",
     "EXAMINER_PRODUCTION_UNKNOWN",
     "EXAMINER_TAG_MOVED",

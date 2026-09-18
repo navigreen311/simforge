@@ -15,7 +15,9 @@ from src.config import settings
 from src.services.agent_runtime.examiner import (
     EXAMINER_NOT_PINNED,
     EXAMINER_NOT_PRODUCTION_MODEL,
+    EXAMINER_PRODUCTION_SETTINGS_UNKNOWN,
     EXAMINER_PRODUCTION_UNKNOWN,
+    EXAMINER_SETTINGS_NOT_PRODUCTION,
     EXAMINER_TAG_MOVED,
     EXAMINER_UNREACHABLE,
     check_examiner,
@@ -234,36 +236,46 @@ def test_an_unreadable_village_config_is_refused_rather_than_assumed(
 # --- the pass, and the one difference it does NOT refuse ----------------------------------------
 
 
-def test_a_pinned_production_model_passes(pinned) -> None:  # noqa: ANN001
-    verdict = check_examiner(_phi4())
+def test_a_pinned_production_model_at_production_settings_passes(pinned) -> None:  # noqa: ANN001
+    """The whole check, satisfied: right model, right file, right settings."""
+    verdict = check_examiner(_phi4(settings={"temperature": 0.7, "max_tokens": 4000, "seed": 0}))
 
     assert verdict.ok
     assert verdict.reason is None
     assert verdict.village_tag == "phi4:latest"
+    assert verdict.village_settings == {"temperature": 0.7, "max_tokens": 4000}
+    assert verdict.settings_divergence is None
 
 
-def test_a_settings_difference_is_surfaced_and_never_refused(pinned) -> None:  # noqa: ANN001
-    """The Village runs its agents at 0.7; the exam runs at 0.0, because an exam whose answers move
-    between runs is not a certification. That tension is real and the ruling does not settle it, so
-    it is reported and the battery proceeds. Refusing here would settle it by implication.
+def test_an_exam_at_steadier_settings_than_production_is_refused(pinned) -> None:  # noqa: ANN001
+    """**ADR-0062 turned this from a note into a refusal.**
+
+    ADR-0061 surfaced the difference and let the battery proceed, on the grounds that an exam at
+    0.7 does not repeat. Ivan settled it the other way: an exam at a steadier setting than
+    production certifies an agent that is not the one doing the work, and the repeatability is
+    bought by sitting the exam three times instead.
     """
-    verdict = check_examiner(_phi4())
+    verdict = check_examiner(_phi4(settings={"temperature": 0.0, "max_tokens": 2048, "seed": 0}))
 
-    assert verdict.ok
+    assert verdict.reason == EXAMINER_SETTINGS_NOT_PRODUCTION
     assert verdict.settings_divergence == {
         "temperature": {"village": 0.7, "exam": 0.0},
         "max_tokens": {"village": 4000, "exam": 2048},
     }
 
 
-def test_matching_settings_report_no_divergence(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_a_village_that_declares_no_settings_is_refused(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+    """Settings nobody stated cannot be matched. The live file reaches this whenever two
+    `mate.models` blocks name one tag, which is reported as an absence rather than guessed at."""
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "mate:\n  ollama_model_routes:\n    agent: phi4:latest\n", encoding="utf-8"
+    )
     monkeypatch.setattr(settings, "exam_model_tag", "phi4:latest")
     monkeypatch.setattr(settings, "exam_model_digest", PHI4_DIGEST)
-    monkeypatch.setattr(
-        settings, "village_config_path", _village_config(tmp_path, temperature=0.0)
-    )
+    monkeypatch.setattr(settings, "village_config_path", str(path))
 
-    verdict = check_examiner(_phi4(settings={"temperature": 0.0, "max_tokens": 4000}))
+    verdict = check_examiner(_phi4())
 
-    assert verdict.ok
-    assert verdict.settings_divergence is None
+    assert verdict.reason == EXAMINER_PRODUCTION_SETTINGS_UNKNOWN
+    assert "cannot be matched" in verdict.detail

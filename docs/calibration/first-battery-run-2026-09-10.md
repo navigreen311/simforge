@@ -1618,3 +1618,62 @@ agents, and every one of The Office's 187 `village_agent` rows is `source='impor
 Office identities no Village instance has an agent directory for, and carrying the ref would move
 the failure one step without fixing it. Named in the report so the field does not get added as
 though it were the answer.
+
+---
+
+# Entry 16 - the exam moves to production settings, and I have a correction to make
+
+**2026-09-17, late.** Three rulings
+([ADR-0062](../adr/ADR-0062-production-settings-and-three-attempts.md)): the exam runs at
+production settings; a pass means passed three attempts out of three; Unit B takes option A now.
+Measurements in
+[exam-timing-and-the-three-agents-2026-09-17.md](../exam-timing-and-the-three-agents-2026-09-17.md).
+
+## The correction, first, because it is mine
+
+**I reported that Victor Serath, Ronan Valek and Seraphine Valek do not exist in the real Village.
+They do.** All three are in `village.db` with exactly the ids The Office records, matching
+departments, alongside `config/agentsrole.yaml`, `village_book.db` and `VillageData/state/`.
+
+What I actually checked was `VillageData/agents/` - the per-agent framework directories - found 114
+names, saw none of the three, and reported the wrong noun. The right sentence was *"the directory
+tree does not have them"*, and it is a different sentence with a different fix.
+
+It also hid the larger finding. The tree and the database share **one agent out of 186 and 114**
+(`gardner`). They are two different populations: the tree was generated 2026-08-28 at 11:19 for an
+earlier cast, the current 186 were created that evening at 21:17, and nothing regenerated it. So
+`VillageReader` has been reading a stale snapshot of a population that is not the one running -
+since before any of this work began, and invisible because every read of a missing agent was
+swallowed by `_safe`.
+
+**That is the shape this journal exists for and I produced it: a true conclusion (the exam cannot
+identify these agents) resting on a false reason (they do not exist).** The conclusion survived;
+the reason was wrong and would have sent the fix to the wrong file. Entry 14 recorded catching this
+before it shipped. This one shipped, in a report, and stood for a day.
+
+## What the timing run found, which was not what it was for
+
+Six exams, three attempts, at production settings on an RTX 5080 with the Village running:
+**159 probes, 1.05s each, ~2.8 minutes.** That was the question.
+
+The answer nobody asked for was in the same output: **13 of 16 answers unreadable, all one shape.**
+
+    ACT: REFUSE 1
+    ACT: DECLINE
+    RECORD: NONE
+    CAVEAT: A retry after a timeout is not permitted ...
+
+phi4 refuses, cites the right rule by number, records nothing, caveats accurately - **and emits two
+ACT lines where the protocol allows one.** The judgment is right and the format is wrong, and the
+grader cannot tell those apart: an unreadable answer yields no observation, so it grades NOT_RUN.
+
+So the blocker on a real PASS is now precisely located and it is **a format rule, not a competence
+one**. Not patched: accepting two ACT lines means deciding which one counts, which is interpreting
+an answer rather than transcribing it, and that is ADR-0048's line. It is the next ruling.
+
+## One number worth not misreading
+
+The 1.05s/probe was measured on a run that was mostly unreadable. An unreadable answer here is the
+same four lines minus one - 41 to 49 output tokens - so the rate should hold when the model
+conforms. **It has not been measured conforming**, and the report says so rather than quietly
+carrying the figure forward.

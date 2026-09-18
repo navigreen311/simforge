@@ -18,15 +18,19 @@ from src.services.agent_runtime.llm_client import (
 from src.services.agent_runtime.model_identity import ModelIdentity
 from src.services.village.reader import VillageReader, VillageReaderError
 
-#: The generation settings every examined turn is put under. Named constants rather than call-site
-#: defaults, because ADR-0060 requires a certification to RECORD what it was earned under, and a
-#: default that is only implied cannot be recorded without somebody copying it into a second place.
+#: The settings a turn runs under when the CALLER supplies none. Scenario runs, demos and the
+#: scenario bank use these; **an exam does not** (ADR-0062).
+#:
+#: They were `EXAM_TEMPERATURE` / `EXAM_MAX_TOKENS` and were exactly wrong for an exam: 0.0 is
+#: steadier than production, and an agent examined at a steadier setting than it works at is not
+#: the agent doing the work. The battery now passes the Village's own declared values through
+#: `AgentRuntime.generation`, and these stay as what a non-exam caller gets.
 #:
 #: `top_p` is deliberately NOT here. The runtime never sends one - `OllamaProvider` fixes it at 1.0
 #: in its own options block - so listing it here would be this module asserting a value it does not
 #: control, which is the shape of every drift this repo has recorded.
-EXAM_TEMPERATURE = 0.0
-EXAM_MAX_TOKENS = 2048
+DEFAULT_TEMPERATURE = 0.0
+DEFAULT_MAX_TOKENS = 2048
 
 
 def build_agent_runtime(village_reader: VillageReader) -> AgentRuntime:
@@ -53,6 +57,11 @@ def build_exam_runtime(village_reader: VillageReader) -> AgentRuntime:
 class AgentRuntime:
     village_reader: VillageReader
     provider: LLMProvider
+    #: The generation settings every turn of THIS runtime is put under, or `None` for the module
+    #: defaults. The battery sets it to the Village's declared production settings and nothing
+    #: else does — which is why it is a field rather than an argument to `turn`: a setting that
+    #: could differ between two turns of one exam would make the exam two exams.
+    generation: dict | None = None
 
     def _safe(self, fn, *args, default: dict | list | None = None):
         try:
@@ -127,6 +136,7 @@ class AgentRuntime:
         matters: an agent examined under a prompt that had replaced its BREATH/FOT/SOUL layers
         would be a different agent from the one being certified.
         """
+        sent = self.generation_settings(seed)
         system_prompt = self.assemble_system_prompt(agent_village_id, fallback_name, fallback_role)
         if extra_system:
             system_prompt = f"{system_prompt}\n\n{extra_system}"
@@ -136,16 +146,22 @@ class AgentRuntime:
             # Passed explicitly rather than left to the provider's defaults, so the values
             # `generation_settings` records are the values this call sends. One source, not two
             # that agree today.
-            temperature=EXAM_TEMPERATURE,
-            max_tokens=EXAM_MAX_TOKENS,
+            temperature=sent["temperature"],
+            max_tokens=sent["max_tokens"],
             seed=seed,
         )
 
     def generation_settings(self, seed: int) -> dict:
-        """What `turn` sends, as the record ADR-0060 requires. The same constants, once."""
+        """What `turn` sends, as the record ADR-0060 requires. One source, read twice.
+
+        A caller-supplied `generation` wins over the module defaults, and a partial one is filled
+        in rather than rejected: the Village declares `temperature` and `max_tokens` and says
+        nothing about a seed, which is SimForge's to choose per attempt.
+        """
+        supplied = self.generation or {}
         return {
-            "temperature": EXAM_TEMPERATURE,
-            "max_tokens": EXAM_MAX_TOKENS,
+            "temperature": supplied.get("temperature", DEFAULT_TEMPERATURE),
+            "max_tokens": supplied.get("max_tokens", DEFAULT_MAX_TOKENS),
             "seed": seed,
         }
 
