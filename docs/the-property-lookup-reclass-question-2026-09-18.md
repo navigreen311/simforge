@@ -1,6 +1,14 @@
 # F1 — the three `property_lookup / happy_path` facts proposed to move
 
-Read-only. **Not settled.** The criterion below is mine, not Ivan's, and the ruling says so.
+Read-only. **SETTLED 18 September 2026 — [ADR-0074](adr/ADR-0074-the-third-worked-example.md).**
+
+> **Ruling:** take the 3/3 mix. Re-class ⓑ, ⓒ and ⓓ to `partial_failure`. **The criterion is what
+> the scenario tests, not where the fact was written down; where the two disagree, what it tests
+> wins.**
+
+The analysis below is left as written, including the case it flagged against itself: ⓑ is cited to
+`inputs` and tests `failure_recognition`, and the ruling says the second wins. That is what makes
+the criterion applicable rather than something to be argued scenario by scenario.
 
 Q2 of [ADR-0072](adr/ADR-0072-breadth-is-its-own-rule.md): *a split half is re-classed to what it
 actually tests.* That is the right test and not a mechanical one. Applying it to
