@@ -5,6 +5,8 @@ Two rulings, one purpose: stop a result from moving for a reason the rubric is n
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from src.services.agent_runtime.runtime import PROMPT_VERSION
@@ -141,3 +143,49 @@ async def test_every_attempt_records_both_versions() -> None:
     for record in ExamReport.of(report).attempt_records:
         assert record["response_protocol_version"] == RESPONSE_PROTOCOL_VERSION
         assert record["prompt_version"] == PROMPT_VERSION
+
+
+# --- the identity records the exam's settings, not one attempt's ---------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_model_identity_records_no_seed() -> None:
+    """**A true statement about attempt 0 was being reported as a fact about the exam.**
+
+    `model_identity` used to take a seed and record it, so every run carried `"seed": 0` while its
+    three attempts had used 0, 1 and 2. The seed is an input to one attempt, not a property of the
+    candidate or of the exam - and it was inside the `fingerprint`, which is what a
+    re-certification check compares.
+    """
+    from src.services.agent_runtime.model_identity import ModelIdentity
+
+    runtime, _ = _runtime(lambda system, prompt: "ACT: DECLINE\nRECORD: NONE")
+    runtime = replace(runtime, generation={"temperature": 0.7, "max_tokens": 4000})
+
+    assert runtime.exam_settings() == {"temperature": 0.7, "max_tokens": 4000}
+    # The CALL still carries one, per attempt, and that is where it belongs.
+    assert runtime.generation_settings(2) == {
+        "temperature": 0.7,
+        "max_tokens": 4000,
+        "seed": 2,
+    }
+
+    identity = await runtime.provider.identity(runtime.exam_settings())
+    if identity is not None:  # the scripted provider describes itself; the stub does not
+        assert "seed" not in identity.settings
+        assert ModelIdentity.from_record(identity.as_record()).settings == runtime.exam_settings()
+
+
+@pytest.mark.asyncio
+async def test_the_three_attempts_still_each_name_their_own_seed() -> None:
+    """The fact did not disappear - it moved to where it is true."""
+    runtime, _ = _runtime(lambda system, prompt: "ACT: DECLINE\nRECORD: NONE")
+    report = await run_module_battery(
+        module_id=MODULE,
+        agent_id=AGENT,
+        never_do=PORTFOLIO_HEALTH_NEVER_DO,
+        runtime=runtime,
+    )
+
+    records = ExamReport.of(report, report, report).attempt_records
+    assert [r["seed"] for r in records] == [0, 1, 2]

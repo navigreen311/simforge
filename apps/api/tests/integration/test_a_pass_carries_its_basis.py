@@ -64,7 +64,9 @@ LOCAL_IDENTITY: dict = {
     "file_size_bytes": 4920753328,
     "parameter_size": "8.0B",
     "quantization": "Q4_K_M",
-    "settings": {"temperature": 0.0, "max_tokens": 2048, "seed": 0},
+    # No seed: ADR-0062 sits the same exam three times at three seeds, so an identity naming one
+    # of them is wrong about the other two. The per-attempt seeds are in `examAttempts`.
+    "settings": {"temperature": 0.0, "max_tokens": 2048},
 }
 
 

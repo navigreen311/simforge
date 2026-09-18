@@ -22,7 +22,12 @@ WHAT EACH FIELD IS, AND WHY IT IS SEPARATE FROM THE NEXT
     file_size_bytes   the file's size. Recorded beside the digest rather than trusted from the tag
     parameter_size    "8.0B" - the model's scale, which the file size alone does not give
     quantization      "Q4_K_M". The same weights at a different quantization are a different exam
-    settings          temperature, top_p, seed, token cap - what was actually SENT, not defaults
+    settings          temperature and the token cap - the settings of the EXAM, not of an attempt
+
+**The seed is not among them.** ADR-0062 sits the same exam three times at three seeds, so a single
+identity naming one of them is wrong about the other two; the per-attempt seeds are in
+`examAttempts`. An earlier version recorded `"seed": 0` on every run and it read as though all
+three attempts had used it.
 
 `fingerprint` is the whole of it hashed once, so re-certification is a string comparison rather
 than a field-by-field argument nobody will write the same way twice.

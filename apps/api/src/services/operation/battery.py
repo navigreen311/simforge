@@ -968,7 +968,7 @@ async def battery_for_run(
 
     # Asked before the battery rather than after, so a wrong or unpinned examiner costs one HTTP
     # call instead of three dozen model calls and a discarded result.
-    examiner = await at_production.model_identity(0)
+    examiner = await at_production.model_identity()
     verdict = check_examiner(examiner)
     if not verdict.ok:
         log.warning(

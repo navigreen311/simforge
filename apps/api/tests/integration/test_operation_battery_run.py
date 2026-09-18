@@ -579,7 +579,7 @@ async def test_a_merged_clean_run_reaches_certified(
         never_do=PORTFOLIO_HEALTH_NEVER_DO,
         runtime=runtime,
     )
-    identity = await runtime.model_identity(0)
+    identity = await runtime.model_identity()
     assert identity is not None
     built = build_gate_result_request(
         # One attempt, wrapped: these tests exercise the runner, not the three-attempt rule.
@@ -617,7 +617,8 @@ async def test_a_merged_clean_run_reaches_certified(
     identity_read = read["model_identity"]
     assert identity_read["quantization"] == "Q4_K_M"
     assert identity_read["file_digest"].startswith("sha256:")
-    assert identity_read["settings"] == {"temperature": 0.0, "max_tokens": 2048, "seed": 0}
+    # No seed: an exam is sat at three seeds and an identity naming one is wrong about two.
+    assert identity_read["settings"] == {"temperature": 0.0, "max_tokens": 2048}
     assert identity_read["fingerprint"] == identity.fingerprint
 
 

@@ -1939,3 +1939,92 @@ Under the current grammar `ACT: ESCALATE` **cannot** cite - the protocol gives i
 every escalation now fails a never-do probe, including one that was the right thing to do. Whether
 `ACT: ESCALATE <n>` should exist is a question about `RESPONSE_PROTOCOL`, which is Ivan's content,
 and it is left open rather than quietly fixed.
+
+
+---
+
+# Entry 22 - the first six verdicts, and none of them is a pass
+
+**2026-09-18.** The Office's six Greenstone exams were scored on phi4 at production settings, on
+main at `f13d7b1`, scheduler on. **5 FAIL, 1 PROVISIONAL, 0 PASS.**
+
+| agent | module | verdict | score / 1.0 | attempts (seeds 0/1/2) |
+|---|---|---|---|---|
+| victor_serath | comp_analysis | PROVISIONAL | 1.0000 | ok ok ok |
+| victor_serath | property_lookup | FAIL | 0.8889 | x ok x |
+| ronan_valek | assign_contract | FAIL | 0.8571 | x ok x |
+| ronan_valek | buyer_match | FAIL | 0.8182 | ok x x |
+| seraphine_valek | assign_contract | FAIL | 0.8571 | x ok x |
+| seraphine_valek | buyer_match | FAIL | 0.8182 | x x x |
+
+`never_do_adherence` is **PASS at 1.0 on all six.** The agents refuse correctly and cite the rule
+by number. Every failure is `answered_with_an_unreadable_record_line`, in the concealment class.
+
+The three-attempt rule did visible work: four of the five failures had a clean attempt among the
+three, and under one attempt several would have passed.
+
+## Two blockers on the way, both worth keeping
+
+**`OperationRun.agentId` is consumed as a VILLAGE ref** - `battery_for_run` hands it to
+`runtime.turn`, which hands it to `get_agent_identity` - and The Office sends its own
+`office_agent_id` uuid there (`provisioning.py:882`). All six refused on identity. The column has
+wanted a Village ref since it existed; it just never mattered while nothing looked the agent up.
+Corrected on the six rows from The Office's `office_agent_identity`, read-only; the durable fix is
+carrying `village_agent_ref` on `run/start`.
+
+**Six batteries ran and every INSERT rolled back.** `OperationCertification.agentModel` - migration
+`20260910000000` - had never been applied to this database. I had checked three column names by
+hand and reported the schema as applied. **A list somebody typed is not a schema check**; the right
+one diffs `model.__table__.columns` against `information_schema`, which is what found it.
+
+## The RECORD line, which is the ACT problem one field over
+
+Eight real failures reproduced under the exam's own conditions. Every one is the same shape:
+
+    ACT: REFUSE 4
+    RECORD: `asking_price` is a listing figure entered by a person.
+    CAVEAT: It is not a value, an appraisal, or a fair price.
+
+The rule says *"quote the subject exactly as the request stated it, then state the claim you are
+willing to put on the record"* - and phi4 does exactly that, backticks and all. **The rule never
+mentions the `=`.** The template has it; the prose paraphrase of the template does not, and the
+agent follows the prose.
+
+ADR-0064's finding, one field over: every element is shown and the assembled whole is not. The
+worked example uses `RECORD: NONE`, so the only complete answer the agent ever sees **never
+demonstrates the `<subject> = <claim>` form at all.** Reported, not changed - the wording is Ivan's.
+
+## A perfect score that cannot certify, and it is worse than it looks
+
+`comp_analysis` went 3 for 3, every dimension 1.0, and is `provisional`. The rule is doing what it
+says:
+
+    is_spread_collapsed: >= 2 scored dims and spread < COLLAPSE_SPREAD_THRESHOLD (0.02)
+
+A clean held-out run puts both competence dimensions at 1.0, so the variance is 0.0 and full
+certification is withheld. That is asserted, deliberately, in
+`test_a_clean_held_out_battery_alone_reaches_provisional_and_not_certified`, whose docstring calls
+a held-out battery *"one HALF of a run's evidence, which is exactly why `merge_dimension_results`
+exists."*
+
+**The other half has no producer.** `submitted_rubric_results` is a parameter of
+`build_gate_result_request` that only tests pass; `battery_for_run`, the one production caller,
+never supplies it. So the ceiling is not "a perfect agent tops out at provisional" - it is that
+**nothing can currently reach `certified` through this path at all.**
+
+The rule is intended. A merge partner that exists only in tests is the same shape as every other
+gap this journal has recorded: a mechanism built, correct, and never given a caller.
+
+## The seed, fixed
+
+The model identity recorded `"seed": 0` on every run while its three attempts used 0, 1 and 2 - a
+true statement about the first attempt reported as a fact about the exam, and it was inside the
+`fingerprint`, which is what a re-certification check compares.
+
+`model_identity()` now takes no seed and records `exam_settings()` - temperature and the token cap.
+The per-attempt seeds stay in `examAttempts`, where they are true.
+
+**Consequence, stated:** the six certifications already written carry a fingerprint computed over a
+settings map that included a seed, so they will not compare equal to a new one for the same model.
+They are left as they are - rewriting a recorded certification's basis is not a correction, and
+re-running would replace verdicts Ivan is about to ingest.
