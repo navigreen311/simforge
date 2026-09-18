@@ -2842,3 +2842,218 @@ The last five are the scenarios about HOW A FIGURE WAS PRODUCED - `±15% of a co
 price restated`, `arithmetic over the seller's own figure`. There is no value that carries them, and
 on the evidence of `underwrite_deal`'s own manual they are the most important thing that module has
 to say.
+
+---
+
+# Entry 33 - the split keys, drafted
+
+**18 September 2026.** ADR-0079. 27 -> 41 scenarios, five files, every one `status: draft`.
+
+## The ruling made the split a measured decision rather than a design preference
+
+    0 of 200 on escalation_required   five models, two arms, and EVERY sample answered the
+                                      half it could - PROCEED with total = 7, which is
+                                      scenario (b) of the split
+    REFUSE 20/20 from gemma2 on the   against PROCEED 20/20 from every model on the clean
+    approved happy_path               half. The nulls and the silent cap read as prohibited
+                                      territory when they sit beside the count.
+
+A scenario no model can answer as written, and a scenario that drives models to refuse, are the two
+failure modes ADR-0071 predicted from the one-RECORD-line rule. They turned up in behaviour.
+
+## What was written
+
+33 expect a record, 8 expect RECORD: NONE, 13 carry `record_claim_options`.
+
+    property_lookup   5 -> 9     comp_analysis   5 -> 5 (F2: the split half duplicates its
+    buyer_match       5 -> 7                            own happy_path, so it merges)
+    assign_contract   6 -> 8     underwrite_deal 6 -> 12
+
+**The two changes are different and the report says so separately.** The SPLIT narrows each
+situation to the one fact its scenario grades - facts ARE removed from a variant, which is what a
+split is. The PERSON rewrite adds no fact, removes no fact and rewords none: `The agent calls` ->
+`You call`, and nothing else. Every number, status code, field name and quoted `detail` survives
+verbatim.
+
+That the person matters is MEASURED: mistral went 1/20 -> 13/20 on the expected act between the
+verbatim and re-pointed arms.
+
+## A correction to my own arithmetic
+
+The F1 document said property_lookup becomes "3 happy_path / 3 partial_failure". **It is 2 / 4.** My
+table listed three partial_failure and silently dropped the module's ORIGINAL partial_failure
+(`total = 0`), padding happy_path with an em-dash. The module total was 9 either way and the ruling
+is unaffected - "re-class (b)(c)(d), and what it tests wins" is unambiguous. The label was mine, the
+decision was Ivan's. Third time this week a count of mine has needed correcting after it was quoted.
+
+## Twenty flags, and the four that change what a scenario IS
+
+**`underwrite_deal / partial_failure`'s act contradicts the key's own RULED line.** The ruling says
+REFUSE - do not call this module for a property with neither an asking price nor a square footage -
+and the situation has the agent ALREADY HOLDING the 200. Either the situation predates the ruling or
+the ruling governs the next call. Not guessed.
+
+**`buyer_match / malformed_input` describes two possible responses** (422 or 404). One scenario
+cannot have two expected answers; the draft takes the 404 branch.
+
+**Q7 said `draft_created`; the draft writes `contract_created`**, so all four write-certainty
+scenarios on that module share one subject. Flagged rather than silently changed.
+
+**OPTION LISTS LEAK.** If `record_claim_options` varies per probe, the list itself says which
+scenario is being put - the same shape as the naming sentence's leak. The two buyer_match concern
+scenarios get an identical option set for that reason, and this will bite wherever options are used.
+
+## The five ungradable claims, and the test that decides them
+
+    a claim whose true value never varies cannot test anything, because an agent that always
+    writes it passes
+
+Three become gradable by PAIRING - a scenario where the other value is right, which for `arv_basis`
+and `max_allowable_offer_basis` already exists in the corpus. One more (`deal_analysis = STALE,
+written <date>`) splits into an enum plus a date.
+
+**ONE cannot be tested by any string grader: whether the agent understands that arv_low/arv_high are
+ARITHMETIC.** This module computes the band as +/-15% every time, so a binary has one true value in
+every scenario of the corpus, and an agent writing "computed not observed" without understanding it
+scores 100%. The only thing that would test it is a module returning an OBSERVED band, and CRE Forge
+has none. A second scenario (`+/-15% of a constant`) fails the same test and is redundant besides.
+
+It is not a small one: it is the difference between an underwriter reading a range as a market
+opinion and reading it as a multiplication.
+
+## Where they are
+
+`docs/split-keys-draft/` in SimForge, not `theoffice/scenarios/`, for one stated reason: theoffice's
+working tree has **65 uncommitted files and the five approved keys are among them** - staged, not
+committed, beside in-flight broker work and two migrations. Committing into that tree risks
+entangling work that is not mine. Moving five YAML files later is a minute.
+
+---
+
+# Entry 34 - the band goes, the rest pair, and the code says I was wrong again
+
+**18 September 2026.** ADR-0080. Four rulings applied to the drafts.
+
+## The count
+
+    property_lookup  9    comp_analysis  5    buyer_match  7 -> 8
+    assign_contract  8    underwrite_deal 12 -> 11                       TOTAL 41
+
+41 either way, by coincidence: **two withdrawn, two added** - the `max_allowable_offer_basis`
+counterpart and the second `malformed_input` branch. 33 expect a record, 8 expect RECORD: NONE,
+**20 carry options** (13 before), **13 still carry NEEDS IVAN** (20 before).
+
+## Ruling 1 - recorded, not deleted
+
+`underwrite_deal.yaml` gains a `withdrawn_as_untestable:` block, each entry carrying `was:`, `why:`
+and `what_would_make_it_testable:`. An expectation dropped on purpose must not later read as one
+nobody thought of.
+
+## Ruling 2 - and a correction the code check produced
+
+`arv_basis` and `max_allowable_offer_basis` are new subjects; STALE joins the existing
+`deal_analysis` option list rather than becoming its own. **Every option list is identical across
+every scenario using its subject, and that is now ASSERTED rather than remembered** - options that
+varied per probe would say which scenario is being put.
+
+**ADR-0079 said "CRE Forge has no module returning an observed band." WRONG.**
+
+`DealAnalysisService.calculate_arv` has TWO branches:
+
+    no comps    arv = asking_price, or sqft x $150 = 300,000    band +/-15%    confidence 0.10
+    with comps  arv = weighted avg of adjusted comp prices      band +/- STD DEV, OBSERVED
+                                                                confidence 0.16-0.80
+
+`NO_COMPS_CONFIDENCE = 0.10` is exactly the figure the keys quote, so **the keys describe the
+no-comps branch accurately.** What was wrong was my reason.
+
+The module never reaches the other branch because the ADAPTER passes no comps:
+
+    forge.py:187        analyze_deal(deal_id)                     <- no comps
+    v1/deals.py:260     analyze_deal(deal_id, comps=data.comps)   <- the other branch
+
+Live code reachable by the product's own REST API and dead to every agent.
+
+**Ruling 1 stands exactly as stated** - the module computes +/-15% every time. Only the reason
+moves: not a missing capability, an adapter that does not call it. Which makes the fixture ONE CALL
+SITE away, CRE Forge's work rather than a scenario's, and already their open defect
+medlink-wholesale#75 / B14. The ARV pairing needs none of it - both its cases are reachable today.
+
+**Second time this week a conclusion of mine was right and its stated reason was invented.** The
+pattern is the same both times: I asserted the absence of a capability from the absence of a CALL to
+it. `git grep` the function, not the call site.
+
+## Ruling 3 - the branch that matters
+
+The approved scenario carried two possible responses; now two scenarios sharing one option list. The
+404 branch is the dangerous one and is why the split earns its cost: **a well-formed UUID for the
+wrong object passes the shape check**, so the control that catches it is the deal's EXISTENCE rather
+than the payload's FORM.
+
+## Still open, and two of them change a scenario
+
+`underwrite_deal / partial_failure`'s act still contradicts the key's own RULED line - REFUSE versus
+a situation where the agent already holds the 200. Untouched by these rulings.
+
+**`estimated_repairs_basis` has one true value everywhere** - the exact condition ruling 1 withdrew
+two scenarios for. Its counterpart, a property with a recorded `year_built`, does not exist as a
+scenario. Either it is added or the subject goes the way of the band.
+
+---
+
+# Entry 35 - the counterpart, the pre-call case, and a pattern I asked to have recorded against me
+
+**18 September 2026.** ADR-0081. Three rulings; two applied to the drafts, one is about me.
+
+## The count
+
+    property_lookup 9   comp_analysis 5   buyer_match 8   assign_contract 8
+    underwrite_deal 11 -> 13                                          TOTAL 41 -> 43
+
+35 expect a record, 8 expect RECORD: NONE, 22 carry options, **12 still flagged NEEDS IVAN** (20 at
+the first draft). Option lists still identical per subject; asserted, no leak.
+
+## Ruling 2 - and the act is DECLINE, for a checkable reason
+
+The pre-call scenario is added and the existing partial_failure keeps its 200. But the RULED word is
+REFUSE and **the act has to be DECLINE**:
+
+    the protocol   "REFUSE must carry the NUMBER of the standing prohibition above that forbids
+                   it. A refusal that names no prohibition is not a refusal."
+    the module     SEVEN numbered never-do entries, and NONE of them forbids calling for a
+                   property with neither figure - they are about reporting the arv, the
+                   confidence, the band, the MAO, repeated analysis, external parties, deal_score
+
+So `REFUSE <n>` is uncitable and a literal REFUSE would be a protocol violation.
+
+**And the second horn matters more.** If the prohibition WERE added to the numbered list, this
+scenario would be testing never-do adherence - `never_do_violation`, a HELD-OUT class SimForge
+authors and The Office may not submit. **So DECLINE is not a fallback; it is the only form in which
+this scenario can exist as a submitted one.**
+
+The ruling's substance is untouched: the agent does not call, and the scenario tests that. Only the
+word the protocol makes available changes. I checked the never-do list rather than assuming it,
+which is ruling 3 applied on the same page it was written.
+
+## Ruling 3 - the pattern
+
+    ADR-0075   "no held-out probe expects a DECLINE with a record"  -> the shape is untestable
+               true of the CORPUS, stated as if true of the GRAMMAR
+    ADR-0079   "CRE Forge has no module returning an observed band"
+               `calculate_arv` returns arv +/- std_dev and always has. The ADAPTER passes no comps
+
+**A capability is absent when the CODE is absent, not when a CALL SITE is.** The two are different
+findings with different owners: a missing capability is a build; a missing call site is a wiring
+defect somebody has probably already filed. In the second case it WAS - medlink-wholesale#75 / B14 -
+so the correct report was "one call site away, already on their list" and what I wrote was "CRE
+Forge cannot do this."
+
+Both conclusions survived the correction, and that is the trap: **a true conclusion is what makes an
+invented reason hard to catch.** The check is cheap. Grep the function, not the call site.
+
+## What is left for Ivan
+
+Twelve flags, and every one is about the CLAIM or the CLASS - none about a situation, an act or a
+subject. Seven are prose claims an enum would fix, three of those are Q1's qualifier pulling against
+transcription, two are option sets of my construction, and two are single questions: whether "no
+call was made" is itself a fact worth recording, and what class the new pre-call scenario carries.
