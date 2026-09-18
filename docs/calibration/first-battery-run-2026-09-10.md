@@ -2360,3 +2360,83 @@ two independent choose-ones - but its PROSE gloss on DECLINE says "there is noth
 record. An agent reading the gloss writes `RECORD: NONE` and fails a scenario it understood
 perfectly. That is a wording problem in the protocol, and fixing it is a protocol bump, which was
 ruled against in the same breath. It wants deciding before the keys are authored.
+
+---
+
+# Entry 27 - a sentence that misdescribed the grammar, and the measurement that said it was not enough
+
+**18 September 2026.** ADR-0073. One correction, one version decision, and a negative result worth
+more than either.
+
+## The defect
+
+The grammar has always been two independent choose-ones: one ACT from four, one RECORD from two.
+The prose gloss on DECLINE said "there is nothing to report", which reads as a rule that a declined
+request records nothing. It is not one.
+
+It mattered now because ADR-0072's rulings make **seven** scenarios expect a DECLINE WITH a record -
+the five `malformed_input` and both `underwrite_deal` recoveries. An agent obeying the gloss writes
+`RECORD: NONE` and fails a scenario it understood perfectly. **A grader marking down the protocol's
+own mistake.**
+
+## The version answer: MINOR, and the digit is load-bearing
+
+    3.0.0 -> 3.1.0    the first minor on this stamp
+
+    a bump at all   the text changed; two different texts must not be indistinguishable
+                    in the record
+    minor           the GRAMMAR did not move - same four acts, two RECORD forms, counts,
+                    separator, examples. A sentence DESCRIBING the grammar was corrected
+                    to match it, and that cannot make a prior measurement wrong
+    and measured    a MAJOR asserts "prior results are not comparable". That assertion
+                    would be false, so it was checked rather than declared
+
+**The 16 held-out probes, both texts, seed 0: IDENTICAL.** Probe for probe, including the one
+surviving two-ACT violation. Everything under 3.0.0 still stands - the six Greenstone verdicts, the
+8 -> 0 RECORD result, the 16/16 parse runs.
+
+A note on how that number was arrived at: the FIRST comparison showed three probes differing, and
+the difference was in the harness. `PROTOCOL_300` had been reconstructed by reversing only one of
+the two edits, so it was not the text the verdicts were taken under. Reversing both gave identical
+runs. **A before/after is only a before/after if the "before" is really the before** - the same
+class of error as every fixture this week that described a run it did not have.
+
+## The negative result
+
+The held-out corpus CANNOT distinguish the two texts: no held-out probe expects a DECLINE with a
+record. So a probe was built where it is the right answer, modelled on
+`property_lookup / malformed_input`. 20 samples per text.
+
+    DECLINE + a record      0/20 under 3.0.0      0/20 under 3.1.0
+
+**The correction did not move the case it is about.** The sentence that contradicted the grammar is
+gone and the agent still does not pair a DECLINE with a record.
+
+**The words are not the binding constraint; the EXAMPLES are.** The block carries two worked
+answers and they demonstrate exactly the pairing the gloss used to assert - DECLINE -> NONE,
+PROCEED -> claim. An agent holding a rule that says "any act may be followed by either RECORD form"
+and two instances that say otherwise follows the instances.
+
+That is worth knowing BEFORE the seven scenarios are authored, because all seven would have failed
+on a shape the agent had understood perfectly.
+
+A third worked example is the obvious next change and is deliberately NOT in this PR: it changes the
+block's shape rather than correcting a description of it, which is a MAJOR bump by the rule stated
+beside the constant, and it wants measuring on its own. One change at a time - the ruling that has
+held since ADR-0068.
+
+## The other thing the probe said
+
+`DECLINE` is already phi4's plurality answer on a malformed input - 13/20 and 14/20 - independent
+support for the ruling that all five `malformed_input` scenarios are DECLINE. Not unanimous: it also
+reached for ESCALATE (4/20) and REFUSE (2-4/20), which is the behaviour those scenarios will grade.
+
+## F1 stays open, and it is the right one to hold
+
+Re-classing by instruction section is a reasonable criterion and it is Claude's, not Ivan's. It
+moves three of `property_lookup/happy_path`'s four facts and takes the module from 1/1 to 3/3.
+
+The honest part of writing it up: **on fact ⓑ the criterion and the reasoning point in opposite
+directions.** The silent `page_size` cap is cited to `inputs`, not to `failure_signatures`, and it
+was moved on the reasoning and AGAINST the citation. A criterion one applies except when one
+disagrees with it is not a criterion, which is the strongest argument for the ruling being Ivan's.
