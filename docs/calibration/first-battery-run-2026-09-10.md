@@ -2521,3 +2521,85 @@ verdicts, the 8 -> 0 RECORD result, and both of ADR-0073's 0/20 results.
 
 3.1.0 stays as the counter-case worth keeping in view: **minor when the grammar's DESCRIPTION was
 corrected, major when the block gained a part.**
+
+---
+
+# Entry 29 - the rate was one number and it is four
+
+**18 September 2026.** ADR-0075. Wording changes stop. Then the ruling's own number was measured
+properly and turned out to be conditional.
+
+## The ruling
+
+    the RECORD line is under-used by phi4 in general, measured at 2-5 of 20 on a probe where
+    the fact is unmissable. That is a finding about the model, not the wording. Wording changes
+    stop here until it is understood.
+
+Two wording changes were built and neither moved it - 0/20 both times. A third would have been the
+third attempt at the same explanation.
+
+## What the measurement said
+
+    clean positive fact          record 20/20      subject  9/20
+    an absence as the answer     record 18/20      subject  5/20
+    a fact behind a limitation   record  2/20      subject  0/20
+    a refused parameter          record  2/20      subject  0/20
+
+**phi4 records readily when the answer is a clean assertion and almost never when it is qualified.**
+The 2-5 of 20 is the qualified case. The clean case is 20 of 20. The ruling is right and the number
+in it is one of four.
+
+**And a second channel nobody had measured: THE SUBJECT.** At 20/20 presence, only 9/20 wrote
+`total`. The rest invented one - `number_of_warehouses_in_reno`, `warehouse_locations`,
+`Reno_warehouses`, and once the literal template with its angle brackets. On the shapes the model is
+GOOD at, a transcription grader loses more answers to the subject than to the missing line.
+
+## What it does instead
+
+**It writes a conforming answer and demotes the fact to a CAVEAT.** Not prose, not silence.
+
+    ACT: DECLINE
+    RECORD: NONE
+    CAVEAT: The search results lack listing dates, so the 'this month' condition cannot be applied.
+    CAVEAT: The module reported 7 matching warehouses in Sparks.
+
+The fact is right there, one line down. And what separates the six samples is THE ACT: the only
+PROCEED of the six is the only record of the six.
+
+Hypothesis, flagged as one and untested because the ruling stops wording changes: the RECORD line
+says "the claim you are WILLING to state as fact", and an agent that has just written a caveat is
+not willing.
+
+## Is the exam passable? No, and not marginally
+
+33 of 41 scenarios expect a record; about 25 of those fail today. Three multiplying reasons, all
+already in the engine: `_dimension_item` fails a dimension on ANY fail; `HELD_OUT_PASS_THRESHOLD` is
+1.0 and its own comment says it is not a knob; ADR-0062 needs three clean attempts.
+
+Every module contains at least one scenario of the shape measured at 0 of 20. Even discarding the
+subject channel and grading on PRESENCE alone, the best module's chance over three attempts is about
+1 in 1,400.
+
+**And what that is not.** Every captured answer is a GOOD answer - it refuses correctly, names the
+limitation accurately, attaches the right caveats. The finding is not that phi4 cannot operate these
+modules. It is that the exam measures a reporting format the model does not use for qualified
+answers, and the exam is all-or-nothing.
+
+## Two things from the options list worth keeping regardless
+
+**A reminder placed in `battery_system_context` OUTSIDE the protocol block is stamped by NEITHER
+`RESPONSE_PROTOCOL_VERSION` nor `PROMPT_VERSION`** - a change to the exam that no version records.
+Whichever option is chosen, that gap wants closing first.
+
+**"Refuse an answer with no RECORD line" does not do what it sounds like.** A missing RECORD line is
+already a violation; what is happening is `RECORD: NONE`, which CONFORMS. Naming it costs nothing
+and moves nothing - it changes what the failure is called, not how often it happens.
+
+## The open question, stated as one
+
+**Are the 41 scenarios unpassable by this EXAM, or unpassable by this MODEL?**
+
+Six models were measured under protocol 1.0.0 at record rates from 3/11 to 11/11, so the behaviour
+is strongly model-dependent - but a different protocol, module, probe set and question, so those
+numbers cannot be quoted as an answer. The comparison that would settle it is 80 calls per model,
+~15 minutes for the four local models already pulled, reusing `a0_probes.py`. Not run.
