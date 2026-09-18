@@ -63,6 +63,7 @@ from src.routers import (
     transfer,
     truth_review,
     ventures,
+    version,
     webhooks,
 )
 from src.telemetry.logging import configure_logging
@@ -99,6 +100,9 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix="/api/health", tags=["health"])
+    # ADR-0084. Mounted beside health rather than inside it: the question "which build is
+    # serving" is asked by an operator about the process, not about a dependency.
+    app.include_router(version.router, prefix="/api/version", tags=["version"])
     app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
     app.include_router(departments.router, prefix="/api/departments", tags=["departments"])
     app.include_router(packs.router, prefix="/api/packs", tags=["packs"])

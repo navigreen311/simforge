@@ -3181,3 +3181,73 @@ what may be SENT, not what the receiver DOES with it.
 So: not recommended. A narrower version gets most of the value - a required `#:` comment on every
 request-model field saying who reads it, enforced by a test, living in the file it describes, with
 no second artefact to drift.
+
+---
+
+# Entry 38 - the SHA was a label, not a fact
+
+**19 September 2026.** ADR-0084. The API had served `f13d7b1` for two days while the checkout sat
+at `0b2fb9e`, **sixteen commits ahead** - so a curriculum's `expected_answer` met a schema written
+before P1 and was discarded on arrival.
+
+## Every check passed
+
+    the port answered
+    /api/health said ok
+    openapi.info.version reported a SHA          <- and it was a real commit, and the wrong one
+
+**`openapi.info.version` is `settings.app_version`, which is `APP_VERSION` from the environment
+with a default of "1.0.0".** Whoever launched the process on 17 September exported it BY HAND. It
+reported a SHA it was TOLD, not one it READ.
+
+And it fails in both directions: on my first restart that day - correct code, no env var - it
+reported "1.0.0". A restart with a STALE export would have reported `f13d7b1` while running
+`0b2fb9e`: a green check over a lie.
+
+## Two numbers, because one cannot catch it
+
+    started_commit    resolved ONCE at import; cannot change while the process lives
+    checkout_commit   read PER REQUEST; this is the one that moves
+    differs           and NULL when either is unknown
+
+**`differs: null` is the care in the whole change.** Returning `false` would tell a process that
+cannot say what it is running that it is up to date - the one reassurance it must not be given. A
+check that could not run is not a check that passed.
+
+A `started_commit` re-read per request would report the CHECKOUT's commit as the PROCESS's own,
+which is exactly the confusion being ended.
+
+## The launch environment, and why it is not os.environ
+
+`SCHEDULER_ENABLED` was true before the restart and false after, because it lived only in the old
+process's environment. Nothing said so; the batteries an operator believed were running were not.
+
+Reported from `settings`, not the environment: a variable exported with a TYPO is present in
+`os.environ` and absent from `settings`, and the second is the honest answer.
+
+**Modes by value; credentials by presence.** A dump would put DATABASE_URL's password, the Clerk
+secret and The Office's tenant token into the response. `configured` answers "was it exported"
+without answering "what is it". A test asserts every entry there is a boolean and that no body
+contains `postgresql://`, `Bearer `, `sk-` or `password`.
+
+## One divergence from The Office, named rather than decided
+
+Theirs is AUTHENTICATED and pins its unauthenticated surface to two routes. Mine is PUBLIC, because
+SimForge's health router is public by stated design and `/api/health/config` already returns
+`app_version` and the whole seam config - authenticating this one alone would be a lock on an open
+door. Worth a ruling; not worth a private decision.
+
+## And the read-only, which found the marker already exists
+
+Retiring the six 18-September runs: the content-hash binding already prevents a MECHANICAL
+mis-match, so the risk is a READING - six `failed` rows read as "this agent cannot do this module"
+when they record "this agent could not answer a scenario that no longer exists".
+
+A new state is the expensive answer (`is_assignable`, every consumer, the frontend) and a column is
+the cheap one. Revoking is wrong: `revoked` means VOIDED, and these verdicts were correct.
+
+**But the database already knows.** Those six were taken under RESPONSE_PROTOCOL_VERSION 3.0.0; the
+protocol is at 4.0.0 and the naming design makes it 5.0.0. Every attempt record carries its
+version, so "earned under a protocol two majors ago" is already stored and **nothing reads it**. A
+reader that showed the protocol version beside a verdict would retire these six by making them
+self-describing, and every future one automatically.
