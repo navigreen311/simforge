@@ -3,6 +3,10 @@
 Read-only. All five are on `underwrite_deal`, and they are the module's whole point: the figures it
 returns are well-formed and are not what they look like.
 
+> **SETTLED 18 September 2026 — [ADR-0080](adr/ADR-0080-the-band-is-withdrawn-the-rest-pair.md).**
+> The two `arv_band` scenarios are **withdrawn as untestable**; the other four pair with a basis
+> field. And one claim below is corrected by reading the code — see the correction at the foot.
+
 ---
 
 ## The test that decides all five
@@ -142,3 +146,51 @@ Three ways to live with it, all Ivan's, none recommended:
    said something; checks nothing about what.
 3. **Withdraw both scenarios** and accept that the band's provenance is not examined, having been
    measured as unexaminable rather than forgotten.
+
+
+---
+
+# CORRECTION, 18 September 2026 — I read the code
+
+Above, case 2 says *"The only thing that would test it is a scenario from a module that does return
+an observed band. No such module exists on CRE Forge."*
+
+**That is wrong.** `DealAnalysisService.calculate_arv`
+(`backend/app/services/deal_analysis.py:160-250`) has two branches:
+
+| | no comps | with comps |
+|---|---|---|
+| ARV | `asking_price`, or `sqft × $150` → 2000 × 150 = **300,000** | weighted average of sqft-adjusted comp prices |
+| band | `× 0.85` / `× 1.15` — the ±15% | **`arv ± std_dev`** of those prices — *observed*. One comp falls back to ±10% |
+| confidence | `NO_COMPS_CONFIDENCE = 0.10` | `0.16`–`0.80`, rising with comp count |
+
+`0.10` is exactly the figure the answer keys quote, so **the keys describe the no-comps branch
+accurately.** What is wrong is my reason: CRE Forge computes an observed band and has all along.
+
+**The module never reaches it because the adapter does not pass comps:**
+
+```python
+backend/app/api/forge.py:187        analyze_deal(deal_id)                    # no comps
+backend/app/api/v1/deals.py:260     analyze_deal(deal_id, comps=data.comps)  # the other branch
+```
+
+`analyze_deal` does `comps or []`. So the comps path is live code reachable by the product's own
+REST API and dead to every agent.
+
+## What that changes
+
+**Ruling 1 stands exactly as stated** — the module computes ±15% every time, so the claim has one
+true value everywhere. Only the reason moves: it is not that CRE Forge lacks the capability, it is
+that the Forge adapter does not call it.
+
+**And it makes the fixture cheap.** Not new behaviour — one call site, plus a module-spec decision
+about whether comps are caller-supplied or fetched (the manual currently says they are not
+caller-supplied). `comp_analysis` already returns exactly the comps `calculate_arv` wants.
+
+**Whose work:** CRE Forge's, not a scenario's. A scenario cannot conjure a response shape the module
+never produces. And it is already on their list — **medlink-wholesale#75 / `docs/blocking.md` B14,
+"`underwrite_deal` does not use `comp_analysis`"** — which is the same defect from the other end.
+
+**The ARV pairing needs none of this.** The asking-price case and the 300,000-constant case are both
+reachable through the module today, which is what ruling 2 requires. Only the *band* pairing waited
+on #75, and that is the pair ruling 1 withdrew.

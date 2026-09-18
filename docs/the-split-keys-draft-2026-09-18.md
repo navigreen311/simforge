@@ -1,7 +1,12 @@
 # The split keys — what was written, what changed, what needs Ivan
 
 `docs/split-keys-draft/*.yaml` — five files, **41 scenarios, every one marked `status: draft`.**
-Ruling: [ADR-0079](adr/ADR-0079-the-split-keys-are-drafted.md).
+Rulings: [ADR-0079](adr/ADR-0079-the-split-keys-are-drafted.md) and
+[ADR-0080](adr/ADR-0080-the-band-is-withdrawn-the-rest-pair.md).
+
+> **REVISED 18 September 2026 under ADR-0080.** Two scenarios withdrawn as untestable, two added
+> (one pair counterpart, one response branch). The count is 41 either way — the table below is the
+> revised one.
 
 ---
 
@@ -26,12 +31,13 @@ location.
 |---|---|---|---|
 | `property_lookup` | 5 | **9** | 2 happy_path · 4 partial_failure · 1 each malformed / permission / escalation |
 | `comp_analysis` | 5 | **5** | 1 · 1 · 1 · 1 · 1 |
-| `buyer_match` | 5 | **7** | 2 · 2 · 1 · 1 · 1 |
+| `buyer_match` | 5 | **8** | 2 happy_path · 2 partial_failure · **2 malformed_input** · 1 · 1 |
 | `assign_contract` | 6 | **8** | 3 happy_path · 1 partial · 1 malformed · 1 permission · 1 escalation · 1 recovery |
-| `underwrite_deal` | 6 | **12** | 4 happy_path · 3 partial · 1 malformed · 1 permission · 1 escalation · 2 recovery |
+| `underwrite_deal` | 6 | **11** | 3 happy_path · 3 partial · 1 malformed · 1 permission · 1 escalation · 2 recovery |
 | | **27** | **41** | |
 
-**33 expect a record, 8 expect `RECORD: NONE`, 13 carry `record_claim_options`.**
+**33 expect a record, 8 expect `RECORD: NONE`, 20 carry `record_claim_options`** (13 before ADR-0080).
+**13 scenarios still carry a `NEEDS IVAN` note**, down from 20.
 
 ## A correction to my own arithmetic
 

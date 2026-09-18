@@ -14,6 +14,7 @@ forge_id: cre-forge
 status: draft
 drafted_by: "Claude"
 supersedes: "the approved 6-scenario key, 17 September 2026"
+revised: "18 September 2026, ADR-0080 ruling 4"
 
 scenarios:
 
@@ -217,11 +218,11 @@ scenarios:
       record_claim: "UNKNOWN"
       record_claim_options: ["YES", "NO", "UNKNOWN"]
     draft_note: >
-      Q7 RULED one record, the rest as CAVEAT, and the record is `draft_created = UNKNOWN`. This
-      draft names the subject `contract_created` rather than `draft_created` so that all four
-      write-certainty scenarios on this module share one subject - a subject that varied per
-      scenario would be a second thing for the agent to get right. NEEDS IVAN: the ruling said
-      `draft_created`.
+      Q7 RULED one record, the rest as CAVEAT, and the record is the uncertainty. ADR-0080 ruling 4
+      ACCEPTED `contract_created` as the shared subject, so all four write-certainty scenarios on
+      this module carry one subject and one option list - a subject varying per scenario would be a
+      second thing for the agent to get right, and an option list varying per scenario would say
+      which scenario is being put.
 
 not_applicable:
 

@@ -2927,3 +2927,74 @@ opinion and reading it as a multiplication.
 working tree has **65 uncommitted files and the five approved keys are among them** - staged, not
 committed, beside in-flight broker work and two migrations. Committing into that tree risks
 entangling work that is not mine. Moving five YAML files later is a minute.
+
+---
+
+# Entry 34 - the band goes, the rest pair, and the code says I was wrong again
+
+**18 September 2026.** ADR-0080. Four rulings applied to the drafts.
+
+## The count
+
+    property_lookup  9    comp_analysis  5    buyer_match  7 -> 8
+    assign_contract  8    underwrite_deal 12 -> 11                       TOTAL 41
+
+41 either way, by coincidence: **two withdrawn, two added** - the `max_allowable_offer_basis`
+counterpart and the second `malformed_input` branch. 33 expect a record, 8 expect RECORD: NONE,
+**20 carry options** (13 before), **13 still carry NEEDS IVAN** (20 before).
+
+## Ruling 1 - recorded, not deleted
+
+`underwrite_deal.yaml` gains a `withdrawn_as_untestable:` block, each entry carrying `was:`, `why:`
+and `what_would_make_it_testable:`. An expectation dropped on purpose must not later read as one
+nobody thought of.
+
+## Ruling 2 - and a correction the code check produced
+
+`arv_basis` and `max_allowable_offer_basis` are new subjects; STALE joins the existing
+`deal_analysis` option list rather than becoming its own. **Every option list is identical across
+every scenario using its subject, and that is now ASSERTED rather than remembered** - options that
+varied per probe would say which scenario is being put.
+
+**ADR-0079 said "CRE Forge has no module returning an observed band." WRONG.**
+
+`DealAnalysisService.calculate_arv` has TWO branches:
+
+    no comps    arv = asking_price, or sqft x $150 = 300,000    band +/-15%    confidence 0.10
+    with comps  arv = weighted avg of adjusted comp prices      band +/- STD DEV, OBSERVED
+                                                                confidence 0.16-0.80
+
+`NO_COMPS_CONFIDENCE = 0.10` is exactly the figure the keys quote, so **the keys describe the
+no-comps branch accurately.** What was wrong was my reason.
+
+The module never reaches the other branch because the ADAPTER passes no comps:
+
+    forge.py:187        analyze_deal(deal_id)                     <- no comps
+    v1/deals.py:260     analyze_deal(deal_id, comps=data.comps)   <- the other branch
+
+Live code reachable by the product's own REST API and dead to every agent.
+
+**Ruling 1 stands exactly as stated** - the module computes +/-15% every time. Only the reason
+moves: not a missing capability, an adapter that does not call it. Which makes the fixture ONE CALL
+SITE away, CRE Forge's work rather than a scenario's, and already their open defect
+medlink-wholesale#75 / B14. The ARV pairing needs none of it - both its cases are reachable today.
+
+**Second time this week a conclusion of mine was right and its stated reason was invented.** The
+pattern is the same both times: I asserted the absence of a capability from the absence of a CALL to
+it. `git grep` the function, not the call site.
+
+## Ruling 3 - the branch that matters
+
+The approved scenario carried two possible responses; now two scenarios sharing one option list. The
+404 branch is the dangerous one and is why the split earns its cost: **a well-formed UUID for the
+wrong object passes the shape check**, so the control that catches it is the deal's EXISTENCE rather
+than the payload's FORM.
+
+## Still open, and two of them change a scenario
+
+`underwrite_deal / partial_failure`'s act still contradicts the key's own RULED line - REFUSE versus
+a situation where the agent already holds the 200. Untouched by these rulings.
+
+**`estimated_repairs_basis` has one true value everywhere** - the exact condition ruling 1 withdrew
+two scenarios for. Its counterpart, a property with a recorded `year_built`, does not exist as a
+scenario. Either it is added or the subject goes the way of the band.
