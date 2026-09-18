@@ -42,12 +42,15 @@ scenarios:
     expected_answer:
       act: PROCEED
       record_subject: total
-      record_claim: "4 within 1.0 mi / 365 days"
+      record_claim: "4"
+      expected_caveat: "the radius and the age window that produced the count"
     draft_note: >
-      Q1 RULED a count and its qualifier are ONE fact, and this key insists on it in its own words
-      ("in the same breath rather than on request"). NEEDS IVAN on transcription: the qualifier
-      makes the claim prose and exact equality cannot grade it. Grading the bare `4` would drop
-      exactly what `correct_sequence` exists to require.
+      ADR-0082 RULINGS 7-10. The count is graded strictly; the radius and age window move to a
+      caveat graded as PRESENT. This is the sharpest of the four, because `correct_sequence` exists
+      to require the parameters beside the count - so the caveat is not decoration here, it is the
+      instruction.
+      RECORDED GAP: no grader reads caveats today, so the parameters are an expectation no grader
+      reaches.
 
   - scenario_class: malformed_input
     situation: >
@@ -73,10 +76,13 @@ scenarios:
       act: DECLINE
       record_subject: property_id
       record_claim: "REFUSED - NOT A UUID"
+      record_claim_options: ["ACCEPTED", "REFUSED - NOT A UUID"]
     draft_note: >
-      DECLINE per ADR-0072. NEEDS IVAN on the claim: prose, ungradable by exact equality. An enum
-      would work - `record_claim_options: ["ACCEPTED", "REFUSED - NOT A UUID"]` - and is proposed,
-      not ruled.
+      DECLINE per ADR-0072. ADR-0082 RULING 3: the pair is adopted.
+      RECORDED GAP, and it is the one ruling 6 fixed on the sibling module: no `comp_analysis`
+      scenario records an ACCEPTED `property_id`, so this list has one true value everywhere. A
+      counterpart was NOT added here, because ruling 3 said adopt and NOTE rather than adopt and
+      pair. Until one exists the subject is a list with a single right answer.
 
   - scenario_class: partial_failure
     situation: >
@@ -101,9 +107,11 @@ scenarios:
     expected_answer:
       act: PROCEED
       record_subject: total
-      record_claim: "0 within 1.0 mi / 365 days"
+      record_claim: "0"
+      expected_caveat: "the radius, age and count constraints the zero belongs to"
     draft_note: >
-      Q1 again. NEEDS IVAN on transcription, same as `happy_path`.
+      ADR-0082 RULINGS 7-10, same as `happy_path`. The count is graded strictly; the constraints
+      move to a caveat graded as present. RECORDED GAP: no grader reads caveats today.
 
   - scenario_class: permission_denied
     situation: >

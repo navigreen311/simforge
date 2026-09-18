@@ -3057,3 +3057,64 @@ Twelve flags, and every one is about the CLAIM or the CLASS - none about a situa
 subject. Seven are prose claims an enum would fix, three of those are Q1's qualifier pulling against
 transcription, two are option sets of my construction, and two are single questions: whether "no
 call was made" is itself a fact worth recording, and what class the new pre-call scenario carries.
+
+---
+
+# Entry 36 - twelve answers, and the keys have no questions left in them
+
+**18 September 2026.** ADR-0082. 43 -> **44 scenarios, zero NEEDS IVAN.**
+
+    37 expect a record   7 expect RECORD: NONE   25 carry options   4 carry an expected_caveat
+
+## The one that is worth keeping as a principle
+
+Ruling 1 keeps `VERIFIED` on the signers list even though nothing can produce it, and the reason
+separates it from the band it superficially resembles:
+
+    an unreachable WRONG answer tests something. An unvarying RIGHT one does not.
+
+The band was withdrawn because the RIGHT answer never varied, so an agent that always wrote it
+passed knowing nothing. `VERIFIED` never occurs either - but the agent must CHOOSE, and choosing it
+means believing a signer was checked. The distractor is the failure the scenario exists to catch,
+offered in a form the agent can take.
+
+## Rulings 7-10, and the answer to the question they asked
+
+**Caveat presence is NOT gradable today, and the data is already there.**
+
+    AgentAnswer.caveats          parsed by _CAVEAT_RE          battery.py:431
+    ObservedBehaviour.disclosed  written at battery.py:531  -  READ AT NO SITE
+
+`grep -rn "\.disclosed"` across apps/api/src returns ONE line, the write. The field is typed,
+populated, and consulted by nothing.
+
+So it is recorded, as the ruling required: **the qualifier on those four scenarios is an expectation
+no grader reaches.** One predicate away - the value already travels - but the grader that would read
+it is P2's submitted-scenario runner, unbuilt.
+
+**And this is ADR-0081 ruling 3 arrived at correctly for once.** The CAPABILITY (parsing a caveat)
+is present; the CALL SITE (grading it) is absent; they are two different findings. Three days ago I
+would have written "SimForge cannot grade caveats."
+
+## What the counts stopped carrying, named rather than hidden
+
+Ruling 2 makes the concerns a plain `0`. What a count does not carry is the READING -
+`failure_signatures.silent_partial` says an empty list is the matcher producing none rather than a
+clearance, and `0` says only the number. That sentence now lives in `expected_behavior` and is not
+graded.
+
+Same shape on the four qualifier scenarios, and `comp_analysis / happy_path` is the sharpest of
+them: `correct_sequence` exists TO REQUIRE the parameters beside the count, so the caveat there is
+not decoration, it is the instruction.
+
+## Two recorded gaps, neither an open question
+
+1. No grader reads caveats, so four qualifiers are unreached.
+2. `comp_analysis / property_id` has no counterpart - ruling 3 said adopt AND NOTE rather than adopt
+   and pair, so its list has one true value in every scenario of that module. Ruling 6 fixed the
+   same shape on `property_lookup` by adding a counterpart; this one stands unpaired on purpose.
+
+## Where the keys stand
+
+Five files, 44 scenarios, every one `status: draft`, and **no question left inside them.** What is
+left is Ivan's review and a move into `theoffice/scenarios/` once that working tree lands.

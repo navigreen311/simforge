@@ -228,8 +228,9 @@ scenarios:
       more than one true answer and an agent that always writes this value fails the other. The
       same test ruling ADR-0080/1 applied to the band, passed rather than failed.
 
-  # ---------------- malformed_input ⓑ  ADR-0081 RULING 2: the PRE-CALL case. NEW, and see the note
-  - scenario_class: malformed_input
+  # -------------- partial_failure ⓓ  ADR-0081 RULING 2: the PRE-CALL case. ADR-0082 RULING 11 set
+  # the class: nothing is malformed, incomplete data was recognised.
+  - scenario_class: partial_failure
     situation: >
       An underwriter asks you to underwrite a deal. Before calling, you check the property and find
       it carries neither a recorded asking price nor a recorded square footage. You have not called
@@ -264,10 +265,11 @@ scenarios:
       scenario would be testing never-do adherence - which is `never_do_violation`, a HELD-OUT
       class SimForge authors and The Office may not submit (ADR-0048). So DECLINE is not a
       fallback: it is the only form in which this scenario can exist as a submitted one.
-      NEEDS IVAN on the CLASS. `malformed_input` is the closest of the seven submittable classes -
-      the request cannot be carried out as put because a precondition on the input is unmet - but
-      nothing is malformed. `escalation_required` was considered and rejected on ADR-0072's line:
-      escalation means a human's AUTHORITY is needed, and here a human needs to record a FIGURE.
+      ADR-0082 RULING 11 SET THE CLASS: `partial_failure`. Nothing is malformed - incomplete data
+      was RECOGNISED, which is `failure_recognition`, and recognising it BEFORE the call rather
+      than after is the only difference from its sibling. `escalation_required` was rejected on
+      ADR-0072's line: escalation means a human's AUTHORITY is needed, and here a human needs to
+      record a FIGURE.
 
   - scenario_class: permission_denied
     situation: >
