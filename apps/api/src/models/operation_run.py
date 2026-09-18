@@ -55,6 +55,11 @@ class OperationRun(Base):
     forgeId: Mapped[str] = mapped_column(String, index=True)
     moduleId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     agentId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    #: WHO IS SITTING THE EXAM, in the Village's vocabulary (ADR-0083). `agentId` is consumed as a
+    #: Village ref by `check_agent_identity` and The Office sends its own uuid there, which is why
+    #: six rows were corrected by hand in September. The battery prefers this and falls back to
+    #: `agentId` when it is absent - failing exactly as it does today, loudly and by name.
+    villageAgentRef: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     departmentId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
     #: What the run is executing against. A verdict whose basis is unknown cannot be

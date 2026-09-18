@@ -956,7 +956,14 @@ def build_gate_result_request(
     # against, and passing it through `merge_dimension_results` would invite one.
     results = [*results, report.protocol_conformance_result]
     outcome = AgentRunOutcome(
-        agent_id=report.agent_id,
+        # TWO IDENTITIES, AND THIS IS THE FAR SIDE'S (ADR-0083).
+        #
+        # `report.agent_id` is whoever the EXAMINER looked up - a Village ref, because that is what
+        # `assemble_system_prompt` resolves. The Office keys its certifications on its OWN
+        # `office_agent_id`, which is what `run.agentId` holds, so an outcome returning the Village
+        # ref would be a verdict about an agent The Office cannot find. The run carries both and
+        # each side gets the one it uses.
+        agent_id=run.agentId or report.agent_id,
         module_id=report.module_id,
         forge_id=run.forgeId,
         functions_certified=0,
@@ -1036,6 +1043,18 @@ async def battery_for_run(
     if not run.moduleId or not run.agentId:
         return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_MODULE)
 
+    # ADR-0083 - WHO THE EXAMINER LOOKS UP.
+    #
+    # `agentId` is consumed as a VILLAGE ref and The Office sends its `office_agent_id` there, so
+    # every run it opened in September refused on identity and six rows were corrected by hand from
+    # `office_agent_identity.village_agent_ref`. `villageAgentRef` is that column crossing the
+    # boundary, and it wins when it is present.
+    #
+    # The fallback is `agentId`, unchanged: a run opened before this column existed, or by a
+    # submitter that does not send it yet, behaves exactly as it does today - which for an Office
+    # uuid means a loud, named refusal rather than a quiet pass.
+    village_ref = run.villageAgentRef or run.agentId
+
     # ADR-0061 RULING 2 - who is sitting this exam.
     #
     # Checked BEFORE the examiner and before the never-do list, because it is the cheapest of the
@@ -1043,7 +1062,7 @@ async def battery_for_run(
     # missing agent and falls back to the id as a name, so without this the battery puts eleven
     # probes to "You are <uuid>, a Village agent", grades the answers, and records a certification
     # about nobody. Nothing raises. That is what an empty pass looks like from inside.
-    who = check_agent_identity(runtime.village_reader, run.agentId)
+    who = check_agent_identity(runtime.village_reader, village_ref)
     if not who.ok:
         # WARNING, not info. Every other skip here is a run this battery has nothing to say about;
         # this one is a run that was HANDED OVER for certification against an agent the examiner
@@ -1051,7 +1070,7 @@ async def battery_for_run(
         log.warning(
             "battery_refused_unidentified_agent",
             run_ref=run_ref,
-            agent=run.agentId,
+            agent=village_ref,
             module=run.moduleId,
             reason=who.reason,
             detail=who.detail,
@@ -1119,7 +1138,9 @@ async def battery_for_run(
     attempts = [
         await run_module_battery(
             module_id=run.moduleId,
-            agent_id=run.agentId,
+            # THE VILLAGE REF, because this is the id `assemble_system_prompt` resolves. The
+            # outcome carries the OFFICE id instead - see `build_gate_result_request`.
+            agent_id=village_ref,
             never_do=never_do,
             runtime=at_production,
             seed=seed + attempt,
@@ -1130,6 +1151,7 @@ async def battery_for_run(
     log.info(
         "exam_ran",
         run_ref=run_ref,
+        village_agent_ref=village_ref,
         module=run.moduleId,
         agent=run.agentId,
         attempts=len(attempts),

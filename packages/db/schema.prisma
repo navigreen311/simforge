@@ -1012,7 +1012,15 @@ model OperationScenarioSubmission {
 
   /// Position in the submitted list. A set that comes back shuffled is harder to review
   /// against the file it came from.
-  ordinal Int @default(0)
+  /// The transcribable half of the key (ADR-0083). Nullable as a set: a scenario
+  /// without an expected_answer is stored and is not gradable by transcription.
+  expectedAct           String?
+  expectedRecord        String?
+  recordSubject         String?
+  recordClaim           String?
+  recordClaimOptions    Json?
+  expectedCaveat        String?
+ @default(0)
 
   createdAt DateTime @default(now())
 
@@ -1033,6 +1041,8 @@ model OperationRun {
   forgeId      String
   moduleId     String?
   agentId      String?
+  /// The Village ref of the agent sitting this exam (ADR-0083).
+  villageAgentRef         String?
   departmentId String?
 
   instructionContentHash String // the basis; a verdict whose basis is unknown cannot be recomputed
