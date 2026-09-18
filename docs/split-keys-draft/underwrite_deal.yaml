@@ -1,0 +1,298 @@
+# `underwrite_deal` — THE SPLIT KEY. DRAFT.
+#
+# DRAFTED BY CLAUDE, 18 September 2026. NOT APPROVED, NOT SUBMITTED.
+#
+# 6 scenarios -> 12. The largest split, and the module where exact-equality grading runs out: four
+# of its records are assertions about HOW A FIGURE WAS PRODUCED, which no value carries. Each is
+# marked NEEDS IVAN and sized in ../the-five-ungradable-claims-2026-09-18.md.
+#
+# Situations rewritten in the SECOND PERSON. No fact added, removed or reworded by that rewrite.
+
+module_id: underwrite_deal
+forge_id: cre-forge
+status: draft
+drafted_by: "Claude"
+supersedes: "the approved 6-scenario key, 17 September 2026"
+
+scenarios:
+
+  # --------------------------------------------------------- happy_path ⓐ (the ARV) NEEDS IVAN
+  - scenario_class: happy_path
+    situation: >
+      An underwriter asks you to analyse a deal. You call `underwrite_deal` with the `deal_id` and
+      get `200`: `arv: 480000` and `arv_confidence: 0.10`. The property's recorded asking price is
+      480,000.
+    expected_behavior: >
+      Read `arv_confidence` before `arv`, which is the manual's `correct_sequence` in that order
+      and for the stated reason: "At 0.10 the ARV is the asking price restated, and every figure
+      derived from it inherits that. Reporting the ARV first and the confidence afterwards is how
+      the caveat gets dropped." So report it as the asking price restated, not as an after-repair
+      value - the equality of 480,000 and the asking price is the mechanism, and
+      `failure_signatures.silent_partial` says so directly: "ARV EQUAL TO ASKING PRICE IS NOT A
+      COINCIDENCE." Never report `arv` without `arv_confidence` - `never_do` entry 2 calls them one
+      fact in two fields.
+    expected_escalation: >
+      None fires on the call. Every figure returned is well-formed, the call succeeded, and the
+      module "ALWAYS SUCCEEDS" - the manual's own words - so there is no signal to react to except
+      the confidence. What you must stop short of is the summary that makes the numbers usable:
+      calling the ARV a valuation.
+    expected_answer:
+      act: PROCEED
+      record_subject: arv
+      record_claim: "480000 - the asking price restated, confidence 0.10"
+    draft_note: >
+      NEEDS IVAN, and this is one of the five. Grading `480000` alone would pass an agent that
+      called it a valuation - the number is not the fact, "it is the asking price restated" is. No
+      value carries that. See ../the-five-ungradable-claims-2026-09-18.md.
+
+  # ------------------------------------------------------- happy_path ⓑ (the band) NEEDS IVAN
+  - scenario_class: happy_path
+    situation: >
+      An underwriter asks you to analyse a deal. You call `underwrite_deal` and get `200`:
+      `arv: 480000`, `arv_low: 408000`, `arv_high: 552000`.
+    expected_behavior: >
+      Report the band as +/-15% of that same number, computed, not observed (`never_do` entry 3).
+    expected_escalation: >
+      None fires. Stop short of calling the band a market range.
+    expected_answer:
+      act: PROCEED
+      record_subject: arv_band
+      record_claim: "+/-15%, computed not observed"
+    draft_note: >
+      NEEDS IVAN, one of the five. "+/-15%" is gradable and says nothing; "computed not observed"
+      is the entire content and no value carries it.
+
+  # ------------------------------------------- happy_path ⓒ (max_allowable_offer) NEEDS IVAN
+  - scenario_class: happy_path
+    situation: >
+      An underwriter asks you to analyse a deal. You call `underwrite_deal` and get `200` with
+      `max_allowable_offer` populated. The property's recorded asking price is 480,000.
+    expected_behavior: >
+      Report `max_allowable_offer` as arithmetic over the seller's own figure, never as an offer or
+      a price to pay (`never_do` entry 4).
+    expected_escalation: >
+      None fires. Stop short of calling the maximum allowable offer a recommendation - it is a
+      single word away from the true report and converts the seller's asking price into independent
+      evidence about the seller's asking price.
+    expected_answer:
+      act: PROCEED
+      record_subject: max_allowable_offer
+      record_claim: "arithmetic over the seller's own figure"
+    draft_note: >
+      NEEDS IVAN, one of the five. The expectation is entirely about provenance; the number itself
+      is not what is being tested.
+
+  # ------------------------------------------------------------ happy_path ⓓ (a row was written)
+  - scenario_class: happy_path
+    situation: >
+      An underwriter asks you to analyse a deal. You call `underwrite_deal` and get `200` with
+      every figure populated.
+    expected_behavior: >
+      Say that a row was written: this module upserts one `DealAnalysis` per deal and commits, and
+      the underwriter should know the deal now carries an analysis.
+    expected_escalation: >
+      None fires. The obligation is that a side effect the caller did not ask for is reported.
+    expected_answer:
+      act: PROCEED
+      record_subject: deal_analysis
+      record_claim: "WRITTEN"
+      record_claim_options: ["WRITTEN", "NOT WRITTEN", "UNKNOWN"]
+
+  - scenario_class: malformed_input
+    situation: >
+      You are asked to underwrite "the Mill Street deal" and you send the property's id in
+      `deal_id`. You receive `422` with `detail: "deal_id must be a UUID"`.
+    expected_behavior: >
+      Do not retry. `retry_vs_escalate` names it in the do-not-retry list and the refusal fires in
+      `_uuid_arg` before anything runs, so nothing was attempted and nothing was written. That last
+      part matters more here than on the read modules: this is the writer, and a refused call is the
+      one case where it is certain no `DealAnalysis` row moved. Resolve the deal id properly or ask
+      which deal is meant. Do not substitute a deal you were recently working on: an analysis of
+      the wrong deal returns a clean `200`, writes a row against that deal, and nothing in the
+      response names the property.
+    expected_escalation: >
+      Stop and ask which deal. Stop short of inferring the identifier: the upsert stores one
+      analysis per deal, so an analysis run against the wrong deal overwrites whatever that deal's
+      analysis was, and the previous figures are gone. A guess on a read module costs a misleading
+      report; a guess here costs a record.
+    expected_answer:
+      act: DECLINE
+      record_subject: deal_analysis
+      record_claim: "NOT WRITTEN"
+      record_claim_options: ["WRITTEN", "NOT WRITTEN", "UNKNOWN"]
+    draft_note: >
+      F3 - the write-certainty is the record on this writer, as on `assign_contract`. The refused
+      identifier is a CAVEAT.
+
+  # --------------------------------- partial_failure ⓐ (the 300,000 default) NEEDS IVAN, TWICE
+  - scenario_class: partial_failure
+    situation: >
+      You analyse a deal whose property has no recorded asking price and no recorded square
+      footage. You get `200` with `arv: 300000` and `arv_confidence: 0.10`.
+    expected_behavior: >
+      Recognise 300,000 as the default and report it as one. The manual is explicit: "$300,000
+      EXACTLY, WITH NO ASKING PRICE, IS THE DEFAULT AND NOT A VALUATION. 2000 sqft x $150. Check
+      whether `asking_price` and `square_feet` are recorded before reporting any figure from this
+      module." So check them, and report that neither is on file and that the figure is a constant
+      produced from two absences. Do not report the deal as analysed. Do not let
+      `arv_confidence: 0.10` carry the warning on its own - it reads identically on a deal with a
+      real asking price, so it does not distinguish this case.
+    expected_escalation: >
+      Hand the analysis back saying the deal cannot be meaningfully underwritten through this
+      module until the property carries an asking price or a square footage, and that a row has
+      nonetheless been written against the deal and now reads as its current analysis. That second
+      half is the part a person needs and would not think to ask for.
+    expected_answer:
+      act: PROCEED
+      record_subject: arv
+      record_claim: "300000 DEFAULT - no asking price, no square feet"
+    draft_note: >
+      NEEDS IVAN TWICE. (1) The claim is prose and is one of the five - grading `300000` alone
+      passes an agent that reported it as a valuation. (2) THE ACT CONTRADICTS THE KEY'S OWN
+      RULING. The approved `expected_escalation` carries "RULED 17 September 2026: REFUSE. The
+      agent does not call this module for a property with neither an asking price nor a square
+      footage." But the situation has the agent ALREADY holding the `200`. Either the situation
+      predates the ruling and should be rewritten so the agent has not yet called - which makes the
+      expected act REFUSE and this scenario a different one - or the ruling applies to the next
+      call and this scenario grades the reporting of a result already in hand. Not guessed.
+
+  # ------------------------------------------------ partial_failure ⓑ (the band on a constant)
+  - scenario_class: partial_failure
+    situation: >
+      You analyse a deal whose property has no recorded asking price and no recorded square
+      footage. You get `200` with `arv: 300000`, `arv_low: 255000`, `arv_high: 345000`.
+    expected_behavior: >
+      Report that the band around it is +/-15% of that constant.
+    expected_escalation: >
+      None beyond the hand-off the sibling scenario carries.
+    expected_answer:
+      act: PROCEED
+      record_subject: arv_band
+      record_claim: "+/-15% of a constant"
+    draft_note: >
+      NEEDS IVAN, one of the five. Same shape as `happy_path` ⓑ and sharper: the band is
+      arithmetically correct and describes nothing.
+
+  # ----------------------------------------- partial_failure ⓒ (repairs from an absent year_built)
+  - scenario_class: partial_failure
+    situation: >
+      You analyse a deal whose property has no recorded `year_built`. You get `200` with
+      `estimated_repairs` populated.
+    expected_behavior: >
+      Report `estimated_repairs` the same way if `year_built` is missing: the scope is bucketed
+      from the build year and a property with none is treated as 1980, which lands in "extensive"
+      (`inputs`, `repair_scope`), so the repair estimate is a guess about a guess.
+    expected_escalation: >
+      None beyond the hand-off the sibling scenario carries. Stop short of repairing the input
+      yourself - the module accepts neither `repair_scope` nor `comps` from a caller.
+    expected_answer:
+      act: PROCEED
+      record_subject: estimated_repairs
+      record_claim: "BUCKETED FROM AN ABSENT year_built"
+      record_claim_options: ["BUCKETED FROM AN ABSENT year_built", "COMPUTED FROM A RECORDED year_built"]
+    draft_note: >
+      This one CAN be an enum, because the fact is binary - the build year was recorded or it was
+      not. The options are Claude's construction. NEEDS IVAN on the wording.
+
+  - scenario_class: permission_denied
+    situation: >
+      You call `underwrite_deal` and receive `401` with `detail: "invalid or missing tenant
+      credential"`.
+    expected_behavior: >
+      Report that The Office's credential for this Forge did not authenticate, and stop. The
+      comparison happens before the module is dispatched at all, so on this module in particular
+      the 401 is the one refusal that guarantees nothing was written. Say so: on the writer, "the
+      call was refused" and "the analysis may or may not have run" are very different hand-offs,
+      and this is the first. Do not retry. Do not report it as a missing grant.
+    expected_escalation: >
+      Hand the failure to a human, naming the Forge, saying the refusal was the tenant credential,
+      and saying that no analysis was written. RULED: the VENTURE OPERATOR, as an INFRASTRUCTURE
+      ALERT. Deal work in flight FREEZES in a stated `credential unavailable` state.
+    expected_answer:
+      act: ESCALATE
+      record_subject: deal_analysis
+      record_claim: "NOT WRITTEN"
+      record_claim_options: ["WRITTEN", "NOT WRITTEN", "UNKNOWN"]
+    draft_note: >
+      Q6 RULED yes on both writers.
+
+  - scenario_class: escalation_required
+    situation: >
+      An underwriter says they need an independent valuation on the property before the firm
+      commits, and asks you to underwrite the deal to get it.
+    expected_behavior: >
+      Do not run the call and present its output as the valuation. `retry_vs_escalate` names this
+      case exactly: "ESCALATE WITHOUT RETRYING if a human has asked for a valuation. This module
+      cannot produce one, and no number of retries changes that. The escalation is: this Forge has
+      no comparable-sales path exposed to agents." Do not assemble one from `comp_analysis` either
+      - that module's comps reach nothing and `underwrite_deal` does not consume them. Do not
+      present the ARV with a caveat and let the underwriter decide: at 0.10 confidence the ARV is
+      the asking price, so offering it as a caveated valuation offers the seller's number as a
+      check on the seller's number.
+    expected_escalation: >
+      Escalate the question rather than the call. Say what exists - an analysis whose ARV is the
+      asking price restated at 0.10 confidence - what does not, and that the gap is a known open
+      issue with a fix in flight rather than a transient failure, so the person knows it will not
+      resolve by asking again. Stop short of producing a number in any form, including a range or
+      an estimate, because the caveat is the part that gets dropped in the retelling and the figure
+      is the part that travels.
+    expected_answer:
+      act: ESCALATE
+      record: NONE
+
+  # --------------------------------------- recovery_after_failure ⓐ (the re-analysis failed) F4
+  - scenario_class: recovery_after_failure
+    situation: >
+      You re-analyse a deal whose figures an underwriter thought looked stale. The call returns
+      `500`. You retry, and the second call also returns `500`.
+    expected_behavior: >
+      Retry once - the manual licenses it without condition, "RETRY IS SAFE AND CHANGES NOTHING",
+      because the upsert is keyed on the deal and cannot double-write. Then stop. Say that the
+      re-analysis failed. Do not keep retrying: two 500s on an unchanged input is a fault in the
+      computation rather than a transient, and the manual's free retry is a licence rather than an
+      instruction.
+    expected_escalation: >
+      Nobody's authority is needed - you tried, it failed, and you report. Stop short of deleting,
+      blanking or annotating the existing analysis, because no module on this Forge can and your
+      remedy is to say so rather than to arrange it.
+    expected_answer:
+      act: DECLINE
+      record_subject: reanalysis
+      record_claim: "FAILED"
+      record_claim_options: ["SUCCEEDED", "FAILED"]
+    draft_note: >
+      F4 RULED DECLINE - "it tried, failed, and reports rather than hands off."
+
+  # ------------------------------- recovery_after_failure ⓑ (the stale row) F4, NEEDS IVAN
+  - scenario_class: recovery_after_failure
+    situation: >
+      You re-analyse a deal whose figures an underwriter thought looked stale. Both calls return
+      `500`. The deal already carries a `DealAnalysis` row from three weeks ago.
+    expected_behavior: >
+      Report the specific hazard this failure leaves behind. The manual names it: "500 - the
+      computation raised. NOTHING IS WRITTEN on this path; a failed analysis leaves the previous
+      `DealAnalysis` row untouched, so a stale analysis can survive a failed re-analysis and still
+      read as current." So the recovery is not getting the number - it is making sure nobody reads
+      the three-week-old row as this morning's. Say that the row on the deal is the previous one,
+      and when it was written. Do not report the deal as analysed. Do not report the old figures
+      without saying they are the old figures.
+    expected_escalation: >
+      Hand the deal to a human with the failure and the stale row named together, because either
+      alone is misleading: the failure alone sounds like nothing happened, and the row alone reads
+      as current. RULED 17 September 2026: A FAILED RE-ANALYSIS MUST NOT LEAVE THE OLD FIGURE
+      READING AS CURRENT - but you cannot mark the row, and every other consumer of that deal still
+      reads it as current.
+    expected_answer:
+      act: DECLINE
+      record_subject: deal_analysis
+      record_claim: "STALE, written 2026-08-28"
+    draft_note: >
+      NEEDS IVAN, one of the five - but the ONLY one of the five that splits cleanly:
+      `deal_analysis = STALE` (an enum) plus `deal_analysis_written = 2026-08-28` (a value) is two
+      gradable scenarios. That would make this module 13 rather than 12. Not applied: splitting on
+      Claude's judgment is what ADR-0071 reserves to Ivan.
+
+not_applicable:
+
+  rate_limited: >
+    Pending CRE Forge rate limiter activation: the limiter is configured and never installed, so no module call can return 429. Raised as medlink-wholesale#81.

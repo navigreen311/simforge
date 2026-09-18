@@ -2842,3 +2842,88 @@ The last five are the scenarios about HOW A FIGURE WAS PRODUCED - `±15% of a co
 price restated`, `arithmetic over the seller's own figure`. There is no value that carries them, and
 on the evidence of `underwrite_deal`'s own manual they are the most important thing that module has
 to say.
+
+---
+
+# Entry 33 - the split keys, drafted
+
+**18 September 2026.** ADR-0079. 27 -> 41 scenarios, five files, every one `status: draft`.
+
+## The ruling made the split a measured decision rather than a design preference
+
+    0 of 200 on escalation_required   five models, two arms, and EVERY sample answered the
+                                      half it could - PROCEED with total = 7, which is
+                                      scenario (b) of the split
+    REFUSE 20/20 from gemma2 on the   against PROCEED 20/20 from every model on the clean
+    approved happy_path               half. The nulls and the silent cap read as prohibited
+                                      territory when they sit beside the count.
+
+A scenario no model can answer as written, and a scenario that drives models to refuse, are the two
+failure modes ADR-0071 predicted from the one-RECORD-line rule. They turned up in behaviour.
+
+## What was written
+
+33 expect a record, 8 expect RECORD: NONE, 13 carry `record_claim_options`.
+
+    property_lookup   5 -> 9     comp_analysis   5 -> 5 (F2: the split half duplicates its
+    buyer_match       5 -> 7                            own happy_path, so it merges)
+    assign_contract   6 -> 8     underwrite_deal 6 -> 12
+
+**The two changes are different and the report says so separately.** The SPLIT narrows each
+situation to the one fact its scenario grades - facts ARE removed from a variant, which is what a
+split is. The PERSON rewrite adds no fact, removes no fact and rewords none: `The agent calls` ->
+`You call`, and nothing else. Every number, status code, field name and quoted `detail` survives
+verbatim.
+
+That the person matters is MEASURED: mistral went 1/20 -> 13/20 on the expected act between the
+verbatim and re-pointed arms.
+
+## A correction to my own arithmetic
+
+The F1 document said property_lookup becomes "3 happy_path / 3 partial_failure". **It is 2 / 4.** My
+table listed three partial_failure and silently dropped the module's ORIGINAL partial_failure
+(`total = 0`), padding happy_path with an em-dash. The module total was 9 either way and the ruling
+is unaffected - "re-class (b)(c)(d), and what it tests wins" is unambiguous. The label was mine, the
+decision was Ivan's. Third time this week a count of mine has needed correcting after it was quoted.
+
+## Twenty flags, and the four that change what a scenario IS
+
+**`underwrite_deal / partial_failure`'s act contradicts the key's own RULED line.** The ruling says
+REFUSE - do not call this module for a property with neither an asking price nor a square footage -
+and the situation has the agent ALREADY HOLDING the 200. Either the situation predates the ruling or
+the ruling governs the next call. Not guessed.
+
+**`buyer_match / malformed_input` describes two possible responses** (422 or 404). One scenario
+cannot have two expected answers; the draft takes the 404 branch.
+
+**Q7 said `draft_created`; the draft writes `contract_created`**, so all four write-certainty
+scenarios on that module share one subject. Flagged rather than silently changed.
+
+**OPTION LISTS LEAK.** If `record_claim_options` varies per probe, the list itself says which
+scenario is being put - the same shape as the naming sentence's leak. The two buyer_match concern
+scenarios get an identical option set for that reason, and this will bite wherever options are used.
+
+## The five ungradable claims, and the test that decides them
+
+    a claim whose true value never varies cannot test anything, because an agent that always
+    writes it passes
+
+Three become gradable by PAIRING - a scenario where the other value is right, which for `arv_basis`
+and `max_allowable_offer_basis` already exists in the corpus. One more (`deal_analysis = STALE,
+written <date>`) splits into an enum plus a date.
+
+**ONE cannot be tested by any string grader: whether the agent understands that arv_low/arv_high are
+ARITHMETIC.** This module computes the band as +/-15% every time, so a binary has one true value in
+every scenario of the corpus, and an agent writing "computed not observed" without understanding it
+scores 100%. The only thing that would test it is a module returning an OBSERVED band, and CRE Forge
+has none. A second scenario (`+/-15% of a constant`) fails the same test and is redundant besides.
+
+It is not a small one: it is the difference between an underwriter reading a range as a market
+opinion and reading it as a multiplication.
+
+## Where they are
+
+`docs/split-keys-draft/` in SimForge, not `theoffice/scenarios/`, for one stated reason: theoffice's
+working tree has **65 uncommitted files and the five approved keys are among them** - staged, not
+committed, beside in-flight broker work and two migrations. Committing into that tree risks
+entangling work that is not mine. Moving five YAML files later is a minute.
