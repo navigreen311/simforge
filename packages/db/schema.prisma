@@ -1112,6 +1112,9 @@ model OperationCertification {
   /// never travels without its rule - is a CHECK constraint in the migration, which Prisma
   /// cannot express: operation_cert_spread_has_a_measure.
   rubricSpreadMeasure   String?
+  /// Why full certification was withheld (ADR-0072): a list of named reasons, written
+  /// only on a provisional row. Recorded rather than recomputed by every reader.
+  withheldBecause       Json?
   failureModesObserved  Json?
   versionSensitivity    Json? // {module: [major|minor|patch]} (Rev 2 Q4)
   expiresAt             DateTime?

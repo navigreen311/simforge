@@ -852,6 +852,7 @@ def build_gate_result_request(
     agent_model: str,
     model_identity: dict | None = None,
     submitted_rubric_results: list[dict] | None = None,
+    submitted_class_results: list[dict] | None = None,
 ) -> GateResultRequest:
     """Turn one battery's report into the payload `POST /operation/gate-result` accepts.
 
@@ -874,7 +875,22 @@ def build_gate_result_request(
     `merge_dimension_results`, which takes the WORSE verdict per dimension. Both report into
     `failure_recognition`, so two results for one dimension is the normal case; a held-out FAIL is
     never softened by a submitted PASS.
+
+    **`submitted_class_results` travels with it, and ADR-0072 is why.** Dimensions are a SCORE and
+    classes are the SOURCE of that score, and the breadth rule reads the sources: a caller that
+    supplied submitted dimensions and no submitted classes would present a merged run that still
+    looks, to every reader downstream, like a battery of SimForge's own devising. So the two are
+    passed together or not at all - a `submitted_rubric_results` with no classes beside it is
+    refused here rather than producing a payload that would be withheld later for a reason the
+    caller could not act on.
     """
+    if submitted_rubric_results and not submitted_class_results:
+        raise ValueError(
+            "submitted_rubric_results were supplied with no submitted_class_results. A dimension "
+            "score with no scenario class behind it is an unsourced claim, and the breadth rule "
+            "(ADR-0072) reads the classes: this payload would be withheld at `provisional` for "
+            "`the_competence_half_did_not_run` with nothing in it to say otherwise."
+        )
     held_out_results = [dict(item) for item in report.rubric_results]
     results = (
         merge_dimension_results(submitted_rubric_results, held_out_results)
@@ -907,7 +923,10 @@ def build_gate_result_request(
         # sat on a model file at all.
         model_identity=model_identity,
         operation_rubric_results=[OperationRubricResultItem(**item) for item in results],
-        per_scenario_class_results=list(report.scenario_class_results),
+        per_scenario_class_results=[
+            *report.scenario_class_results,
+            *(ScenarioClassResult(**item) for item in submitted_class_results or []),
+        ],
         failure_modes_observed=list(report.failure_modes),
         # ADR-0062: all three, in the order they were sat. A reader who sees a FAIL has to be able
         # to see WHICH attempt failed, and a reader who sees a PASS has to be able to see that

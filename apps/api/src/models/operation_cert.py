@@ -104,6 +104,15 @@ class OperationCertification(Base):
     #: answer for rows not yet written. Null only where there is no number to label - see the
     #: CHECK constraint above.
     rubricSpreadMeasure: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: WHY full certification was withheld (ADR-0072). A list of named reasons from
+    #: `WITHHOLD_REASONS`, written only on a `provisional` row: a FAILED run was not withheld, and
+    #: a CERTIFIED one has nothing to say here.
+    #:
+    #: Recorded rather than recomputed. Every reader used to re-derive the hold from the raw
+    #: numbers - the web card rebuilt `collapsed` from the spread and the dimension count - which
+    #: works until a rule changes and then explains old holds under a rule that never applied to
+    #: them. The same lesson as `rubricSpreadMeasure`, one column along.
+    withheldBecause: Mapped[list | None] = mapped_column(JSON, nullable=True)
     failureModesObserved: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Which version components (major/minor/patch) this cert is sensitive to, per module (Rev 2 Q4).
     versionSensitivity: Mapped[dict | None] = mapped_column(JSON, nullable=True)

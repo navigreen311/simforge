@@ -1849,6 +1849,9 @@ export interface AgentOperationCert {
   // without the measure beside it (ADR-0070).
   rubric_dimension_spread: number | null;
   rubric_spread_measure: string | null;
+  // ADR-0072 — WHY full certification was held, recorded on the row rather than re-derived
+  // here. Empty on a certified or failed cert; empty too on a row predating the column.
+  withheld_because: string[];
   per_scenario_class_results: PerScenarioClassResult[];
   failure_modes_observed: string[];
   // What the cert was earned under (a change to any of these → re-cert).

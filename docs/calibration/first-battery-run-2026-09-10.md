@@ -2271,3 +2271,92 @@ docstring.
 
 So the ambiguity the label fixes exists only in SimForge's own rows, and it is fixed where it
 exists.
+
+---
+
+# Entry 26 - the ceiling comes back up, on purpose this time
+
+**18 September 2026.** Eight rulings. Seven settle the answer keys; the eighth is the one built.
+
+## The eighth: breadth is its own rule
+
+    certification requires the competence half to have run. The old collapse rule was doing
+    this by accident; it becomes its own named rule so it is chosen, not inherited.
+
+**One verdict, three rules, three entries.** Entry 23 proved a clean held-out run could never
+certify. Entry 25 corrected the measure and the withhold left with the wrong reason. This puts the
+withhold back and writes its name on the row.
+
+    originally    provisional   variance 0.0 - a rule not asking this question
+    ADR-0070      certified     the accidental withhold left with the wrong reason
+    ADR-0072      provisional   the_competence_half_did_not_run, RECORDED
+
+The test that carries this has now been rewritten three times, and the sequence in its docstring is
+the most useful thing in the file.
+
+## Three lines in the rule, each a decision
+
+    a FAIL counts as RUN           the withhold is about the half not being EXERCISED; a run
+                                   that exercised it and found the agent wanting is `failed`
+    not_applicable / NOT_RUN       does NOT count - otherwise a curriculum clears the rule by
+                                   declaring the competence half away
+    one submitted class is enough  the rule asks whether the half RAN, not how wide;
+                                   how wide is coverage, which the denominator already reports
+
+## A withheld certification says why
+
+`withheldBecause` - five named reasons, written only on a `provisional` row. A run that FAILED the
+bar was not withheld, and listing what else was wrong with it would describe a hold that never
+happened.
+
+**Recorded rather than recomputed**, which is the same argument as `rubricSpreadMeasure` one
+migration earlier. Every reader used to re-derive the hold from the raw numbers - the web card
+rebuilt `collapsed` from the spread and the dimension count - which works right up to the moment a
+rule changes, and then every reader is explaining an old hold under a rule that never applied to it.
+
+Not backfilled. A row written before the column was held for a reason nobody recorded, and inventing
+one would be writing a basis the row never had.
+
+## What the rule found on its way in
+
+**`build_gate_result_request` accepted submitted DIMENSIONS with no submitted CLASSES.** Dimensions
+are a score; classes are its source. A payload built that way reads downstream as a battery of
+SimForge's own devising and would be withheld for a reason the caller could not act on. The builder
+now refuses one without the other.
+
+**Eleven test fixtures were withheld for describing runs they did not have** - empty
+`per_scenario_class_results`, or one class behind two scored dimensions. Same shape as Entry 25's
+eleven. Twice in two days the new rule's first act was to catch a fixture lying about its own run,
+which is worth more than the rule itself: **the fixtures were the least-checked claims in the
+repository.**
+
+## The seven that settle the keys
+
+Recorded, not built - they are instructions for `theoffice`.
+
+    Q1  a count and its qualifier are ONE fact
+    Q2  a split half is RE-CLASSED to what it actually tests
+    Q3  "nothing was sent" and "name the next actor" are one fact
+    Q4/Q7  one record, rest CAVEAT - the record is the fact someone would otherwise
+           be MISLED about: sent = false, draft_created = UNKNOWN
+    Q5  the record is the COUNT of concerns reported
+    Q6  yes on both writers. "No contract was created" is a fact.
+        AN ESCALATION RECORDING NOTHING WAS A PATTERN, NOT A RULE.
+    ACT  DECLINE on all five malformed_input - escalation means a human's AUTHORITY
+         is needed, not that a field was malformed
+
+**27 -> 41**, in `docs/the-split-list-under-the-rulings-2026-09-18.md`, every scenario with its
+class, ACT and RECORD.
+
+## And the two things the list could not settle
+
+**`comp_analysis` does not grow.** Splitting its `escalation_required` produces a PROCEED half whose
+record is identical to its own `happy_path`. The half merges rather than adds; 5 -> 5. A split that
+produces a duplicate is the signal that the original scenario was one scenario after all.
+
+**DECLINE's record.** The protocol's GRAMMAR allows any RECORD beside any ACT - ACT and RECORD are
+two independent choose-ones - but its PROSE gloss on DECLINE says "there is nothing to report". Five
+`malformed_input` scenarios and both `underwrite_deal` recoveries now expect a DECLINE WITH a
+record. An agent reading the gloss writes `RECORD: NONE` and fails a scenario it understood
+perfectly. That is a wording problem in the protocol, and fixing it is a protocol bump, which was
+ruled against in the same breath. It wants deciding before the keys are authored.

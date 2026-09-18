@@ -68,7 +68,12 @@ from src.services.operation.never_do import (
     classify_scenario_class,
     declarations_from_map,
 )
-from src.services.operation.rubric import OPERATION_DIMENSIONS, OperationDimension
+from src.services.operation.rubric import (
+    OPERATION_DIMENSIONS,
+    VERDICT_FAIL,
+    VERDICT_PASS,
+    OperationDimension,
+)
 
 
 class ScenarioClass(StrEnum):
@@ -433,8 +438,60 @@ def validate_curriculum_submission(
     )
 
 
+# =================================================================================================
+# THE BREADTH RULE (ADR-0072)
+# =================================================================================================
+
+
+def is_competence_unexercised(per_scenario_class_results: object) -> bool:
+    """**Only SimForge's own held-out classes ran.** Discipline was tested; competence was not.
+
+    Ivan's ruling: *certification requires the competence half to have run. The old collapse rule
+    was doing this by accident; it becomes its own named rule so it is chosen, not inherited.*
+
+    The accident is worth stating, because it is the reason this function exists rather than being
+    assumed. A held-out battery scores exactly two dimensions, a clean pass puts both at exactly
+    1.0, and until ADR-0070 the collapse check read that as a rubric that had failed to
+    discriminate. So a discipline-only run was withheld - correctly, and for the wrong reason.
+    Correcting the collapse rule removed the withhold along with the wrong reason, and this puts
+    back the right one.
+
+    `HELD_OUT_CLASSES` is the seam, and it is the same seam everywhere else in this module:
+    SimForge authors `never_do_violation` and `silent_failure`, The Office may author the other
+    seven, and a certification that rests only on the first pair rests entirely on work the
+    examiner set itself.
+
+    **Silence is not exercise.** A run reporting no classes at all returns False here - not because
+    it is fine, but because `is_evidence_absent` is the withhold that speaks to it, and one fact
+    should produce one reason.
+    """
+    exercised = {
+        c
+        for c, verdict in _class_verdicts(per_scenario_class_results)
+        if verdict in (VERDICT_PASS, VERDICT_FAIL)
+    }
+    if not exercised:
+        return False
+    return not (exercised - HELD_OUT_CLASSES)
+
+
+def _class_verdicts(per_scenario_class_results: object) -> list[tuple[str, str | None]]:
+    """(class, verdict) pairs from either shape this fact is written in: the `ScenarioClassResult`
+    objects on a gate-result body, or the `{class: verdict}` mapping a certification row stores."""
+    if isinstance(per_scenario_class_results, Mapping):
+        return [(str(k), v) for k, v in per_scenario_class_results.items()]
+    out: list[tuple[str, str | None]] = []
+    for r in per_scenario_class_results or []:  # type: ignore[union-attr]
+        if isinstance(r, Mapping):
+            out.append((str(r.get("scenario_class")), r.get("verdict")))
+        else:
+            out.append((str(getattr(r, "scenario_class", "")), getattr(r, "verdict", None)))
+    return out
+
+
 __all__ = [
     "ScenarioClass",
+    "is_competence_unexercised",
     "ALL_SCENARIO_CLASSES",
     "HELD_OUT_CLASSES",
     "REQUIRED_SCENARIO_FIELDS",

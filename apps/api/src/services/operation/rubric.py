@@ -46,6 +46,44 @@ PROTOCOL_CONFORMANCE_DIMENSION = "protocol_conformance"
 #: not a route, so the constant moved rather than the rule bending.
 FAILURE_MODE_UNREADABLE = "agent_answer_did_not_conform_to_the_response_protocol"
 
+# =================================================================================================
+# WHY A CERTIFICATION WAS WITHHELD (ADR-0072)
+# =================================================================================================
+#
+# Five named reasons, recorded on the row rather than recomputed by every reader.
+#
+# Until this, a `provisional` said nothing about which withhold produced it: the web card
+# re-derived `collapsed` from the spread and the dimension count, and the never-do hole from a
+# status computed somewhere else. That works right up to the moment a rule changes, and then every
+# reader is explaining a hold under a rule that no longer applies - which is the defect ADR-0070 had
+# to reason about in the same week, from the other end.
+#
+# A reason is recorded ONLY when it actually held the state at `provisional`. A run that FAILED the
+# bar was not withheld, and listing what else was wrong with it would describe a hold that never
+# happened.
+
+#: Nothing about the module was observed at all - no competence dimension carries a verdict.
+WITHHOLD_EVIDENCE_ABSENT = "no_competence_dimension_carried_a_verdict"
+#: The rubric did not discriminate. A statement about the instrument (ADR-0070).
+WITHHOLD_RUBRIC_UNDISCRIMINATING = "the_rubric_did_not_discriminate"
+#: The module declares never-do obligations and the dimension testing them went unexercised.
+WITHHOLD_NEVER_DO_UNTESTED = "a_declared_never_do_obligation_went_unexercised"
+#: ADR-0072 - only SimForge's own held-out classes ran. Discipline without competence.
+WITHHOLD_COMPETENCE_UNEXERCISED = "the_competence_half_did_not_run"
+#: ADR-0060 - the exam was not sat on anything with a model file.
+WITHHOLD_NO_MODEL_FILE = "the_exam_was_not_sat_on_a_named_model_file"
+
+#: Every reason, so a reader can tell an unknown string from a stale one.
+WITHHOLD_REASONS: frozenset[str] = frozenset(
+    {
+        WITHHOLD_EVIDENCE_ABSENT,
+        WITHHOLD_RUBRIC_UNDISCRIMINATING,
+        WITHHOLD_NEVER_DO_UNTESTED,
+        WITHHOLD_COMPETENCE_UNEXERCISED,
+        WITHHOLD_NO_MODEL_FILE,
+    }
+)
+
 #: Dimensions excluded from `rubric_dimension_spread` and from `_numeric_dim_count`. A set rather
 #: than one string because the exclusion is a CATEGORY - a dimension that measures the channel -
 #: and the next one belongs here too.
