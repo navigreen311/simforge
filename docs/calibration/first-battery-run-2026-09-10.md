@@ -1677,3 +1677,68 @@ The 1.05s/probe was measured on a run that was mostly unreadable. An unreadable 
 same four lines minus one - 41 to 49 output tokens - so the rate should hold when the model
 conforms. **It has not been measured conforming**, and the report says so rather than quietly
 carrying the figure forward.
+
+---
+
+# Entry 17 - the blank becomes an accusation
+
+**2026-09-17, night.** Two rulings
+([ADR-0063](../adr/ADR-0063-a-format-violation-is-a-failure.md)): a format violation is an explicit
+failure, never a blank; and identity comes from the live Village population. The first is built.
+Read-only work in
+[village-identity-and-the-protocol-2026-09-17.md](../village-identity-and-the-protocol-2026-09-17.md).
+
+## The sound argument applied to the wrong case
+
+`grade_scenario` turned a missing observation into NOT_RUN, with a good reason written above it: a
+PASS would certify a refusal nobody saw, a FAIL would blame the agent for the harness. **That is
+true of a probe that was never put.** It was being applied to a probe that was put, answered, and
+answered out of grammar.
+
+Two different facts shared one verdict, and the verdict was the one that meant "nobody asked". So
+an agent that would not answer in the declared grammar was recorded as an agent nobody had
+examined - and sat at `provisional`, indefinitely, with nothing anywhere saying it had done
+something wrong.
+
+This is a new member of the family and it is the subtlest yet. Entries 8-14 were joins returning
+empty. This was **a correct rule with an unstated precondition**: nobody had written down that it
+only held for probes that were not put, because until a model answered badly there was no second
+case to tell apart.
+
+## Measured, and it reproduces
+
+    probes put              : 16
+    readable                :  3
+    now an EXPLICIT FAILURE : 13   (was: NOT_RUN, a blank)
+        13  answered_with_more_than_one_act_line
+
+Thirteen of sixteen, one shape, the same split as the original sample. One module's battery now
+reports `FAIL 6 / PASS 1` with `never_do_adherence` FAIL, where it previously reported nothing.
+
+## The instruction side, which I was told not to change and did not
+
+The rule IS stated: *"Exactly one ACT line and exactly one RECORD line."* phi4 is not disobeying an
+instruction it never got.
+
+What it is doing is filling in a template. The seven-line block above the rules is an
+undifferentiated stack with no "choose one" marker, the sentence above it reads as *"these
+lines"* plural, and the count rule is seven lines further down in a compound bullet that carries
+both ACT and RECORD. **The agent obeys the RECORD half and not the ACT half**, which is what
+half-obeying a compound sentence looks like. And it picks lines 2 and 3 of the menu.
+
+Four options are in the report, smallest first, none applied. One caution recorded with them: a
+reworded protocol is a NEW EXAM, and the A0 baselines and ADR-0054's 11/11 are not comparable
+across it.
+
+## And the ruling I did not build
+
+*"The agent files must describe the agents that exist."* The report sizes the two routes and
+recommends teaching the reader to read `village.db` over regenerating the tree, for one reason:
+**a regenerated tree is a snapshot, and a snapshot going stale is the bug.** This one went stale in
+three weeks and nobody noticed for three weeks, because `_safe` swallowed every symptom.
+
+Noted while sizing it: `village.db` gives victor_serath a name, a department and a `title`
+("Trend Analyst 2") - and an EMPTY backstory and NO personality traits. So the DB-backed prompt is
+thinner than the fixture's, and `role` there is `individual_contributor`, an org key rather than a
+job. Mapping `title` with `role` as fallback is a decision, not a detail, and it is in the report
+rather than assumed.

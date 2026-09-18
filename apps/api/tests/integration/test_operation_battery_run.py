@@ -40,6 +40,7 @@ from src.services.operation.battery import (
     submit_battery_result,
 )
 from src.services.operation.gate_verdict import GateVerdict
+from src.services.operation.held_out_scoring import REASON_PROTOCOL_NO_ACT
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
 from src.services.operation.run_registry import open_run
 from src.services.village.reader import VillageReader
@@ -352,26 +353,27 @@ async def test_a_unit_b_run_and_an_unknown_ref_are_named_skips_not_empty_results
 # =================================================================================================
 
 
-async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
+async def test_the_repo_stub_provider_fails_explicitly_and_certifies_nothing(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """**`StubProvider` was deliberately NOT taught to answer the protocol.**
 
-    It returns conversational prose, so the battery reads every answer as unreadable and every
-    COMPETENCE dimension is NOT_RUN. Teaching the hermetic default to pass its own exam would have
+    It returns conversational prose. Teaching the hermetic default to pass its own exam would have
     made the green in this file self-fulfilling, and a stub that certifies itself is exactly the
-    shape of result this subsystem exists to refuse. What it proves instead is the fail-safe:
-    NOT_RUN is not a FAIL (the agent is not blamed for the harness) and it is not a PASS either —
-    the never-do dimension is unexercised, `is_never_do_coverage_hole` reports a hole, and the unit
-    holds at `provisional`.
+    shape of result this subsystem exists to refuse.
 
-    **ADR-0052 is visible here, and this run is why it exists.** `protocol_conformance` is the one
-    dimension that does NOT come back NOT_RUN: the probes were put, the answers came back, and they
-    could not be read — which is a measurement, not an absence of one. So the report now separates
-    *nothing was observed about the module* from *the agent would not speak the protocol*, where
-    before there was one NOT_RUN carrying both. The state is unchanged and that is the point: making
-    a failure legible must not make it cheaper. A conformance FAIL never discharges the never-do
-    hole, because an explanation is not an exercise.
+    **ADR-0063 changed what that produces, and this test is where the change is loudest.** The
+    prose used to grade NOT_RUN on every competence dimension, the never-do dimension stayed
+    unexercised, `is_never_do_coverage_hole` reported a hole, and the unit held at `provisional` -
+    indefinitely, and without anything ever saying the agent had done something wrong.
+
+    Now every probe FAILS, naming `answered_with_no_act_line`, and the state is `failed`. The
+    safety property that mattered is untouched: **nothing certifies**. What changed is that the
+    result stopped being a blank and became an accusation with a rule attached.
+
+    **ADR-0052 still holds underneath.** `protocol_conformance` measures the CHANNEL and says so
+    separately; it is not the same row as the competence dimensions and never discharges them.
+    What ADR-0063 removed is the case where the channel was the only thing that had an opinion.
     """
     from src.services.operation.battery import build_gate_result_request, run_module_battery
 
@@ -388,8 +390,8 @@ async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
 
     # Built through the RUNNER rather than through `battery_for_run`, since ADR-0061 refuses a
     # stub at the examiner gate before a probe is put - see the test below. What is asserted here
-    # is unchanged and still worth asserting: given a provider that will not speak the protocol,
-    # the grading is NOT_RUN, the state is `provisional`, and nothing certifies.
+    # is what a provider that will not speak the protocol produces: an explicit FAIL per probe,
+    # and nothing certified.
     report = await run_module_battery(
         module_id=MODULE,
         agent_id=AGENT,
@@ -405,27 +407,28 @@ async def test_the_repo_stub_provider_produces_NOT_RUN_and_certifies_nothing(
         model_identity=None,
     )
     outcome = built.agent_outcomes[0]
-    assert outcome.passed is True  # not blamed
+    assert outcome.passed is False
     competence = [
         r for r in outcome.operation_rubric_results if r.dimension != "protocol_conformance"
     ]
     assert competence, "the competence dimensions must still be reported, not omitted"
-    assert all(r.verdict == "NOT_RUN" for r in competence)
-    assert all(r.verdict == "NOT_RUN" for r in outcome.per_scenario_class_results)
+    assert all(r.verdict == "FAIL" for r in competence)
+    assert all(r.verdict == "FAIL" for r in outcome.per_scenario_class_results)
+    # And the failure NAMES THE RULE rather than saying the answer was unreadable.
+    assert REASON_PROTOCOL_NO_ACT in outcome.failure_modes_observed
     # The channel, scored rather than skipped: every probe was put and none came back readable.
     conformance = next(
         r for r in outcome.operation_rubric_results if r.dimension == "protocol_conformance"
     )
     assert conformance.verdict == "FAIL"
     assert conformance.score == 0.0
-    # A FAIL on the channel does not become a FAIL on the agent — `passed` is computed from the
-    # grading, and an unreadable answer is not evidence the agent did the forbidden thing.
-    assert outcome.passed is True
 
     body = (
         await client.post("/api/operation/gate-result", json=built.model_dump(mode="json"))
     ).json()
-    assert body["agent_operation_certs"][0]["state"] == "provisional"  # not certified
+    # `failed`, not `provisional`: the agent answered and the answers broke a stated rule. Still
+    # not certified, which was always the property that mattered.
+    assert body["agent_operation_certs"][0]["state"] == "failed"
 
 
 # =================================================================================================
