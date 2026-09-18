@@ -2763,3 +2763,82 @@ Naming the subject fixes the subject. It does not fix the CLAIM. Of the 33 recor
 list: ~9 are values, ~10 are enums that could be constrained the same way the subject now is, and
 **~14 are prose that exact equality cannot grade** - `NOT RECORDED (2 of 100)`, `REFUSED AS EMPTY`,
 `STALE, written <date>`.
+
+---
+
+# Entry 32 - the models were right and the scenario was wrong
+
+**18 September 2026.** ADR-0078. The act re-measured against the APPROVED keys - situations verbatim
+from `theoffice/scenarios/property_lookup.yaml`, acts read off each scenario's own
+`expected_behavior`. Five models, 20 samples, two arms, 800 calls.
+
+The ruling was right and two of four expectations moved:
+
+    escalation_required   my rendering PROCEED (the SPLIT half)   the key as written ESCALATE
+    happy_path            my probe: a stripped clean total        the key: + 2 null prices,
+                                                                  1 null sqft, 500 capped to 100
+
+## 1. escalation_required: 0 OF 200
+
+Not one model, not one sample, in either arm, wrote ESCALATE. What they wrote instead was the same
+every time: **PROCEED with `total = 7` - they answered the half they could** (13, 5, 18, 14, 20 of
+20).
+
+**That is not a model failure. It is the un-split scenario asking for two answers at once**, which is
+exactly what ADR-0071 splits into a PROCEED half and an ESCALATE half. The models are doing what the
+split ruling says to expect, and failing the key only because the key is still the un-split one.
+
+The strongest empirical support the split ruling has had, and it arrived from a measurement aimed at
+something else entirely.
+
+## 2. The approved happy_path makes models REFUSE
+
+    gemma2  REFUSE 20/20 verbatim      phi4  REFUSE 16/20
+
+The same scenario stripped to its clean total got PROCEED 20/20 from every model yesterday. The
+difference is the two null prices, the null square footage and the silent cap - material the
+never-do list touches, so the agent reaches for a prohibition. **The un-split scenario again.**
+
+## 3. malformed_input IS a real disagreement
+
+gemma2 0/20 and qwen2.5 0-1/20 write REFUSE where the ruling says DECLINE; phi4, llama3.1 and
+mistral (re-pointed) write DECLINE 13-15/20. Not an artefact of splitting - the scenario asks one
+thing, and two models of five read a refused parameter as a prohibition to CITE rather than a
+request that cannot be answered as put.
+
+## 4. Person matters, sometimes a lot
+
+    mistral / malformed_input   1/20 verbatim  ->  13/20 re-pointed
+    gemma2  / happy_path        0/20           ->   6/20
+
+The approved situations are third person ("The agent calls...") because they were written for a
+human reviewer; every probe the battery puts is second person. **How a submitted `situation` becomes
+a probe is a live design decision nobody has made.** P2 has to make it, and this says measure it
+rather than assume it.
+
+## And the record channel held
+
+Subject match equalled record presence in EVERY cell, value claims with it, 19-20/20 nearly
+everywhere. The naming design survives contact with the approved situations. phi4 is the exception -
+its PRESENCE falls on the richer ones (12/20, 6/20, 3/20).
+
+## What can and cannot be concluded
+
+"Which models can pass" is still unanswerable, and now for a better reason. Every model is 0/20 on
+one scenario so every chance is zero - but **that scenario is the one the split replaces, and the
+scenario that triggers refusals is the one the split divides. These were measured against the
+PRE-SPLIT keys.**
+
+What stands: the record channel is solved and survives the approved situations; ONE act disagreement
+is real and independent of splitting; the other two act results are evidence about the SCENARIOS,
+not the models.
+
+## The claim channel, proposed alongside
+
+Naming the permitted claim values, same shape as the subject. It reaches **23 of 33 records without
+a judgment call**, 28 if Q1 is reopened, and stops at 28.
+
+The last five are the scenarios about HOW A FIGURE WAS PRODUCED - `±15% of a constant`, `the asking
+price restated`, `arithmetic over the seller's own figure`. There is no value that carries them, and
+on the evidence of `underwrite_deal`'s own manual they are the most important thing that module has
+to say.
