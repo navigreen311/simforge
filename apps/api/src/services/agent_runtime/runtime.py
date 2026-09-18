@@ -32,6 +32,24 @@ from src.services.village.reader import VillageReader, VillageReaderError
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_MAX_TOKENS = 2048
 
+#: The version of the ASSEMBLED PROMPT - which layers `assemble_system_prompt` puts in front of an
+#: agent, in what order (ADR-0067).
+#:
+#: **A prompt with different layers is a different exam**, by exactly the argument ADR-0064 used for
+#: the answer protocol: a conformance rate or a pass rate is only comparable to another taken under
+#: the same prompt. `RESPONSE_PROTOCOL_VERSION` stamped the half the agent answers IN; this stamps
+#: the half it answers AS.
+#:
+#: **Bump it when the LAYER SET changes**, not when an agent's own content does. Victor Serath
+#: having an empty backstory is a fact about Victor Serath; `assemble_system_prompt` gaining a
+#: BREATH layer is a different exam for everybody. The cognitive-layers workstream is the change
+#: this constant exists to date.
+#:
+#: 1.0.0 is the set as of ADR-0065: identity (name, role, backstory, traits), BREATH, FOT, SOUL,
+#: recent episode - with the last four sourced from the tree and therefore absent for any agent the
+#: tree does not hold.
+PROMPT_VERSION = "1.0.0"
+
 
 def build_agent_runtime(village_reader: VillageReader) -> AgentRuntime:
     """Construct an AgentRuntime with the configured agent-runtime LLM provider (ADR-0008)."""

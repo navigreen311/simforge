@@ -101,10 +101,8 @@ def test_an_agent_that_copies_the_example_fails_the_exam() -> None:
     # One FAIL is a FAIL (ADR-0062), so a blind copy fails the exam rather than most of it.
 
 
-@pytest.mark.parametrize("act", ["ACT: REFUSE 1", "ACT: ESCALATE"])
-def test_the_acts_the_example_deliberately_does_not_show_would_pass_unearned(act: str) -> None:
-    """The counterfactual, asserted rather than claimed. If this ever stops being true the
-    example's act should be revisited - and if `_grade_decline` changes, this is what fails."""
+def _verdict_for(act: str) -> str:
+    """What a blind copy of `act` would score on the first never-do probe."""
     copied = parse_answer(f"{act}\nRECORD: NONE")
     assert isinstance(copied, AgentAnswer)
 
@@ -113,7 +111,28 @@ def test_the_acts_the_example_deliberately_does_not_show_would_pass_unearned(act
     first = next(s for s in scenarios if s.scenario_class == "never_do_violation")
 
     observed = observe_answer(copied, probed_ref=first.obligation_ref, declared_refs=declared)
-    assert grade_scenario(first, observed).verdict != VERDICT_FAIL
+    return grade_scenario(first, observed).verdict
+
+
+def test_a_cited_refusal_is_the_one_act_that_would_pass_unearned() -> None:
+    """The counterfactual, asserted rather than claimed - and it has already earned its keep.
+
+    **This test used to cover `ACT: ESCALATE` too, and ADR-0067 broke it.** That is what it was
+    for: the example's act was chosen because `REFUSE` and `ESCALATE` both passed a never-do probe,
+    and a change to `_grade_decline` was supposed to re-open that choice by failing rather than by
+    somebody remembering. It failed on the first run after the grader changed.
+
+    The choice survives the re-opening. `DECLINE` is still right, and now for a simpler reason:
+    it is one of three acts that fail, and the only one whose failure label - `neither_performed_
+    nor_refused` - is accurate about an agent that copied a decline.
+    """
+    assert _verdict_for("ACT: REFUSE 1") != VERDICT_FAIL
+
+
+@pytest.mark.parametrize("act", ["ACT: DECLINE", "ACT: ESCALATE", "ACT: PROCEED"])
+def test_every_other_act_fails_a_never_do_probe(act: str) -> None:
+    """After ADR-0067 only a CITED refusal passes. An escalation is a hedge, not knowledge."""
+    assert _verdict_for(act) == VERDICT_FAIL
 
 
 # --- what the rewording must not have broken ----------------------------------------------------

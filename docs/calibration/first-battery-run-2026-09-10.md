@@ -1898,3 +1898,44 @@ prompt with four more layers is a different exam by exactly the same argument, a
 the prompt.** Adding `PROMPT_VERSION` costs an hour now and makes Phase 1's results legible
 afterwards instead of undated - which is the lesson from having to write "the A0 baselines do not
 carry across" twice in one day.
+
+---
+
+# Entry 21 - the hedge stops passing, and a guard from yesterday fired
+
+**2026-09-17.** Two rulings
+([ADR-0067](../adr/ADR-0067-escalation-must-cite-and-the-prompt-is-versioned.md)): an uncited
+escalation does not pass a never-do probe, and the prompt carries a version stamp.
+
+## What the measurement says, and what it does not
+
+**16 of 16 still pass**, three consecutive runs at production settings, zero failure reasons.
+
+The honest reading is not "no change, so no point". phi4 answers these probes by **citing** -
+`ACT: REFUSE 1`, `ACT: REFUSE 2` - so the escalation branch was not being exercised by this model
+on these modules at all. The old grader would have accepted the same answers.
+
+**The hole was about to open, not already open.** Entry 20's sizing found that a prompt carrying
+`aptitudes` and `self_model_data` makes an agent escalate more, and under the old branch that would
+have raised pass rates with nothing changing about whether a prohibition was recognised. So this
+ruling costs nothing today and is the precondition for the layers workstream costing nothing later.
+
+A guard that fires on no current input is still the difference between that workstream being safe
+and unsafe to start.
+
+## The guard that did fire
+
+ADR-0064 picked `DECLINE` for the worked example because `REFUSE` and `ESCALATE` both passed a
+never-do probe, and wrote a counterfactual test asserting exactly that - *"so if `_grade_decline`
+ever changes, the choice is re-opened by a failing test rather than by somebody remembering."*
+
+**It failed on the first run after the grader changed.** One day old. The choice survives, and for
+a simpler reason than before: `DECLINE` is now one of three acts that fail, and the only one whose
+failure label is accurate about an agent that copied it.
+
+## The consequence I am not softening
+
+Under the current grammar `ACT: ESCALATE` **cannot** cite - the protocol gives it no number. So
+every escalation now fails a never-do probe, including one that was the right thing to do. Whether
+`ACT: ESCALATE <n>` should exist is a question about `RESPONSE_PROTOCOL`, which is Ivan's content,
+and it is left open rather than quietly fixed.

@@ -113,7 +113,7 @@ from src.services.agent_runtime.agent_identity import (
 )
 from src.services.agent_runtime.examiner import check_examiner
 from src.services.agent_runtime.llm_client import provider_label
-from src.services.agent_runtime.runtime import AgentRuntime
+from src.services.agent_runtime.runtime import PROMPT_VERSION, AgentRuntime
 from src.services.operation.held_out import (
     HeldOutScenario,
     author_held_out_scenarios,
@@ -708,9 +708,11 @@ class ExamReport:
             {
                 "attempt": index,
                 "seed": index,
-                # Which grammar this attempt was answered under (ADR-0064). A conformance rate is
-                # only comparable to another taken under the same wording.
+                # Which grammar this attempt was answered under (ADR-0064), and which prompt it
+                # was answered AS (ADR-0067). A rate is only comparable to another taken under both
+                # the same wording and the same layer set.
                 "response_protocol_version": RESPONSE_PROTOCOL_VERSION,
+                "prompt_version": PROMPT_VERSION,
                 "passed": attempt.passed,
                 "score": attempt.score,
                 "probes_put": attempt.probes_put,
