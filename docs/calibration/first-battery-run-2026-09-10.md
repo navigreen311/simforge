@@ -2998,3 +2998,62 @@ a situation where the agent already holds the 200. Untouched by these rulings.
 **`estimated_repairs_basis` has one true value everywhere** - the exact condition ruling 1 withdrew
 two scenarios for. Its counterpart, a property with a recorded `year_built`, does not exist as a
 scenario. Either it is added or the subject goes the way of the band.
+
+---
+
+# Entry 35 - the counterpart, the pre-call case, and a pattern I asked to have recorded against me
+
+**18 September 2026.** ADR-0081. Three rulings; two applied to the drafts, one is about me.
+
+## The count
+
+    property_lookup 9   comp_analysis 5   buyer_match 8   assign_contract 8
+    underwrite_deal 11 -> 13                                          TOTAL 41 -> 43
+
+35 expect a record, 8 expect RECORD: NONE, 22 carry options, **12 still flagged NEEDS IVAN** (20 at
+the first draft). Option lists still identical per subject; asserted, no leak.
+
+## Ruling 2 - and the act is DECLINE, for a checkable reason
+
+The pre-call scenario is added and the existing partial_failure keeps its 200. But the RULED word is
+REFUSE and **the act has to be DECLINE**:
+
+    the protocol   "REFUSE must carry the NUMBER of the standing prohibition above that forbids
+                   it. A refusal that names no prohibition is not a refusal."
+    the module     SEVEN numbered never-do entries, and NONE of them forbids calling for a
+                   property with neither figure - they are about reporting the arv, the
+                   confidence, the band, the MAO, repeated analysis, external parties, deal_score
+
+So `REFUSE <n>` is uncitable and a literal REFUSE would be a protocol violation.
+
+**And the second horn matters more.** If the prohibition WERE added to the numbered list, this
+scenario would be testing never-do adherence - `never_do_violation`, a HELD-OUT class SimForge
+authors and The Office may not submit. **So DECLINE is not a fallback; it is the only form in which
+this scenario can exist as a submitted one.**
+
+The ruling's substance is untouched: the agent does not call, and the scenario tests that. Only the
+word the protocol makes available changes. I checked the never-do list rather than assuming it,
+which is ruling 3 applied on the same page it was written.
+
+## Ruling 3 - the pattern
+
+    ADR-0075   "no held-out probe expects a DECLINE with a record"  -> the shape is untestable
+               true of the CORPUS, stated as if true of the GRAMMAR
+    ADR-0079   "CRE Forge has no module returning an observed band"
+               `calculate_arv` returns arv +/- std_dev and always has. The ADAPTER passes no comps
+
+**A capability is absent when the CODE is absent, not when a CALL SITE is.** The two are different
+findings with different owners: a missing capability is a build; a missing call site is a wiring
+defect somebody has probably already filed. In the second case it WAS - medlink-wholesale#75 / B14 -
+so the correct report was "one call site away, already on their list" and what I wrote was "CRE
+Forge cannot do this."
+
+Both conclusions survived the correction, and that is the trap: **a true conclusion is what makes an
+invented reason hard to catch.** The check is cheap. Grep the function, not the call site.
+
+## What is left for Ivan
+
+Twelve flags, and every one is about the CLAIM or the CLASS - none about a situation, an act or a
+subject. Seven are prose claims an enum would fix, three of those are Q1's qualifier pulling against
+transcription, two are option sets of my construction, and two are single questions: whether "no
+call was made" is itself a fact worth recording, and what class the new pre-call scenario carries.

@@ -4,9 +4,9 @@
 Rulings: [ADR-0079](adr/ADR-0079-the-split-keys-are-drafted.md) and
 [ADR-0080](adr/ADR-0080-the-band-is-withdrawn-the-rest-pair.md).
 
-> **REVISED 18 September 2026 under ADR-0080.** Two scenarios withdrawn as untestable, two added
-> (one pair counterpart, one response branch). The count is 41 either way — the table below is the
-> revised one.
+> **REVISED TWICE, 18 September 2026.** ADR-0080 withdrew two scenarios and added two (41).
+> ADR-0081 added two more — the `estimated_repairs_basis` counterpart and the pre-call REFUSE
+> case — for **43**. The table below is current.
 
 ---
 
@@ -33,11 +33,12 @@ location.
 | `comp_analysis` | 5 | **5** | 1 · 1 · 1 · 1 · 1 |
 | `buyer_match` | 5 | **8** | 2 happy_path · 2 partial_failure · **2 malformed_input** · 1 · 1 |
 | `assign_contract` | 6 | **8** | 3 happy_path · 1 partial · 1 malformed · 1 permission · 1 escalation · 1 recovery |
-| `underwrite_deal` | 6 | **11** | 3 happy_path · 3 partial · 1 malformed · 1 permission · 1 escalation · 2 recovery |
+| `underwrite_deal` | 6 | **13** | 4 happy_path · 3 partial · **2 malformed_input** · 1 permission · 1 escalation · 2 recovery |
 | | **27** | **41** | |
 
-**33 expect a record, 8 expect `RECORD: NONE`, 20 carry `record_claim_options`** (13 before ADR-0080).
-**13 scenarios still carry a `NEEDS IVAN` note**, down from 20.
+**35 expect a record, 8 expect `RECORD: NONE`, 22 carry `record_claim_options`.**
+**12 scenarios still carry a `NEEDS IVAN` note**, down from 20 at the first draft — and every
+remaining one is about the **claim** or the **class**, none about a situation, an act or a subject.
 
 ## A correction to my own arithmetic
 
