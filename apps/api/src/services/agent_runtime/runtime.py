@@ -169,25 +169,36 @@ class AgentRuntime:
             seed=seed,
         )
 
-    def generation_settings(self, seed: int) -> dict:
-        """What `turn` sends, as the record ADR-0060 requires. One source, read twice.
+    def exam_settings(self) -> dict:
+        """The settings that describe the EXAM - what every attempt of it runs under.
+
+        **The seed is deliberately not here.** It is an input to one attempt, not a property of the
+        exam: ADR-0062 runs the same exam three times at seeds 0, 1 and 2, so a record that names
+        one seed is wrong about two of the three. The per-attempt seeds live in `examAttempts`.
 
         A caller-supplied `generation` wins over the module defaults, and a partial one is filled
         in rather than rejected: the Village declares `temperature` and `max_tokens` and says
-        nothing about a seed, which is SimForge's to choose per attempt.
+        nothing about a seed.
         """
         supplied = self.generation or {}
         return {
             "temperature": supplied.get("temperature", DEFAULT_TEMPERATURE),
             "max_tokens": supplied.get("max_tokens", DEFAULT_MAX_TOKENS),
-            "seed": seed,
         }
 
-    async def model_identity(self, seed: int) -> ModelIdentity | None:
+    def generation_settings(self, seed: int) -> dict:
+        """What `turn` sends for ONE attempt: the exam's settings plus that attempt's seed."""
+        return {**self.exam_settings(), "seed": seed}
+
+    async def model_identity(self) -> ModelIdentity | None:
         """The candidate that answered this runtime's turns, settings included.
 
         Asked of the provider rather than assembled here: only the provider can say what file it
         is serving, and only this runtime knows what it asked for. The two halves meet here and
         nowhere else.
+
+        **Takes no seed** (ADR-0060 correction). It used to take one and record it, which put
+        `"seed": 0` into the identity of a run whose three attempts used 0, 1 and 2 - a true
+        statement about the first attempt reported as a fact about the exam.
         """
-        return await self.provider.identity(self.generation_settings(seed))
+        return await self.provider.identity(self.exam_settings())
