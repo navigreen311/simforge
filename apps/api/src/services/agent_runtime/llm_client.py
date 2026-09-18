@@ -632,6 +632,28 @@ def get_agent_llm() -> LLMProvider:
     return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
 
 
+def get_exam_llm() -> LLMProvider:
+    """The EXAMINER (ADR-0061): the model Village agents run on, by tag, always via Ollama.
+
+    **Not routed through `LLM_PROVIDER`, deliberately.** That setting answers "what should a
+    scenario run use", and its `auto` resolves to ollama-or-stub while its `anthropic` branch is a
+    cloud model. The examiner is a local model file by ruling, so a provider switch is not one of
+    the things this call is allowed to obey - a setting turned for a demo must not silently change
+    who sits a certification.
+
+    The cloud provider is still reachable for practice runs, through the ordinary agent runtime,
+    and ADR-0060 already holds anything it produces short of a certification for want of a model
+    file.
+    """
+    inner = OllamaProvider(
+        settings.ollama_base_url,
+        settings.exam_model_tag,
+        settings.llm_request_timeout_seconds,
+        settings.llm_max_retries,
+    )
+    return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
+
+
 def get_judge_llm() -> LLMProvider:
     provider = resolve_provider(settings.llm_judge_provider)
     judge_model = (

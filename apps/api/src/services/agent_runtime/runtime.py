@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.services.agent_runtime.llm_client import LLMProvider, LLMResponse, get_agent_llm
+from src.services.agent_runtime.llm_client import (
+    LLMProvider,
+    LLMResponse,
+    get_agent_llm,
+    get_exam_llm,
+)
 from src.services.agent_runtime.model_identity import ModelIdentity
 from src.services.village.reader import VillageReader, VillageReaderError
 
@@ -27,6 +32,21 @@ EXAM_MAX_TOKENS = 2048
 def build_agent_runtime(village_reader: VillageReader) -> AgentRuntime:
     """Construct an AgentRuntime with the configured agent-runtime LLM provider (ADR-0008)."""
     return AgentRuntime(village_reader=village_reader, provider=get_agent_llm())
+
+
+def build_exam_runtime(village_reader: VillageReader) -> AgentRuntime:
+    """A runtime pinned to the EXAMINER, which is not the same thing as the agent runtime.
+
+    `get_agent_llm()` resolves `LLM_PROVIDER` and `OLLAMA_AGENT_MODEL` - settings that exist for
+    scenario runs, demos and the scenario bank. The examiner is a different question with a
+    different answer (ADR-0061): it is the model Village agents run on, pinned by digest, and it
+    must not be changeable by a setting that was turned for something else.
+
+    So the exam names its own model. `check_examiner` then decides whether that model may sit the
+    exam at all - this function only makes sure the battery is asking for the right one rather
+    than for whatever the last demo left configured.
+    """
+    return AgentRuntime(village_reader=village_reader, provider=get_exam_llm())
 
 
 @dataclass

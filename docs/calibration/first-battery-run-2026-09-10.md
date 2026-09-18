@@ -1556,3 +1556,65 @@ The explanation was plausible, it was about to be committed beside the fix, and 
 an unrelated reason. That is entry 13's family again in the smallest possible form: **a true
 conclusion arriving with an invented mechanism.** Deleted before it shipped, and recorded here
 because the near-miss is the only evidence the check is worth running.
+
+---
+
+# Entry 15 - the examiner gets pinned, and the blank pass gets a name
+
+**2026-09-17, evening.** Two rulings
+([ADR-0061](../adr/ADR-0061-the-examiner-is-the-production-model.md)): the examiner is the
+production model, pinned by digest; and an agent SimForge cannot identify is not examined. Survey
+in [examiner-and-identity-2026-09-17.md](../examiner-and-identity-2026-09-17.md).
+
+## What the blank pass actually looked like
+
+`assemble_system_prompt` swallows a missing agent - `_safe` catches `VillageReaderError` - and the
+name falls back to the id. So a battery against an unknown agent puts eleven probes to
+
+    You are e27fc174-01ac-4090-8127-f4f0cec91bf9, a Village agent
+
+and the model answers, and the grader grades, and a certification records it. **Nothing raised,
+nothing was NOT_RUN, and the result was indistinguishable from a real pass.** That is the sixth
+member of entries 8-14's family and the most complete one yet: not a join returning empty, but a
+join returning something *plausible*.
+
+The leniency is right where it lives - a dev tree missing an agent should still be exercisable - so
+it was not changed. The battery is what must not rely on it.
+
+## Two things measured that changed what got built
+
+**phi4 arrived today.** It was absent this morning (`/api/show` answered `model not found`) and was
+pulled at 10:28 - 9.05 GB, 14.7B, Q4_K_M, `sha256:ac896e5b8b34...`. The pin is real, and the live
+check passes end to end against the real Ollama and the real Village config.
+
+**And the config does not have the shape the code says it has.** `modules/frameworks/mate.py` maps
+mode `agent` to `ModelType.DEFAULT_LLM`, so the resolution is a route that names a TYPE. The live
+`config.yaml` writes the TAG directly:
+
+    ollama_model_routes:
+      agent: phi4:latest        # not `default_llm`
+
+A reader written from the code would have raised on the real file. It was written from the code,
+and then run against the real file before it was finished - which is the only reason it reads both
+shapes now.
+
+**The follow-on nearly shipped as a false negative.** `temperature` and `max_tokens` live under
+`mate.models.<type>` whichever form the route takes. The first version looked for them only on the
+indirect path, so against the live file it reported `settings: {}` - and "no divergence" would have
+meant "did not look". The real divergence is large and matters:
+
+    village 0.7 / exam 0.0   ·   village 4000 / exam 2048
+
+Reported, not refused: an exam at 0.7 does not repeat, and a certification that moves between runs
+is not one. That tension is ADR-0061's stated open question rather than a thing quietly decided.
+
+## The identity gap is two gaps, and only one is a seam
+
+The Office holds the mapping - `office_agent_identity.village_agent_ref` gives `victor_serath`,
+`seraphine_valek`, `ronan_valek` - and it never crosses. That is a field to add.
+
+**But the ref would not help either.** None of the three exists in the real Village tree's 114
+agents, and every one of The Office's 187 `village_agent` rows is `source='import'`. So they are
+Office identities no Village instance has an agent directory for, and carrying the ref would move
+the failure one step without fixing it. Named in the report so the field does not get added as
+though it were the answer.

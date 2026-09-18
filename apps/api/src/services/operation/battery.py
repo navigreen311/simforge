@@ -106,6 +106,12 @@ from src.schemas.operation_payloads import (
     OperationRubricResultItem,
     ScenarioClassResult,
 )
+from src.services.agent_runtime.agent_identity import (
+    AGENT_IDENTITY_BLANK,
+    AGENT_NOT_IN_VILLAGE,
+    check_agent_identity,
+)
+from src.services.agent_runtime.examiner import check_examiner
 from src.services.agent_runtime.llm_client import provider_label
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.held_out import (
@@ -152,6 +158,11 @@ SKIP_NO_MODULE = "the_run_declares_no_module_or_agent"
 SKIP_NO_NEVER_DO = "the_module_declares_no_never_do_list"
 SKIP_BOOTSTRAP_FORGE = "this_forge_is_certified_by_a_human_bootstrap"
 SKIP_UNKNOWN_RUN = "no_run_was_opened_under_this_ref"
+#: Re-exported from their own modules so every reason a battery declined is one name from one
+#: place. ADR-0061's two rulings: the examiner must be the production model, and an agent nobody
+#: can identify is not examined.
+SKIP_AGENT_NOT_IN_VILLAGE = AGENT_NOT_IN_VILLAGE
+SKIP_AGENT_IDENTITY_BLANK = AGENT_IDENTITY_BLANK
 
 #: Re-exported from `rubric` so this module's public surface is unchanged. It moved because the
 #: gate-result handler needs it and ADR-0050 forbids that handler from importing this module.
@@ -651,6 +662,52 @@ async def battery_for_run(
     if not run.moduleId or not run.agentId:
         return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_MODULE)
 
+    # ADR-0061 RULING 2 - who is sitting this exam.
+    #
+    # Checked BEFORE the examiner and before the never-do list, because it is the cheapest of the
+    # three and because it is the one that fails silently. `assemble_system_prompt` swallows a
+    # missing agent and falls back to the id as a name, so without this the battery puts eleven
+    # probes to "You are <uuid>, a Village agent", grades the answers, and records a certification
+    # about nobody. Nothing raises. That is what an empty pass looks like from inside.
+    who = check_agent_identity(runtime.village_reader, run.agentId)
+    if not who.ok:
+        # WARNING, not info. Every other skip here is a run this battery has nothing to say about;
+        # this one is a run that was HANDED OVER for certification against an agent the examiner
+        # cannot name, which somebody needs to see.
+        log.warning(
+            "battery_refused_unidentified_agent",
+            run_ref=run_ref,
+            agent=run.agentId,
+            module=run.moduleId,
+            reason=who.reason,
+            detail=who.detail,
+        )
+        return BatterySkipped(run_ref=run_ref, reason=who.reason or AGENT_NOT_IN_VILLAGE)
+
+    # ADR-0061 RULING 1 - who is ASKING the questions.
+    #
+    # Asked before the battery rather than after, so a wrong or unpinned examiner costs one HTTP
+    # call instead of a dozen model calls and a discarded result.
+    examiner = await runtime.model_identity(seed)
+    verdict = check_examiner(examiner)
+    if not verdict.ok:
+        log.warning(
+            "battery_refused_examiner",
+            run_ref=run_ref,
+            reason=verdict.reason,
+            detail=verdict.detail,
+        )
+        return BatterySkipped(run_ref=run_ref, reason=verdict.reason or "examiner_refused")
+    if verdict.settings_divergence:
+        # Surfaced, never a refusal. The Village runs its agents at its own temperature and the
+        # exam runs at 0.0 because a certification cannot move between runs; that tension is
+        # ADR-0061's open question and deciding it here would decide it by implication.
+        log.info(
+            "examiner_settings_diverge_from_production",
+            run_ref=run_ref,
+            divergence=verdict.settings_divergence,
+        )
+
     never_do = await module_never_do_list(session, run.forgeId, run.moduleId)
     if not never_do:
         return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_NEVER_DO)
@@ -679,7 +736,6 @@ async def battery_for_run(
         runtime=runtime,
         seed=seed,
     )
-    identity = await runtime.model_identity(seed)
     log.info(
         "battery_ran",
         run_ref=run_ref,
@@ -706,7 +762,7 @@ async def battery_for_run(
         # than what was configured - the same rule `agent_model` follows and for the same reason.
         # `None` when the provider cannot describe itself, which the gate-result path refuses to
         # certify rather than papering over here.
-        model_identity=identity.as_record() if identity else None,
+        model_identity=examiner.as_record() if examiner else None,
     )
 
 
@@ -743,6 +799,8 @@ __all__ = [
     "SKIP_NO_MODULE",
     "SKIP_NO_NEVER_DO",
     "SKIP_UNKNOWN_RUN",
+    "SKIP_AGENT_NOT_IN_VILLAGE",
+    "SKIP_AGENT_IDENTITY_BLANK",
     "ACT_DECLINE",
     "ACT_PROCEED",
     "ACT_REFUSE",

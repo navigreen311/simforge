@@ -67,6 +67,25 @@ class Settings(BaseSettings):
     llm_cache_mode: str = Field(default="off", alias="LLM_CACHE_MODE")
     llm_test_mode: bool = Field(default=False, alias="LLM_TEST_MODE")
 
+    # --- The examiner (ADR-0061) -------------------------------------------------------------
+    # Certification runs on the model Village agents run on, pinned by DIGEST. A tag moves: the
+    # same `phi4:latest` can be re-pulled over different weights and nothing in the name changes.
+    #
+    # `exam_model_tag` is the tag SimForge asks Ollama for, and it must equal the one the Village
+    # declares (`village_config_path` below) or the battery refuses - an examiner that is not the
+    # production model certifies nothing about production.
+    #
+    # `exam_model_digest` is the PIN. Empty means unpinned, and a battery refuses rather than
+    # running against whatever the tag points at today. Read it once from
+    # `GET {OLLAMA_BASE_URL}/api/tags` and put it here.
+    exam_model_tag: str = Field(default="phi4:latest", alias="EXAM_MODEL_TAG")
+    exam_model_digest: str = Field(default="", alias="EXAM_MODEL_DIGEST")
+    # The Village's own `config.yaml` - where its agents' model is declared. Read-only, and read
+    # at check time rather than cached, so a change in production is seen on the next battery.
+    # Empty means SimForge cannot see what production runs, and the battery refuses to claim it
+    # matched.
+    village_config_path: str = Field(default="", alias="VILLAGE_CONFIG_PATH")
+
     # Village coupling
     village_data_path: str = Field(
         default="./village-data-local/VillageData", alias="VILLAGE_DATA_PATH"
