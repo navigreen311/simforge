@@ -58,11 +58,58 @@ VERDICT_FAIL = "FAIL"
 VERDICT_NOT_RUN = "NOT_RUN"
 VERDICT_NOT_APPLICABLE = "not_applicable"
 
-# Collapse threshold for rubric_dimension_spread — a SEPARATE knob from the per-dimension pass
-# threshold. A passing result whose spread is below this is "measuring one thing five times": the
-# rubric did not discriminate, so full certification is WITHHELD (state → provisional) until the
-# dimensions actually separate. Mirrors the frontend COLLAPSE_SPREAD_THRESHOLD; keep in sync.
+# =================================================================================================
+# THE COLLAPSE MEASURE, VERSIONED (ADR-0070)
+# =================================================================================================
+#
+# Two rules have produced the number stored in `rubricDimensionSpread`, and a row says which.
+# Ivan's ruling: the measure is VERSIONED, NOT MIGRATED - old rows keep the variance they were
+# computed with, and every row records which rule produced it. A recorded result's basis is never
+# rewritten, so nothing here recomputes a stored number or reinterprets one under a rule it was not
+# computed under.
+#
+# The consequence is that both rules stay live and both stay tested. The v1 functions below are not
+# dead code kept for sentiment: they are how a v1 row is read, and they are correct for it.
+
+#: v1 - population variance over the scored competence dimensions, compared against 0.02.
+SPREAD_MEASURE_VARIANCE_V1 = "population_variance_v1"
+#: v2 - the range (max - min), with a ceiling band and a count of independently-sourced classes.
+SPREAD_MEASURE_RANGE_V2 = "dimension_range_v2"
+#: What a run computed TODAY records. Changing this is a new measure, not an edit to this one.
+CURRENT_SPREAD_MEASURE = SPREAD_MEASURE_RANGE_V2
+
+# --- v1 thresholds. Kept because v1 rows are read with them, not because v1 rows are recomputed. -
+#
+# A SEPARATE knob from the per-dimension pass threshold. A passing result whose variance was below
+# this was "measuring one thing five times". Mirrors the frontend COLLAPSE_SPREAD_THRESHOLD.
+#
+# **Why it was wrong, stated where the constant lives.** It is compared against a population
+# VARIANCE while every name around it says "spread": the equivalent standard deviation is 0.141, so
+# two dimensions had to differ by roughly 0.30 to clear it. And `_dimension_item` scores a PASS
+# dimension `passes / graded`, which for a PASS is exactly 1.0 - so a clean run had variance 0.0 at
+# any number of dimensions and could never certify, while a mediocre one spread wide and did.
 COLLAPSE_SPREAD_THRESHOLD = 0.02
+
+# --- v2 thresholds -------------------------------------------------------------------------------
+#
+# The question the rule is asking is about the INSTRUMENT, not the agent: its own comment says
+# "the rubric did not discriminate". v1 tested whether the SCORES were similar, which on a scale
+# where a pass is pinned to 1.0 is what a good result looks like.
+
+#: A RANGE (max - min), directly readable as "the dimensions differ by less than a tenth". What
+#: the word "spread" meant all along.
+COLLAPSE_RANGE_THRESHOLD = 0.10
+
+#: Agreement AT the ceiling is a clean sweep, not a collapse. Dimensions agreeing at 0.85 are the
+#: signature the rule was written for; dimensions agreeing at 1.0 are an agent that passed
+#: everything. The band is compared against the LOWEST score, so one dimension below it is enough
+#: to make the agreement an agreement short of the ceiling.
+COLLAPSE_CEILING_BAND = 0.95
+
+#: Below this many scenario classes carrying a real verdict, the dimensions are not independently
+#: sourced - one class feeding several rows is the real "measuring one thing twice", and no range
+#: over those rows means anything. This is the clause v1 never had.
+MIN_INDEPENDENT_CLASSES = 2
 
 
 @dataclass(frozen=True)
@@ -175,6 +222,18 @@ def validate_every_dimension_has_scenario_class(
     return issues
 
 
+def _spread_scores(results: list[dict]) -> list[float]:
+    """The scores both measures are computed over. Shared so the two rules can never disagree
+    about WHICH dimensions are being compared - only about how to compare them."""
+    return [
+        float(r["score"])
+        for r in results
+        if r.get("score") is not None
+        and r.get("verdict") not in (VERDICT_NOT_APPLICABLE, VERDICT_NOT_RUN)
+        and r.get("dimension") not in SPREAD_EXCLUDED_DIMENSIONS
+    ]
+
+
 def compute_rubric_dimension_spread(results: list[dict]) -> float:
     """Population variance of the numeric dimension scores on one operation result — a collapse
     check (Rev 2 §6.3). Low spread across dimensions that should differ = possible collapse
@@ -185,13 +244,7 @@ def compute_rubric_dimension_spread(results: list[dict]) -> float:
     not_applicable / not-run dimensions carry no score and are EXCLUDED (a not_applicable is not a
     zero). Fewer than two scored dimensions ⇒ spread is 0.0 (nothing to discriminate).
     """
-    scores = [
-        float(r["score"])
-        for r in results
-        if r.get("score") is not None
-        and r.get("verdict") not in (VERDICT_NOT_APPLICABLE, VERDICT_NOT_RUN)
-        and r.get("dimension") not in SPREAD_EXCLUDED_DIMENSIONS
-    ]
+    scores = _spread_scores(results)
     n = len(scores)
     if n < 2:
         return 0.0
@@ -281,9 +334,110 @@ def is_evidence_absent(results: list[dict]) -> bool:
 
 
 def is_spread_collapsed(spread: float | None, results: list[dict]) -> bool:
-    """A passing result whose dimensions collapsed (≥2 scored dims, spread below the collapse
-    threshold). Non-blocking as a warning, but per the Rev-2 audit it HOLDS the state at provisional
-    rather than certified — full certification is withheld until real signal separates the dims."""
+    """**The v1 rule** (`SPREAD_MEASURE_VARIANCE_V1`): ≥2 scored dims and a population variance
+    below `COLLAPSE_SPREAD_THRESHOLD` holds the state at provisional rather than certified.
+
+    Live, not legacy. Every certification recorded before ADR-0070 carries a number this rule
+    produced, and this is how those rows are read — a v1 row compared against a v2 threshold would
+    be a recorded result reinterpreted under a rule it was not computed under. New runs go through
+    `is_rubric_undiscriminating`, which dispatches here for a v1 row."""
     if spread is None:
         return False
     return _numeric_dim_count(results) >= 2 and spread < COLLAPSE_SPREAD_THRESHOLD
+
+
+# =================================================================================================
+# v2 — the measure a run computes today (ADR-0070)
+# =================================================================================================
+
+
+def compute_dimension_range(results: list[dict]) -> float:
+    """The RANGE (max - min) of the scored competence dimensions — the v2 measure.
+
+    Same pool as v1 (`_spread_scores`), different statistic. Fewer than two scored dimensions ⇒
+    0.0, exactly as v1 returns: nothing to discriminate is not the same as failing to, and the
+    dispatcher below short-circuits before the number is ever compared.
+    """
+    scores = _spread_scores(results)
+    if len(scores) < 2:
+        return 0.0
+    return max(scores) - min(scores)
+
+
+def collapse_measure(results: list[dict]) -> tuple[float, str]:
+    """The collapse number for a run happening NOW, with the name of the rule that produced it.
+
+    Returned as a pair so the number and its provenance are written by one call and cannot drift
+    apart. A caller that stores the first and forgets the second is the defect this ADR closes.
+    """
+    return compute_dimension_range(results), CURRENT_SPREAD_MEASURE
+
+
+def count_classes_exercised(per_scenario_class_results: list) -> int:
+    """How many scenario CLASSES carried a real verdict — how many independent sources the
+    dimensions were drawn from.
+
+    Accepts either the `ScenarioClassResult` objects the gate-result body carries or the
+    `{class: verdict}` mapping the certification row stores, because both are the same fact written
+    two ways and the rule must read a stored row as easily as a live one.
+    """
+    if isinstance(per_scenario_class_results, dict):
+        verdicts = list(per_scenario_class_results.values())
+    else:
+        verdicts = [
+            r.get("verdict") if isinstance(r, dict) else getattr(r, "verdict", None)
+            for r in per_scenario_class_results or []
+        ]
+    return sum(1 for v in verdicts if v in (VERDICT_PASS, VERDICT_FAIL))
+
+
+def _undiscriminating_range_v2(
+    spread: float, results: list[dict], classes_exercised: int
+) -> bool:
+    """v2. **A statement about the instrument, not the agent.**
+
+    Two clauses, and they answer different questions:
+
+    (a) *Were the dimensions independently sourced?* Below `MIN_INDEPENDENT_CLASSES` classes
+        carrying a verdict, several dimensions are being fed by one scenario class, and their
+        agreement says nothing about the module. This is the real "measuring one thing twice",
+        and v1 could not see it at all.
+
+    (b) *Did they agree, and did they agree SHORT OF the ceiling?* Dimensions within
+        `COLLAPSE_RANGE_THRESHOLD` of each other below `COLLAPSE_CEILING_BAND` are the signature
+        the rule was written for. The same dimensions AT the ceiling are an agent that passed
+        everything, and withholding from it was the defect.
+    """
+    scores = _spread_scores(results)
+    if len(scores) < 2:
+        return False
+    if classes_exercised < MIN_INDEPENDENT_CLASSES:
+        return True
+    return spread < COLLAPSE_RANGE_THRESHOLD and min(scores) < COLLAPSE_CEILING_BAND
+
+
+def is_rubric_undiscriminating(
+    spread: float | None,
+    results: list[dict],
+    *,
+    measure: str | None,
+    classes_exercised: int,
+) -> bool:
+    """Did the rubric fail to discriminate — read under the rule that produced this row's number.
+
+    **The dispatch is the ruling.** `spread` is a number whose meaning depends entirely on
+    `measure`: 0.0 under v1 is a collapsed variance and 0.0 under v2 is a range that may be a clean
+    sweep. Comparing a stored v1 number against a v2 threshold would reinterpret a recorded result
+    under a rule it was not computed under, which is the thing the ruling forbids.
+
+    An UNRECOGNISED measure withholds. A number we cannot interpret is not evidence that the
+    rubric discriminated, and this codebase's standing habit on missing evidence is to abstain
+    rather than to grant (`is_evidence_absent`, ADR-0052).
+    """
+    if spread is None:
+        return False
+    if measure == SPREAD_MEASURE_VARIANCE_V1:
+        return is_spread_collapsed(spread, results)
+    if measure == SPREAD_MEASURE_RANGE_V2:
+        return _undiscriminating_range_v2(spread, results, classes_exercised)
+    return True

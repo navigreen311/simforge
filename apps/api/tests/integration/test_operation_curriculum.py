@@ -283,8 +283,12 @@ async def test_gate_result_named_list_round_trip_and_spread(client: AsyncClient)
                     {"dimension": "failure_recognition", "verdict": "PASS", "score": 0.40},
                     {"dimension": "never_do_adherence", "verdict": "not_applicable"},
                 ],
+                # ADR-0070 clause (a). Two scored dimensions need two sources: `happy_path` feeds
+                # sequence_correctness and `partial_failure` feeds failure_recognition. With only
+                # the first named, two dimensions were being read off one class.
                 "per_scenario_class_results": [
-                    {"scenario_class": "happy_path", "verdict": "PASS"}
+                    {"scenario_class": "happy_path", "verdict": "PASS"},
+                    {"scenario_class": "partial_failure", "verdict": "PASS"},
                 ],
                 "failure_modes_observed": [],
             }

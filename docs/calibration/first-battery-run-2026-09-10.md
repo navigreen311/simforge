@@ -2166,3 +2166,108 @@ the rule was written for still collapse.
 Not built. The piece to settle first is piece 4: `rubric_dimension_spread` is stored on every
 certification as a variance, and changing what a recorded number means without saying so is the
 same shape as the model-identity fingerprint two entries ago.
+
+---
+
+# Entry 25 - the ceiling comes down, and the rule that lowered it is dated
+
+**18 September 2026.** Two rulings, both about what a recorded number means.
+
+## Ruling 1 - the scenarios split
+
+The disagreement Entry 24 surfaced is closed, and it is closed on the SCENARIOS rather than on the
+protocol. An expectation that names two facts is two scenarios wearing one coat; the protocol's one
+RECORD line is what makes an answer transcribable and is not the thing that was wrong.
+
+    (1) the key picks one fact      part of every expectation stops being checked
+    (2) the protocol allows several 4.0.0; the six verdicts and 3/16 -> 16/16 and 8 -> 0 all
+                                    become incomparable
+    (3) the scenarios split         RULED. more scenarios to author; nothing else
+
+Measured against the five approved keys: **7 of 27 split mechanically, 7 -> 20, so 27 -> 40**, and
+seven questions Ivan answers before the rest can be cut. The full reading is in
+`docs/the-scenario-split-2026-09-18.md`.
+
+**The mechanical test that fell out of the reading.** Every expected behaviour cites its source -
+`correct_sequence`, `inputs`, `failure_signatures.silent_partial`, a `never_do` entry, a RULED line.
+Where one scenario draws recorded facts from several sections, those sections are the seams. And
+`instruction_section` is already a field on every submitted scenario, so the split is cut along
+something the payload has carried all along.
+
+**What a split is NOT.** Not an enumeration. Re-presenting the same situation with a different
+expected record fails on every copy but one: the agent can only put one thing on the RECORD line and
+the same situation produces the same answer. Two facts in one situation become two SITUATIONS.
+
+## Ruling 2 - the measure is versioned, not migrated
+
+The collapse rule is corrected and `rubricDimensionSpread` now holds two different measures, with
+the row saying which. Nothing is recomputed. The migration writes a LABEL, not a value, and the
+label is true of every row it touches.
+
+    population_variance_v1    11 rows (the ones that carry a number)
+    dimension_range_v2        everything from here
+
+**The dispatch is the ruling, and the case that shows why is the one number both rules produce:**
+
+    0.0 under v1   a collapsed variance      WITHHOLD
+    0.0 under v2   a range at the ceiling    CERTIFY
+
+Comparing a stored v1 number against a v2 threshold is a recorded result reinterpreted under a rule
+it was not computed under. So v1 stays live and stays tested - `is_spread_collapsed` is not kept for
+sentiment, it is how the eleven rows already in the database are read.
+
+**An unrecognised measure withholds.** A number that cannot be interpreted is not evidence the
+rubric discriminated, which is the same habit as `is_evidence_absent`.
+
+### A CHECK, not NOT NULL - and the fixtures said so
+
+NOT NULL was the first attempt and 41 tests failed. The signal was right and the shape was wrong: a
+Unit B row has no dimensions to compare and carries no number, so NOT NULL forces a label onto rows
+with nothing to label. The invariant is narrower:
+
+    CHECK (rubricDimensionSpread IS NULL OR rubricSpreadMeasure IS NOT NULL)
+
+The number and its rule travel together or not at all.
+
+### What the remaining failures were, and why none of them was papered over
+
+Eighteen left after the constraint was narrowed, in two kinds.
+
+**Three were fixtures building a cert row with a spread and no measure.** The constraint doing its
+job.
+
+**Eleven were fixtures that under-described their own runs** - `per_scenario_class_results: []` or
+one class behind two scored dimensions - and clause (a) withheld them. Every one was a fixture
+claiming two dimensions from fewer than two sources, which is the exact case the clause exists for.
+The fixtures were corrected to describe the run they claim to describe, not the rule relaxed.
+
+**AND FOUR WERE A REAL BEHAVIOUR CHANGE, in the loosening direction.** A clean held-out battery now
+CERTIFIES. That is the ceiling Entry 23 proved unreachable, and it is now reachable.
+
+## The thing worth writing down: what the fix also removed
+
+The collapse rule was doing a second job by accident - a BREADTH check - and it no longer does.
+
+A certification earned on the held-out battery alone rests on DISCIPLINE (refused the prohibited,
+concealed nothing) and says nothing about COMPETENCE until P2 delivers the submitted half. Two
+things bound it, and neither is the collapse rule: the outcome reports `functions_certified = 0`,
+which ADR-0061 already refuses `auto_execute` on, and Phase 1 holds every certified agent at the
+`propose` ceiling.
+
+A breadth withhold, if one is wanted, is its OWN NAMED RULE. The failure mode being avoided here is
+the one this journal keeps recording in other forms: a property that holds by side effect holds
+until somebody fixes the thing it was a side effect of, and then it does not, and nothing says so.
+The test that used to assert the old ceiling now asserts the new one and carries the cost in its
+docstring.
+
+## The Office is not touched, and the reason is not caution
+
+`rubric_dimension_spread` stays on the gate-result payload unchanged and no measure joins it.
+
+1. `broker/simforge_response_manifest.json` is field-set equality, checked on every Office build. A
+   new outbound field fails that build; adding one is a reviewable act on their side.
+2. **Nothing over there reads the number.** A search of the whole repository for `spread` finds no
+   consumer. It is delivered and discarded.
+
+So the ambiguity the label fixes exists only in SimForge's own rows, and it is fixed where it
+exists.

@@ -10,7 +10,10 @@ from src.services.operation.rubric import (
     DIMENSION_SCENARIO_CLASS,
     OPERATION_DIMENSIONS,
     OPERATION_RUBRIC_VERSION,
+    collapse_measure,
+    compute_dimension_range,
     compute_rubric_dimension_spread,
+    count_classes_exercised,
     validate_every_dimension_has_scenario_class,
 )
 from src.services.operation.state_machine import (
@@ -26,7 +29,10 @@ __all__ = [
     "OPERATION_DIMENSIONS",
     "DIMENSION_SCENARIO_CLASS",
     "OPERATION_RUBRIC_VERSION",
+    "collapse_measure",
+    "compute_dimension_range",
     "compute_rubric_dimension_spread",
+    "count_classes_exercised",
     "validate_every_dimension_has_scenario_class",
     "OperationState",
     "OPERATION_STATES",

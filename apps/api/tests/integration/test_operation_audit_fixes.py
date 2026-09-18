@@ -106,7 +106,14 @@ async def test_passing_with_healthy_spread_and_no_neverdo_is_certified(
                     {"dimension": "failure_recognition", "verdict": "PASS", "score": 0.60},
                     {"dimension": "recovery", "verdict": "PASS", "score": 0.82},
                 ],
-                "per_scenario_class_results": [],
+                # ADR-0070 clause (a): three dimensions, three classes that sourced them. A
+                # healthy spread over dimensions fed by ONE class would not be evidence the
+                # rubric discriminated, so the classes are named here rather than left empty.
+                "per_scenario_class_results": [
+                    {"scenario_class": "happy_path", "verdict": "PASS"},
+                    {"scenario_class": "partial_failure", "verdict": "PASS"},
+                    {"scenario_class": "recovery_after_failure", "verdict": "PASS"},
+                ],
             }
         ],
     }

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -29,6 +29,18 @@ from src.models.base import Base, _new_id, _now
 
 class OperationCertification(Base):
     __tablename__ = "OperationCertification"
+
+    #: ADR-0070 - the collapse NUMBER and the RULE that produced it travel together or not at all.
+    #: Stated as a constraint rather than as NOT NULL because a row may legitimately carry no
+    #: number: a Unit B row has no rubric dimensions to compare. What may never happen is a number
+    #: whose meaning is unknown - 0.0 is a collapsed variance under v1 and a clean sweep under v2,
+    #: so an unlabelled number is not a weaker record, it is an unreadable one.
+    __table_args__ = (
+        CheckConstraint(
+            '"rubricDimensionSpread" IS NULL OR "rubricSpreadMeasure" IS NOT NULL',
+            name="operation_cert_spread_has_a_measure",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
 
@@ -85,6 +97,13 @@ class OperationCertification(Base):
     # NAMED LIST: [{dimension, verdict, score?, threshold?}] — not fixed columns.
     operationRubricResults: Mapped[list | None] = mapped_column(JSON, nullable=True)
     rubricDimensionSpread: Mapped[float | None] = mapped_column(Float, nullable=True)  # collapse
+    #: WHICH RULE produced `rubricDimensionSpread` (ADR-0070). The measure is versioned, not
+    #: migrated: rows written before v2 keep the population variance they were computed with and
+    #: are labelled `population_variance_v1`, which is what they always were. NO default: the
+    #: backfill was a one-time statement of fact about rows that already existed, not a standing
+    #: answer for rows not yet written. Null only where there is no number to label - see the
+    #: CHECK constraint above.
+    rubricSpreadMeasure: Mapped[str | None] = mapped_column(String, nullable=True)
     failureModesObserved: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Which version components (major/minor/patch) this cert is sensitive to, per module (Rev 2 Q4).
     versionSensitivity: Mapped[dict | None] = mapped_column(JSON, nullable=True)

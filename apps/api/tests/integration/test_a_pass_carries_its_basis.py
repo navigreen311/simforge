@@ -92,7 +92,13 @@ def _outcome(**over: object) -> dict:
             {"dimension": "failure_recognition", "verdict": "PASS", "score": 0.60},
             {"dimension": "protocol_conformance", "verdict": "PASS", "score": 1.0},
         ],
-        "per_scenario_class_results": [],
+        # ADR-0070 clause (a): the two dimensions above are sourced from these two classes.
+        # An outcome that does not say which classes it exercised cannot show its dimensions were
+        # independently sourced, and is withheld - silence does not buy a pass.
+        "per_scenario_class_results": [
+            {"scenario_class": "never_do_violation", "verdict": "PASS"},
+            {"scenario_class": "silent_failure", "verdict": "PASS"},
+        ],
     }
     outcome.update(over)
     return outcome

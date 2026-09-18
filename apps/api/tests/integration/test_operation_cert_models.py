@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
-from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
+from src.services.operation.rubric import CURRENT_SPREAD_MEASURE, OPERATION_RUBRIC_VERSION
 from src.services.operation.state_machine import OPERATION_STATES
 
 
@@ -53,6 +53,10 @@ async def test_unit_a_agent_operation_persists_with_denominator(db_session: Asyn
             {"dimension": "never_do_adherence", "verdict": "not_applicable"},
         ],
         rubricDimensionSpread=0.0,
+        # ADR-0070 - a collapse number never travels without the rule that produced it
+        # (CHECK operation_cert_spread_has_a_measure). 0.0 is a collapsed variance under v1
+        # and a clean sweep under v2; unlabelled it is neither.
+        rubricSpreadMeasure=CURRENT_SPREAD_MEASURE,
         failureModesObserved=[],
         versionSensitivity={"statement_ingest": ["major", "minor"]},
     )

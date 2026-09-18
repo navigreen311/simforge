@@ -223,6 +223,13 @@ async def _gate_result(client: AsyncClient, *, passed: bool, run_ref: str = "op-
                     {"dimension": "sequence_correctness", "verdict": "PASS", "score": 0.95},
                     {"dimension": "recovery", "verdict": "PASS", "score": 0.60},
                 ],
+                # ADR-0070 clause (a): the two classes that sourced the two dimensions above.
+                # Unreported, the dimensions cannot be shown to be independently sourced and the
+                # outcome is withheld at provisional - which is not what this file is about.
+                "per_scenario_class_results": [
+                    {"scenario_class": "happy_path", "verdict": "PASS"},
+                    {"scenario_class": "recovery_after_failure", "verdict": "PASS"},
+                ],
             }
         ],
     }

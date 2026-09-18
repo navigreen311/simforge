@@ -55,9 +55,10 @@ from src.services.operation.recert import is_content_hash_void, raise_high_incid
 from src.services.operation.rubric import (
     FAILURE_MODE_UNREADABLE,
     OPERATION_RUBRIC_VERSION,
-    compute_rubric_dimension_spread,
+    collapse_measure,
+    count_classes_exercised,
     is_evidence_absent,
-    is_spread_collapsed,
+    is_rubric_undiscriminating,
 )
 from src.services.operation.run_registry import (
     UnitOutcome,
@@ -261,7 +262,11 @@ async def gate_result(
     agent_units: list[UnitOutcome] = []
     for outcome in body.agent_outcomes:
         results_dicts = [_out_dim(r) for r in outcome.operation_rubric_results]
-        spread = compute_rubric_dimension_spread(results_dicts)
+        # ADR-0070: the number AND the rule that produced it, written by one call. How many
+        # scenario classes carried a real verdict is the second half of the v2 question - not
+        # "did the scores agree" but "were the dimensions independently sourced at all".
+        spread, spread_measure = collapse_measure(results_dicts)
+        classes_exercised = count_classes_exercised(outcome.per_scenario_class_results)
         # Which SHAPE of coverage hole this is, when the battery told us. A dimension that went
         # unexercised while the protocol mode was reported is the candidate-side case: had the
         # probe been put and read, the dimension would carry a verdict. Absent the mode we do not
@@ -277,7 +282,12 @@ async def gate_result(
             state = OperationState.FAILED.value
         elif (
             is_evidence_absent(results_dicts)
-            or is_spread_collapsed(spread, results_dicts)
+            or is_rubric_undiscriminating(
+                spread,
+                results_dicts,
+                measure=spread_measure,
+                classes_exercised=classes_exercised,
+            )
             or is_never_do_coverage_hole(
                 module_has_never_do, results_dicts, answer_unreadable=answer_unreadable
             )
@@ -426,6 +436,7 @@ async def gate_result(
             },
             operationRubricResults=results_dicts,
             rubricDimensionSpread=spread,
+            rubricSpreadMeasure=spread_measure,
             failureModesObserved=list(outcome.failure_modes_observed),
             versionSensitivity=outcome.version_sensitivity or None,
             expiresAt=outcome.expires_at,
@@ -731,6 +742,8 @@ async def agent_operation_view(agent_id: str, session: AsyncSession = Depends(ge
                 "functions_in_module": c.functionsInModule,  # DENOMINATOR
                 "max_certified_trust_tier": c.maxCertifiedTrustTier,
                 "rubric_dimension_spread": c.rubricDimensionSpread,
+                # ADR-0070 - the number is unreadable without the rule that produced it.
+                "rubric_spread_measure": c.rubricSpreadMeasure,
             }
             for c in certs
         ],
@@ -925,6 +938,8 @@ def _serialize_cert(c: OperationCertification) -> dict:
         "max_certified_trust_tier": c.maxCertifiedTrustTier,
         "operation_rubric_results": c.operationRubricResults or [],  # NAMED LIST
         "rubric_dimension_spread": c.rubricDimensionSpread,
+        # ADR-0070 - the number is unreadable without the rule that produced it.
+        "rubric_spread_measure": c.rubricSpreadMeasure,
         "escalation_path_verified": c.escalationPathVerified,
         "compliance_coupling_verified": c.complianceCouplingVerified,
         "expires_at": c.expiresAt.isoformat() if c.expiresAt else None,
