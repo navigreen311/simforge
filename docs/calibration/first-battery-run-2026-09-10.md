@@ -2440,3 +2440,84 @@ The honest part of writing it up: **on fact ⓑ the criterion and the reasoning 
 directions.** The silent `page_size` cap is cited to `inputs`, not to `failure_signatures`, and it
 was moved on the reasoning and AGAINST the citation. A criterion one applies except when one
 disagrees with it is not a criterion, which is the strongest argument for the ruling being Ivan's.
+
+---
+
+# Entry 28 - the example did not work either, and the instrument was weaker than claimed
+
+**18 September 2026.** ADR-0074. Two rulings, a null result, and a claim withdrawn.
+
+## F1 settled, with a criterion rather than a verdict
+
+    the criterion is what the scenario tests, not where the fact was written down;
+    where the two disagree, what it tests wins
+
+That closes the case I had flagged against myself. Fact (b) - reading back a silently capped
+`page_size` - is cited to `inputs` and tests `failure_recognition`, so the citation criterion and
+the competency reading pointed in OPPOSITE directions, and I had moved it on the reasoning and
+against the citation. A criterion one applies except when one disagrees with it is not a criterion.
+Ruling 1 makes it one. `property_lookup` is 3 `happy_path` / 3 `partial_failure`.
+
+## The third example: 0/20, the same as the words
+
+    ADR-0073  the gloss corrected, words only        0/20 both texts
+    ADR-0074  a third worked example, shape shown    0/20 both texts
+
+Ivan's ruling stands regardless - until the protocol carries the shape, any scenario expecting it is
+untestable, and the protocol now carries it. But it does not produce the shape. Stopping here, as
+ruled. No fourth.
+
+## The diagnostic, which is where the finding is
+
+The ADR-0073 probe cannot say WHY: it conflates "does not know the shape is allowed" with "does not
+think there is a fact here". So a second probe, where the agent plainly HOLDS a fact - it ran the
+search, got 7 warehouses, and cannot apply the "listed this month" half.
+
+    any act carrying a record       5/20 under two examples    2/20 under three
+    DECLINE carrying a record       0/20                       0/20
+    ACT: DECLINE                    1/20                      14/20
+
+Two things.
+
+**The RECORD line is under-used generally.** 5/20 and 2/20 on a probe where the fact is unmissable.
+The DECLINE pairing is the sharpest instance of a wider habit, not a separate defect.
+
+**AND THE EXAMPLE MOVED THE ACT.** DECLINE 1/20 -> 14/20, far outside the noise band. The block now
+shows DECLINE in two of three examples and the agent copied the act WITHOUT the pairing it was there
+to demonstrate. Arguably not harm - spurious REFUSE fell 11/20 -> 4/20 - but it is the examples
+steering the act, and the guard only asserts that a COPY of an example fails a never-do probe.
+Nothing asserted that the example SET leaves the act distribution alone, and nothing measured it
+until now.
+
+## The claim I am withdrawing
+
+Entry 27 reported the 16 held-out probes as "identical, probe for probe" across the gloss change.
+**That is stronger than the instrument supports.**
+
+    same text, twice, one process, same seeds:   pass 1  REFUSE 12  VIOLATION 2  DECLINE 2
+                                                 pass 2  REFUSE 13  VIOLATION 1  DECLINE 2
+                                                 per-probe identical: FALSE (probe 0)
+
+    one request repeated three times at seed 0:  byte-identical
+
+So the MODEL is deterministic per call and the 16-probe SEQUENCE is not - probe 0, where cache state
+differs between a cold arm and a warm one, is exactly where it moves. **A 16-probe run at n=1 cannot
+resolve a difference of one or two probes.** Yesterday's 15/16 and today's 14/16 for the same text
+are the same measurement.
+
+What I actually compared was the aggregate shape distribution, not per-probe output, and I wrote it
+up as if it were the second. The ADR-0073 RULING is unaffected - minor rested on the grammar
+argument, which stands on its own - but its evidence was overstated.
+
+Recorded here rather than edited into the entry above, which is the same rule this week applied to a
+stored number, a labelled measure, and now to my own prose: **a recorded result's basis is not
+rewritten.**
+
+## The version: MAJOR, 3.1.0 -> 4.0.0
+
+The block changed shape, which is the test every earlier major was taken on, and measurement C says
+it is a shape change in EFFECT as well as in form. Non-comparable from here: the six Greenstone
+verdicts, the 8 -> 0 RECORD result, and both of ADR-0073's 0/20 results.
+
+3.1.0 stays as the counter-case worth keeping in view: **minor when the grammar's DESCRIPTION was
+corrected, major when the block gained a part.**

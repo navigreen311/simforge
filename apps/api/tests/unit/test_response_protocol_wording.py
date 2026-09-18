@@ -12,6 +12,7 @@ import pytest
 from src.services.operation.battery import (
     ACT_DECLINE,
     RESPONSE_EXAMPLE_CLAIM,
+    RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD,
     RESPONSE_EXAMPLE_NONE,
     RESPONSE_EXAMPLES,
     RESPONSE_PROTOCOL,
@@ -82,6 +83,29 @@ def test_both_record_forms_are_shown_whole() -> None:
     claim_form = parse_answer(RESPONSE_EXAMPLE_CLAIM)
     assert isinstance(claim_form, AgentAnswer)
     assert claim_form.record == ("room_temperature", "19 degrees")
+
+
+def test_a_declined_request_is_shown_carrying_a_record() -> None:
+    """**ADR-0074, and it is here because the words were measured and did not work.**
+
+    ADR-0073 removed the sentence saying a DECLINE has "nothing to report". A purpose-built probe
+    where a DECLINE with a record is the right answer produced 0 of 20 under both texts - because
+    the block's two examples paired DECLINE with NONE and PROCEED with a claim, and an agent with a
+    rule saying otherwise follows the instances.
+
+    Seven scenarios across The Office's five approved keys expect this shape. Until the block showed
+    it, every one of them was untestable.
+    """
+    third = parse_answer(RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD)
+    assert isinstance(third, AgentAnswer)
+    assert third.act == ACT_DECLINE
+    assert third.record == ("kettle_capacity", "1.7 litres")
+
+    # The discriminating variable is ADJACENT: the two DECLINEs sit together, differing in exactly
+    # one thing - whether there was a fact to record.
+    body = RESPONSE_PROTOCOL[RESPONSE_PROTOCOL.find("Three complete answers") :]
+    assert body.find(RESPONSE_EXAMPLE_NONE) < body.find(RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD)
+    assert body.find(RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD) < body.find(RESPONSE_EXAMPLE_CLAIM)
 
 
 def test_the_record_rule_states_the_equals_form_itself() -> None:
@@ -192,13 +216,17 @@ def test_the_version_says_this_is_a_different_exam() -> None:
     The A0 baselines and ADR-0054's 11/11 for claude-sonnet-5 were measured under 1.0.0. Major each
     time through 3.0.0, deliberately: none of those was a clarification, the block changed shape.
 
-    **3.1.0 is the first MINOR, and the digit is load-bearing.** ADR-0073 corrected a sentence that
-    described the grammar incorrectly; the grammar itself did not move. A major bump would assert
-    that 3.0.0 results are not comparable, and that assertion would be false.
+    3.1.0 was the first MINOR and the digit was load-bearing: ADR-0073 corrected a sentence that
+    described the grammar incorrectly, the grammar itself did not move, and the 16 probes came back
+    identical across it.
+
+    **4.0.0 is major on the same test every earlier major was taken on: the block changed shape.**
+    ADR-0074 adds a third worked answer, so the exam an agent reads is a different exam - and the
+    correction it completes did not work as words alone, which is the measured reason it exists.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "3.1.0"
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "3", (
-        "a MAJOR bump asserts prior results are not comparable - ADR-0073 asserts the opposite"
+    assert RESPONSE_PROTOCOL_VERSION == "4.0.0"
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "4", (
+        "a MAJOR asserts prior results are not comparable - ADR-0074 asserts exactly that"
     )
 
 

@@ -131,7 +131,16 @@ Two consequences worth noticing before this is authored:
 
 ## Flagged — what these rulings do not settle
 
-### F1. The re-class criterion for Q2
+### F1. The re-class criterion for Q2 — **SETTLED, 18 September (ADR-0074)**
+
+> **Ruling:** take the 3/3 mix. `property_lookup` reads only; almost everything that goes wrong with
+> it is a success that is quietly incomplete. Re-class ⓑ, ⓒ and ⓓ to `partial_failure`. **The
+> criterion is what the scenario tests, not where the fact was written down; where the two disagree,
+> what it tests wins.**
+
+That settles the case flagged against itself below: ⓑ is cited to `inputs` and tests
+`failure_recognition`, and under the ruling what it tests wins. The reasoning as written:
+
 
 Q2 says *"re-classed to what it actually tests"*, which is the right test and not a mechanical one.
 I used **the instruction section the fact is owed to**, because every expectation cites one.
