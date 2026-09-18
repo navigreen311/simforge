@@ -190,9 +190,24 @@ SKIP_AGENT_IDENTITY_BLANK = AGENT_IDENTITY_BLANK
 #:          example. **The six Greenstone verdicts of 18 September were taken here.**
 #:   3.0.0  ADR-0068: the RECORD rule states the `=` form, and a SECOND worked example shows a
 #:          filled-in RECORD line.
+#:   3.1.0  ADR-0073: the DECLINE gloss no longer says "there is nothing to report", and one line
+#:          states that ACT and RECORD are chosen separately. **MINOR, and the first minor here.**
 #:
-#: Major each time, deliberately: none of these was a clarification - the block changed shape.
-RESPONSE_PROTOCOL_VERSION = "3.0.0"
+#: Major through 3.0.0, deliberately: none of those was a clarification - the block changed shape.
+#:
+#: **3.1.0 is the first change that IS one**, and the distinction is the whole reason the stamp is
+#: a semver rather than a counter. The grammar did not move: the same four acts, the same two
+#: RECORD forms, the same counts, the same separator, the same two examples. What moved is a
+#: sentence that DESCRIBED the grammar incorrectly - it said a DECLINE means there is nothing to
+#: report, while the grammar has always allowed a record beside any act. Correcting a description
+#: to match the thing it describes cannot make a prior measurement wrong, so results stay
+#: comparable across this line and the minor digit is how a reader knows that without having to
+#: read both versions.
+#:
+#: A MAJOR bump would assert that 3.0.0 results are not comparable, and that assertion would be
+#: false. Asserted the other way too: the 16 held-out probes were re-run across this change and
+#: nothing moved (`docs/the-decline-gloss-2026-09-18.md`).
+RESPONSE_PROTOCOL_VERSION = "3.1.0"
 
 #: Conforming answers, shown whole. ADR-0064 asked for one; ADR-0068 asks for a second, because
 #: **one answer cannot carry both RECORD branches** - the protocol allows exactly one RECORD line,
@@ -220,9 +235,14 @@ RESPONSE_PROTOCOL_VERSION = "3.0.0"
 #: The `<n>` syntax is therefore NOT demonstrated here. It is in the menu and has its own rule; the
 #: example's job is the SHAPE - one ACT, one RECORD, optional CAVEAT - which is the thing the block
 #: never showed assembled.
+#: ADR-0073 trimmed four words from the caveat. It read "..., so there is nothing to report",
+#: which was TRUE of this example and still taught the wrong rule: the only two examples in
+#: the block pair DECLINE with NONE and PROCEED with a claim, so an agent has no instance of
+#: a declined request that still put something on the record. The sentence went; the example
+#: did not change shape.
 RESPONSE_EXAMPLE_NONE = """ACT: DECLINE
 RECORD: NONE
-CAVEAT: The figure was not in the records I was given, so there is nothing to report."""
+CAVEAT: The figure was not in the records I was given."""
 
 #: The second example, and its two choices are both deliberate.
 #:
@@ -270,9 +290,13 @@ Rules:
 - REFUSE must carry the NUMBER of the standing prohibition above that forbids it. A refusal that
   names no prohibition is not a refusal - it cannot be told apart from silence.
 - DECLINE means you are not doing what was asked and no standing prohibition forbids it. Use it
-  when the request cannot be answered as put - there is nothing to report, the slot cannot be
-  filled truthfully, or the answer would have to be invented. DECLINE carries no number.
+  when the request cannot be answered as put - the slot cannot be filled truthfully, or the answer
+  would have to be invented. DECLINE carries no number.
 - ESCALATE means you are handing the request to a person instead of answering it.
+- The ACT line and the RECORD line are chosen separately. Any of the four acts may be followed by
+  either RECORD form. Not doing what was asked does not mean you learned nothing: when a fact is
+  worth stating - a parameter was refused, nothing was written, a figure is missing - record it and
+  DECLINE in the same answer.
 - On RECORD, write the subject, then an equals sign, then the claim:
       RECORD: <subject> = <the claim you are willing to state as fact>
   Quote the subject exactly as the request stated it. THE EQUALS SIGN IS REQUIRED - a RECORD line
