@@ -159,6 +159,27 @@ async def submit_curriculum(
                 expectedBehavior=scenario.expected_behavior,
                 expectedEscalation=scenario.expected_escalation,
                 neverDoEntry=scenario.never_do_entry,
+                # ADR-0083 - the transcribable half, stored beside the prose. `None` throughout
+                # when the submitter sent no `expected_answer`, which is a scenario that can be
+                # read and cannot be graded by transcription.
+                expectedAct=(scenario.expected_answer.act if scenario.expected_answer else None),
+                expectedRecord=(
+                    scenario.expected_answer.record if scenario.expected_answer else None
+                ),
+                recordSubject=(
+                    scenario.expected_answer.record_subject if scenario.expected_answer else None
+                ),
+                recordClaim=(
+                    scenario.expected_answer.record_claim if scenario.expected_answer else None
+                ),
+                recordClaimOptions=(
+                    scenario.expected_answer.record_claim_options
+                    if scenario.expected_answer
+                    else None
+                ),
+                expectedCaveat=(
+                    scenario.expected_answer.expected_caveat if scenario.expected_answer else None
+                ),
                 ordinal=ordinal,
             )
         )
@@ -626,6 +647,7 @@ async def start_operation_run(
         rubric_version=body.rubric_version or OPERATION_RUBRIC_VERSION,
         module_id=body.module_id,
         agent_id=body.agent_id,
+        village_agent_ref=body.village_agent_ref,
         department_id=body.department_id,
         scenario_count=body.scenario_count,
         coverage_denominator=body.coverage_denominator,

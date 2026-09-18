@@ -3118,3 +3118,66 @@ not decoration, it is the instruction.
 
 Five files, 44 scenarios, every one `status: draft`, and **no question left inside them.** What is
 left is Ivan's review and a move into `theoffice/scenarios/` once that working tree lands.
+
+---
+
+# Entry 37 - the request side was ignoring, and two identities were one
+
+**19 September 2026.** ADR-0083. The asymmetry: the RESPONSE side has been strict since the
+beginning - The Office's manifest enumerates every field SimForge may return and fails their build
+on an undeclared one - and the REQUEST side had no equivalent at all.
+
+Pydantic's default is `extra="ignore"`, so a submitter could send `expected_answer` - the half
+SimForge would GRADE an agent against - and get a 200 back with nothing kept. **No error on either
+side, and both of them believing a key had been delivered.** The same defect as P1's, one layer out:
+P1 fixed "validated and stored nowhere"; this fixes "not even validated".
+
+## What `extra="forbid"` would start refusing: NOTHING, and it was checked
+
+Read off `broker/provisioning.py` on origin/main, The Office sends ten keys on run/start and six on
+the curriculum, and **every one is declared.** The suite agrees empirically - 1,062 pass with the
+forbid in place.
+
+What it refuses in FUTURE is the point rather than the cost: a field The Office adds and SimForge
+has not accepted yet now fails at the boundary, loudly, on the first call, instead of being dropped
+for however long it takes somebody to notice a column full of nulls.
+
+## The validators matter more than the forbid
+
+Four refusals, each of which would otherwise store cleanly and then grade EVERY agent as failing -
+which reads as a finding about the agent:
+
+    an act the protocol does not offer
+    both record forms at once, or neither
+    a subject with no claim
+    A RIGHT ANSWER THAT IS NOT ON ITS OWN OPTION LIST
+
+## Two identities that were one
+
+`OperationRun.agentId` is consumed as a VILLAGE ref and The Office sends its OFFICE uuid there.
+Six rows were corrected by hand in September. Both now travel:
+
+    the examiner's lookup           villageAgentRef   assemble_system_prompt resolves a Village ref
+    the outcome The Office receives agentId           its certs are keyed on its own uuid
+
+An outcome returning the Village ref would be a verdict about an agent The Office cannot find, so
+the battery takes `village_ref` for the prompt and `build_gate_result_request` takes `run.agentId`
+for the outcome. **Splitting them was the actual fix; the column was the easy half.**
+
+## And the read-only, which argues against itself
+
+Would a REQUEST manifest be worth having? The response manifest is not a schema - it is a file of
+REASONS, and it encodes a policy no type can express: *The Office is entitled to learn WHETHER an
+agent passed, not WHY, because a rich enough explanation reconstructs the scenario.*
+
+The request direction has no counterpart to that hazard. What it does have is fields that are
+DECLARED AND UNREAD - `certification_units_requested[].agent_id` is sent and only `module_id` is
+consumed, by The Office's own comment.
+
+**And neither a schema nor a manifest would have caught the defect that actually cost us six rows.**
+`agent_id` was declared, populated, well-typed, and read as something it is not. A manifest records
+what may be SENT, not what the receiver DOES with it.
+
+So: not recommended. A narrower version gets most of the value - a required `#:` comment on every
+request-model field saying who reads it, enforced by a test, living in the file it describes, with
+no second artefact to drift.

@@ -21,11 +21,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # =================================================================================================
 # Inbound — curriculum submission (Office → SimForge)
 # =================================================================================================
+
+
+#: The four acts `RESPONSE_PROTOCOL` offers, as an expected answer may name them. `REFUSE` is
+#: written bare here: the protocol requires the agent to append the prohibition NUMBER, and which
+#: number is a fact about the module's never-do list rather than about the key.
+EXPECTED_ACTS: frozenset[str] = frozenset({"PROCEED", "REFUSE", "DECLINE", "ESCALATE"})
 
 
 class InstructionSetRef(BaseModel):
@@ -49,13 +55,90 @@ class CertificationUnitRequest(BaseModel):
     venture_context: str | None = None
 
 
+class ExpectedAnswer(BaseModel):
+    """The shape the submitter expects, beside the prose (ADR-0069 ruling 2, ADR-0077, ADR-0082).
+
+    **Transcription, not judgment.** The grader compares the agent's parsed ACT and RECORD to these
+    fields by exact equality. No model reads either side's prose, which is what `_DECLINE_MARKERS`
+    was deleted for (ADR-0048) and what the held-out battery was built around (ADR-0051).
+
+    `record_subject` is NAMED TO THE AGENT (ADR-0077): the exam renders it into the probe, so the
+    string the agent is shown and the string the grader compares are this one field and cannot
+    drift. The same goes for `record_claim_options` when the claim is an enum.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: PROCEED | REFUSE <n> | DECLINE | ESCALATE - the four the protocol offers.
+    act: str
+    #: `NONE` when the expected answer records nothing. Mutually exclusive with the pair below.
+    record: str | None = None
+    record_subject: str | None = None
+    record_claim: str | None = None
+    #: The permitted claims, named to the agent. **One list per (module, subject), always** - a list
+    #: that varied per probe would say which scenario is being put, the same leak the naming
+    #: sentence avoids.
+    record_claim_options: list[str] | None = None
+    #: A qualification the answer must carry, graded as PRESENT rather than word for word
+    #: (ADR-0082 rulings 7-10). Records an expectation that no grader reaches YET:
+    #: `ObservedBehaviour.disclosed` is written at one site and read at none.
+    expected_caveat: str | None = None
+
+    @model_validator(mode="after")
+    def _one_record_form(self) -> ExpectedAnswer:
+        if self.act not in EXPECTED_ACTS:
+            raise ValueError(
+                f"expected_answer.act {self.act!r} is not one of {sorted(EXPECTED_ACTS)}. "
+                "A key naming an act the protocol does not offer expects an answer no agent "
+                "can give."
+            )
+        records_nothing = (self.record or "").upper() == "NONE"
+        names_a_fact = self.record_subject is not None or self.record_claim is not None
+        if records_nothing and names_a_fact:
+            raise ValueError(
+                "expected_answer declares `record: NONE` and a subject or claim. The protocol "
+                "allows one RECORD line and it is one or the other."
+            )
+        if not records_nothing and not names_a_fact:
+            raise ValueError(
+                "expected_answer declares neither `record: NONE` nor a subject and claim. An "
+                "expectation that says nothing about the RECORD line cannot be transcribed."
+            )
+        if names_a_fact and (self.record_subject is None or self.record_claim is None):
+            raise ValueError(
+                "expected_answer names a record subject without a claim, or a claim without a "
+                "subject. Both halves or neither."
+            )
+        if self.record_claim_options is not None:
+            if records_nothing:
+                raise ValueError(
+                    "expected_answer declares `record: NONE` and a list of claim options. There "
+                    "is nothing for the options to be options FOR."
+                )
+            if self.record_claim not in self.record_claim_options:
+                raise ValueError(
+                    f"expected_answer.record_claim {self.record_claim!r} is not among its own "
+                    f"options {self.record_claim_options!r}. A key whose right answer is not on "
+                    "the list the agent is shown cannot be satisfied."
+                )
+        return self
+
+
 class OperationScenarioSubmission(BaseModel):
+    #: ADR-0083: an undeclared field is REFUSED, not dropped. Pydantic's default is to ignore
+    #: extras, so before this a submitter could send `expected_answer` and have it silently
+    #: discarded - both sides believing an answer key had been delivered when none had.
+    model_config = ConfigDict(extra="forbid")
+
     scenario_class: str  # one of ScenarioClass
     module_id: str
     instruction_section: str  # which section of the instruction set it tests
     expected_behavior: str
     expected_escalation: str
     never_do_entry: str | None = None  # for never_do_violation scenarios
+    #: The transcribable half of the key. Optional while the 44 split keys are still drafts; a
+    #: scenario without one can be stored and cannot be graded by transcription.
+    expected_answer: ExpectedAnswer | None = None
 
 
 class CoverageDeclaration(BaseModel):
@@ -261,6 +344,9 @@ class OperationRunStartRequest(BaseModel):
     only known once it finishes cannot be asked about while it is hanging.
     """
 
+    #: ADR-0083: an undeclared field is REFUSED, not dropped.
+    model_config = ConfigDict(extra="forbid")
+
     run_ref: str
     unit: str  # "A" (agent x forge x module) | "B" (department x forge)
     forge_id: str
@@ -270,6 +356,17 @@ class OperationRunStartRequest(BaseModel):
     module_id: str | None = None
     agent_id: str | None = None
     department_id: str | None = None
+    #: WHO IS SITTING THE EXAM, in the Village's own vocabulary (`victor_serath`), not The
+    #: Office's uuid.
+    #:
+    #: `agent_id` above is consumed as a VILLAGE ref by `check_agent_identity`, and The Office
+    #: sends its `office_agent_id` there - so every run it opened in September refused on identity
+    #: and six rows were corrected by hand from `office_agent_identity.village_agent_ref`. This is
+    #: that column crossing the boundary instead.
+    #:
+    #: Optional, because The Office does not send it yet. When it is absent the battery falls back
+    #: to `agent_id` and fails exactly as it does today - loudly, by name, never quietly.
+    village_agent_ref: str | None = None
     scenario_count: int = 0
     coverage_denominator: int = 0
     #: The window this run is judged against, fixed at start. A run is never re-judged

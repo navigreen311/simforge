@@ -51,7 +51,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -90,6 +90,22 @@ class OperationScenarioSubmission(Base):
 
     #: Position in the submitted list, preserved. A curriculum is ordered by its author and a set
     #: that comes back shuffled is harder to review against the file it came from.
+    #: THE TRANSCRIBABLE HALF (ADR-0083). P1 deliberately left these out because the payload did
+    #: not carry them and "a column written by nothing is the defect this repository has recorded
+    #: seven times". The payload carries them now, so the columns arrive with the field rather than
+    #: ahead of it.
+    #:
+    #: Nullable as a set: a scenario submitted without an `expected_answer` is stored and is not
+    #: gradable by transcription, which is the honest state of the 44 drafts until they are
+    #: approved.
+    expectedAct: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: `NONE` when the expected answer records nothing; else null and the pair below is set.
+    expectedRecord: Mapped[str | None] = mapped_column(String, nullable=True)
+    recordSubject: Mapped[str | None] = mapped_column(String, nullable=True)
+    recordClaim: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recordClaimOptions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    expectedCaveat: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     ordinal: Mapped[int] = mapped_column(Integer, default=0)
 
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
