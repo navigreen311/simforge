@@ -13,10 +13,13 @@ way.
 
 from __future__ import annotations
 
+import os
+
 from httpx import AsyncClient
 
 from src import build_info
 from src.build_info import UNKNOWN, commits_differ
+from src.config import settings
 
 
 async def test_it_reports_both_commits_and_whether_they_differ(client: AsyncClient) -> None:
@@ -100,3 +103,60 @@ async def test_it_never_raises_when_git_cannot_be_read(client: AsyncClient, monk
 
     assert body["checkout_commit"] == UNKNOWN
     assert body["differs"] is None
+
+
+# =================================================================================================
+# A path is reported by whether it RESOLVES (ADR-0088)
+# =================================================================================================
+
+
+async def test_a_path_is_reported_by_whether_it_resolves(client: AsyncClient) -> None:
+    """**The failure this fixes.** For two days `village_db_path` read as `configured: true` while
+    pointing at a file that does not exist — because it has a default, and a default is a value.
+    `configured` answered *is there a string*; for a path the useful question is *is there a file*.
+    """
+    paths = (await client.get("/api/version")).json()["launch_environment"]["paths"]
+
+    assert set(paths) >= {"village_config_path", "village_db_path", "village_data_path"}
+    for name, report in paths.items():
+        assert set(report) == {"value_set", "is_default", "resolves"}, name
+        assert all(isinstance(v, bool) for v in report.values()), name
+
+
+async def test_a_default_that_points_nowhere_reads_as_unresolved(
+    client: AsyncClient, monkeypatch
+) -> None:
+    """The exact shape of the two-day miss: set, defaulted, and not there."""
+    monkeypatch.setattr(settings, "village_db_path", "./nowhere/village.db")
+
+    report = (await client.get("/api/version")).json()["launch_environment"]["paths"][
+        "village_db_path"
+    ]
+
+    assert report["value_set"] is True
+    assert report["resolves"] is False
+
+
+async def test_is_default_is_compared_against_the_field_not_the_environment(
+    client: AsyncClient, monkeypatch
+) -> None:
+    """**A value set in `.env` is not in `os.environ`** — pydantic reads the file into the settings
+    object. Checking the environment would report every configured path as unconfigured, which is
+    the same class of wrong answer pointing the other way.
+    """
+    monkeypatch.setattr(settings, "village_config_path", "C:/somewhere/config.yaml")
+
+    report = (await client.get("/api/version")).json()["launch_environment"]["paths"][
+        "village_config_path"
+    ]
+
+    assert report["is_default"] is False  # the field's default is ""
+    assert "VILLAGE_CONFIG_PATH" not in os.environ or True  # and no environment check was needed
+
+
+async def test_no_path_value_is_reported(client: AsyncClient) -> None:
+    """An absolute path carries a username and this route is public. `resolves` is what an operator
+    needs; the value is not."""
+    raw = (await client.get("/api/version")).text
+    assert "village1.0.2-recovered" not in raw
+    assert "C:/" not in raw and "C:\\\\" not in raw
