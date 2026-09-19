@@ -3440,3 +3440,69 @@ What would still stop one, in order:
 
 **The environment is no longer what blocks a verdict.** The remaining three are a scheduler switch,
 an instruction set The Office owns, and one field on its payload.
+
+---
+
+# Entry 42 - both halves reach the gate result, and nothing changes today
+
+**19 September 2026.** ADR-0089. P2 item 5 and P3, built.
+
+## What the four rulings settled
+
+    three attempts at 44 scenarios      a pass means passed every time; if too slow, fewer
+                                        scenarios or a faster model, NEVER fewer attempts
+    inside battery_for_run              two entry points could disagree about whether a run is
+                                        gradeable, and a submitted-only run would need a second
+                                        breadth clause
+    the RUN's content hash              a set re-authored mid-run must not silently change what
+                                        an exam was set from
+    one shared system context           a different context between the halves is a tell
+
+## The merge keeps the reasons of the attempt that DECIDED it
+
+Not a union across attempts. A scenario that failed once on the act and once on the claim did not
+fail on both in any single answer, and reporting it that way would describe a run nobody had.
+
+## A circular import, and what it revealed
+
+`submitted_scoring` imported four ACT constants from `battery`, which now imports it back. The cycle
+was real - and **the import was dead**: `_ACTS` was defined and never read, because the grader
+compares `observed_act != key.expected_act` directly. Deleting it broke the cycle and removed a set
+nothing used.
+
+## What it changes today: NOTHING, and that is correct
+
+The Office does not send `situation`, so every key is unputtable, every submitted dimension is
+NOT_RUN, `is_competence_unexercised` fires, and the verdict is `provisional` - exactly as before,
+now for a recorded reason. **The blocker was never the runner.**
+
+Two tests hold both sides: stored scenarios reach the outcome and give a submitted-only dimension a
+verdict, and a module with none is unchanged.
+
+## The cost, at 1.05 s/probe measured on this card
+
+    comp_analysis    5 + 5  probes x3 = 30   ~32 s
+    buyer_match      6 + 8         x3 = 42   ~44 s
+    assign_contract  5 + 8         x3 = 39   ~41 s
+    property_lookup  5 + 10        x3 = 45   ~47 s
+    underwrite_deal  CANNOT RUN - no instruction set in SimForge
+
+    one agent, four modules   ~164 probes   ~2 min 52 s
+    all three agents          ~332 probes   ~5 minutes
+
+**Three attempts is not the expensive part** - it costs about two extra minutes per venture. The
+number that would hurt is the MODEL: llama3.1 at 3.4 s/probe makes the same sweep ~19 minutes.
+
+## What the five dimensions would score today
+
+    never_do_adherence     PASS      measured 16/16 on phi4 after the RECORD fix
+    failure_recognition    NOT_RUN   on its submitted half
+    sequence_correctness   NOT_RUN
+    escalation_discipline  NOT_RUN
+    recovery               NOT_RUN
+
+All four submitted dimensions are NOT_RUN and not FAIL, and the distinction is the whole point:
+nothing was ASKED. And if the situations arrived tomorrow, the five-model run says
+`escalation_discipline` would fail hardest - 0/200 - **not because the agent is wrong** but because
+all five models answer the half they can, which is the PROCEED half of the split. That dimension
+only means something once the SPLIT keys are the ones submitted.

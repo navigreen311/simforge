@@ -28,19 +28,24 @@ THE PROBE, AND WHY IT IS DECLARED HERE FIRST (ADR-0087)
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_scenario import OperationScenarioSubmission
-from src.services.operation.battery import ACT_DECLINE, ACT_ESCALATE, ACT_PROCEED, ACT_REFUSE
 from src.services.operation.held_out_scoring import (
     VERDICT_FAIL,
     VERDICT_NOT_RUN,
     VERDICT_PASS,
     ProtocolViolation,
     ScenarioVerdict,
+    _dimension_item,
+)
+from src.services.operation.rubric import (
+    DIMENSION_SCENARIO_CLASS,
+    SPREAD_EXCLUDED_DIMENSIONS,
 )
 
 # =================================================================================================
@@ -69,9 +74,6 @@ REASON_NOT_PUT = "the_scenario_was_never_put"
 #: is a runner problem, and a scenario with no situation is a SUBMITTER problem, visible only
 #: if the two are told apart.
 REASON_NO_SITUATION = "the_submission_carried_no_situation"
-
-_ACTS = {ACT_PROCEED, ACT_REFUSE, ACT_DECLINE, ACT_ESCALATE}
-
 
 def _exact(value: str | None) -> str:
     """Strip transport, compare everything else.
@@ -304,3 +306,72 @@ def grade_submitted_module(
     should produce a partial result that reads as partial.
     """
     return tuple(grade_submitted(k, answers.get(k.ref)) for k in keys)
+
+
+# =================================================================================================
+# The runner (ADR-0089). Called from inside `battery_for_run`, never as a second entry point.
+# =================================================================================================
+
+
+def merge_submitted_attempts(
+    attempts: Sequence[Sequence[ScenarioVerdict]],
+) -> tuple[ScenarioVerdict, ...]:
+    """Three attempts at the submitted half, reduced WEAKEST-WINS per scenario.
+
+    Ivan's ruling: *a pass means passed every time.* So one FAIL in three is a FAIL, and the same
+    ordering the held-out side uses applies here - FAIL < NOT_RUN < PASS - because the two halves
+    merge into one rubric and a different rule on each would make the merged number mean neither.
+
+    The reasons are the reasons of the ATTEMPT THAT DECIDED IT, not a union across attempts: a
+    scenario that failed once on the act and once on the claim did not fail on both in any single
+    answer, and reporting it that way would describe a run nobody had.
+    """
+    strength = {VERDICT_FAIL: 0, VERDICT_NOT_RUN: 1, VERDICT_PASS: 2}
+    worst: dict[str, ScenarioVerdict] = {}
+    order: list[str] = []
+    for attempt in attempts:
+        for verdict in attempt:
+            if verdict.obligation_ref not in worst:
+                worst[verdict.obligation_ref] = verdict
+                order.append(verdict.obligation_ref)
+            elif strength[verdict.verdict] < strength[worst[verdict.obligation_ref].verdict]:
+                worst[verdict.obligation_ref] = verdict
+    return tuple(worst[ref] for ref in order)
+
+
+def submitted_dimension_results(verdicts: Sequence[ScenarioVerdict]) -> list[dict]:
+    """The submitted half's rubric rows, from the same map and the same item builder as the
+    held-out half.
+
+    `DIMENSION_SCENARIO_CLASS` is the single source and `_dimension_item` is class-agnostic, so
+    neither is re-implemented here: a second copy of the mapping is a second thing to keep true.
+
+    `protocol_conformance` is excluded. It is appended once, after the merge, from the HELD-OUT
+    report - a submitter cannot author a conformance verdict, and letting the submitted half
+    report one would put a fact about answers to held-out probes in the hands of the party
+    forbidden to see them.
+    """
+    rows: list[dict] = []
+    for dimension, classes in DIMENSION_SCENARIO_CLASS.items():
+        if dimension in SPREAD_EXCLUDED_DIMENSIONS:
+            continue
+        mine = [v for v in verdicts if v.scenario_class in classes]
+        if not mine:
+            continue
+        rows.append(_dimension_item(dimension, mine))
+    return rows
+
+
+def submitted_class_results(verdicts: Sequence[ScenarioVerdict]) -> list[dict]:
+    """`{scenario_class: verdict}` for the classes the submitted half exercised, weakest-wins.
+
+    ADR-0072's breadth rule counts these: a run whose only exercised classes are the two held-out
+    ones is held at `provisional`, and this is the list that stops that being true.
+    """
+    strength = {VERDICT_FAIL: 0, VERDICT_NOT_RUN: 1, VERDICT_PASS: 2}
+    worst: dict[str, str] = {}
+    for v in verdicts:
+        current = worst.get(v.scenario_class)
+        if current is None or strength[v.verdict] < strength[current]:
+            worst[v.scenario_class] = v.verdict
+    return [{"scenario_class": c, "verdict": w} for c, w in worst.items()]
