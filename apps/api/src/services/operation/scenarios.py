@@ -70,7 +70,6 @@ from src.services.operation.never_do import (
 )
 from src.services.operation.rubric import (
     OPERATION_DIMENSIONS,
-    VERDICT_FAIL,
     VERDICT_PASS,
     OperationDimension,
 )
@@ -465,14 +464,29 @@ def is_competence_unexercised(per_scenario_class_results: object) -> bool:
     it is fine, but because `is_evidence_absent` is the withhold that speaks to it, and one fact
     should produce one reason.
     """
-    exercised = {
+    # ADR-0092 RULING 2 - DEMONSTRATED, NOT MERELY RUN.
+    #
+    # This set was `verdict in (VERDICT_PASS, VERDICT_FAIL)`, and a FAIL counted as exercise. On
+    # 19 September four agents reached `certified` with every competence class at FAIL: the
+    # classes had verdicts, so the breadth rule read the run as broad and let it through. **A
+    # failure is not coverage.** A class the agent failed says the exam asked - it does not say
+    # the agent showed anything, and this rule exists to ask the second question.
+    #
+    # `demonstrated` is therefore PASS only. FAIL, NOT_RUN and not_applicable all leave the
+    # competence half undemonstrated, which is the honest reading of each: the first is a refusal
+    # to certify on, the second and third are absences.
+    demonstrated = {
         c
         for c, verdict in _class_verdicts(per_scenario_class_results)
-        if verdict in (VERDICT_PASS, VERDICT_FAIL)
+        if verdict == VERDICT_PASS
     }
-    if not exercised:
+    # Silence still returns False, and now so does a run with nothing but failures - for the same
+    # reason. `is_evidence_absent` speaks to an empty result and ADR-0092 ruling 1 fails a run
+    # whose dimensions failed; this withhold exists for the run that PASSED its held-out half and
+    # demonstrated no competence beside it.
+    if not _class_verdicts(per_scenario_class_results):
         return False
-    return not (exercised - HELD_OUT_CLASSES)
+    return not (demonstrated - HELD_OUT_CLASSES)
 
 
 def _class_verdicts(per_scenario_class_results: object) -> list[tuple[str, str | None]]:

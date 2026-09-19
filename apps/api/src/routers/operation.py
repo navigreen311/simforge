@@ -56,6 +56,7 @@ from src.services.operation.recert import is_content_hash_void, raise_high_incid
 from src.services.operation.rubric import (
     FAILURE_MODE_UNREADABLE,
     OPERATION_RUBRIC_VERSION,
+    VERDICT_FAIL,
     WITHHOLD_COMPETENCE_UNEXERCISED,
     WITHHOLD_EVIDENCE_ABSENT,
     WITHHOLD_NEVER_DO_UNTESTED,
@@ -81,8 +82,10 @@ from src.services.operation.scenarios import (
 )
 from src.services.operation.state_machine import OperationState, is_assignable
 from src.services.operation.trust_tier import tier_for_state
+from src.telemetry.logging import get_logger
 from src.utils.time import utcnow
 
+log = get_logger("operation")
 router = APIRouter()
 
 
@@ -343,9 +346,31 @@ async def gate_result(
         if is_competence_unexercised(outcome.per_scenario_class_results):
             withheld.append(WITHHOLD_COMPETENCE_UNEXERCISED)
 
+        # ADR-0092 RULING 1, ON THE RECEIVING SIDE.
+        #
+        # `outcome.passed` arrives over the wire. SimForge's own builder now derives it from the
+        # merged result, but this handler accepts a `GateResultRequest` from anyone, and the rule
+        # is about the CERTIFICATION rather than about who computed the boolean: an agent that
+        # fails a competence dimension is not certified, whatever was sent.
+        #
+        # Not a 422. A submitter reporting a dimension FAIL is telling the truth about the exam;
+        # refusing the payload would lose the result. The verdict is corrected instead, and the
+        # row records both halves - `state` failed, `operationRubricResults` saying why.
+        dimensions_failed = [
+            r["dimension"] for r in results_dicts if r.get("verdict") == VERDICT_FAIL
+        ]
+        if dimensions_failed and outcome.passed:
+            log.warning(
+                "gate_result_pass_contradicted_by_its_own_dimensions",
+                run_ref=run_ref,
+                agent=outcome.agent_id,
+                module=outcome.module_id,
+                failed_dimensions=dimensions_failed,
+            )
+
         if void:
             state = OperationState.REVOKED.value
-        elif not outcome.passed:
+        elif not outcome.passed or dimensions_failed:
             state = OperationState.FAILED.value
         elif withheld:
             state = OperationState.PROVISIONAL.value
@@ -467,6 +492,18 @@ async def gate_result(
             instructionVersion=ref.instruction_version,
             forgeApiVersion=ref.forge_api_version,
             instructionContentHash=body.run_content_hash,
+            # ADR-0092 RULING 4. WHICH ANSWER KEYS THIS WAS GRADED AGAINST.
+            #
+            # Until now the binding was INFERRED: `submitted_keys_for` selects by
+            # (forge, module, instruction hash), so the key set was implied by a hash of the
+            # INSTRUCTIONS and written down nowhere. Two things could change underneath it - a key
+            # edited, a key added - without the instruction hash moving a byte, and no row could
+            # say whether the exam it recorded had seen them.
+            #
+            # NULL where no submitted keys were put, which is the honest value: a held-out-only
+            # exam was graded against no answer key, and a digest of the empty set would say it
+            # was graded against one.
+            scenarioSetHash=outcome.scenario_set_hash,
             operationRubricVersion=op_rubric_version,
             agentId=outcome.agent_id,
             moduleId=outcome.module_id,
