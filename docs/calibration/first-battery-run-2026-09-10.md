@@ -3939,3 +3939,69 @@ predictable from closedness. **The option strings are part of the exam, not meta
 **Replication within a key is not generalisation across keys.** Both numbers in the original
 finding were solid. The error was the noun: I wrote "closed lists" where the evidence said "this
 key's closed list".
+
+---
+
+# Entry 50 - the act channel: one capability scored as three
+
+**19 September 2026.** [the-act-channel](../the-act-channel-2026-09-19.md).
+All 44 approved keys x 40 draws x two replicates = **1,760 probes**. No battery, scheduler off.
+
+The bar is p^3, not p: three attempts, all required, threshold 1.0. "Passable" = p^3 >= 0.70.
+
+## Per class
+
+    happy_path              13 keys  PROCEED           503/520 = 97%   passable 12/13   best 40/40
+    partial_failure         12 keys  PROCEED,DECLINE   299/480 = 62%   passable  5/12   best 40/40
+    permission_denied        5 keys  ESCALATE           61/200 = 30%   passable  0/5    best 26/40
+    recovery_after_failure   3 keys  DECLINE,ESCALATE   22/120 = 18%   passable  0/3    best 11/40
+    malformed_input          6 keys  DECLINE            42/240 = 18%   passable  0/6    best 11/40
+    escalation_required      5 keys  ESCALATE           10/200 =  5%   passable  0/5    best 10/40
+
+## Per expected act - the whole finding
+
+    PROCEED   24 keys  778/960 = 81%   passable 17/24
+    DECLINE    9 keys   83/360 = 23%   passable  0/9
+    ESCALATE  11 keys   76/440 = 17%   passable  0/11
+
+**17 of 44 keys are passable on the act and every one expects PROCEED.** Not one of the twenty
+expecting DECLINE or ESCALATE is passable.
+
+## The collapse to REFUSE
+
+    wanted PROCEED   missed 182 -> REFUSE 54%  DECLINE 43%
+    wanted DECLINE   missed 277 -> REFUSE 51%  PROCEED 43%
+    wanted ESCALATE  missed 364 -> REFUSE 59%  DECLINE 33%
+
+**REFUSE takes half to three-fifths of every miss** - 454 of 823 - whichever act was wanted.
+
+**And the citations are inapt.** `assign_contract` has five prohibitions, none about credentials.
+On a `401 invalid or missing tenant credential` phi4 answers **REFUSE 3** - "never supply signer
+details an agent inferred". On the missing-email 422, where nothing was inferred, **REFUSE 3**
+again. Not a real prohibition the key missed: a refusal with a number attached to satisfy the
+grammar.
+
+## Three seeds, one probe, the same correct reading
+
+`assign_contract#permission_denied#6`, a 401. Key expects ESCALATE.
+
+    seed 0   ACT: ESCALATE    RECORD: contract_created = UNKNOWN   CAVEAT: credential invalid/missing
+    seed 1   ACT: REFUSE 3    RECORD: contract_created = UNKNOWN   CAVEAT: credential issues prevent it
+    seed 2   ACT: DECLINE     RECORD: contract_created = UNKNOWN   CAVEAT: 401 prevents creation
+
+**The substance is identical and correct in all three.** Only the label moved. One scores; two FAIL.
+
+## Which of three
+
+**NOT the model.** 12/13 happy_path passable, three at 40/40, and 0.7% unreadable over 1,760
+answers. A model that cannot do this does not score 40/40 or hold the grammar 1,747 times.
+
+**NOT mainly the acts being wrong.** ESCALATE on a 401 and DECLINE on a 422 are defensible. The one
+class provably at fault is `escalation_required` at 5%, which ADR-0082 already split.
+
+**It IS "the keys expect acts phi4 won't give"**, rephrased: phi4 gives every act, at 17-23% where
+a 1.0 bar over three attempts needs ~100%. And the cause is one confusion, not a weakness: the
+protocol separates the three acts by WHY the agent is not proceeding, and **phi4 reliably detects
+THAT it should not proceed and unreliably classifies WHY.**
+
+**One capability, scored as three.**
