@@ -171,7 +171,24 @@ BOOTSTRAP_FORGE_IDS: frozenset[str] = frozenset({"simforge", "sim-forge", "simfo
 
 #: Why a battery did not run. A refusal that names itself can be told from a crash.
 SKIP_NOT_UNIT_A = "the_run_is_not_an_agent_module_unit"
+#: The RUN is incomplete: it named no module, or no agent, or neither. Fixed on the hand-over -
+#: `OperationRunStartRequest` - by whoever opened it.
 SKIP_NO_MODULE = "the_run_declares_no_module_or_agent"
+#: SimForge holds no instruction set for this forge and module. The run is fine; the CURRICULUM
+#: never arrived, or arrived for a different module. Fixed by a submission, not by a re-hand-over.
+#:
+#: **Split from `SKIP_NO_MODULE` (ADR-0090), which it shared for as long as both existed.** The
+#: shared constant did not merely blur them: its value says "the run declares no module or agent",
+#: which on this branch is FALSE - the run declares both, and SimForge has nothing to examine them
+#: against. A reader was told to go and look at a payload that was correct.
+#:
+#: The cost is in this repository's own record, and it is not hypothetical. Calibration entry:
+#: *"`submit_application` has zero rows in SimForge. So the skip is `SKIP_NO_MODULE`, not
+#: `SKIP_NO_NEVER_DO` - the module is unknown, not known-and-empty."* **That prediction was
+#: wrong.** Zero rows meant an empty never-do list, and the never-do branch returned first, so the
+#: skip was `SKIP_NO_NEVER_DO` - the reason the entry ruled out. The distinction it drew is the
+#: right one; the code could not make it, and one shared constant is why nobody could tell.
+SKIP_NO_INSTRUCTION_SET = "no_instruction_set_for_this_forge_and_module"
 SKIP_NO_NEVER_DO = "the_module_declares_no_never_do_list"
 SKIP_BOOTSTRAP_FORGE = "this_forge_is_certified_by_a_human_bootstrap"
 SKIP_UNKNOWN_RUN = "no_run_was_opened_under_this_ref"
@@ -1050,6 +1067,18 @@ async def battery_for_run(
     if run.unit != "A":
         return BatterySkipped(run_ref=run_ref, reason=SKIP_NOT_UNIT_A)
     if not run.moduleId or not run.agentId:
+        # Module and agent are both fixed in the same place - the hand-over payload - so one reason
+        # covers them and the log names which. Splitting further would send a reader to the same
+        # file twice.
+        log.info(
+            "battery_skipped_incomplete_run",
+            run_ref=run_ref,
+            missing=[
+                name
+                for name, value in (("module_id", run.moduleId), ("agent_id", run.agentId))
+                if not value
+            ],
+        )
         return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_MODULE)
 
     # ADR-0083 - WHO THE EXAMINER LOOKS UP.
@@ -1114,10 +1143,6 @@ async def battery_for_run(
         )
         return BatterySkipped(run_ref=run_ref, reason=verdict.reason or "examiner_refused")
 
-    never_do = await module_never_do_list(session, run.forgeId, run.moduleId)
-    if not never_do:
-        return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_NEVER_DO)
-
     instruction_set = (
         (
             await session.execute(
@@ -1133,7 +1158,30 @@ async def battery_for_run(
         .first()
     )
     if instruction_set is None:
-        return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_MODULE)
+        # ADR-0090. NOT `SKIP_NO_MODULE`: the run named its module and its agent, and SimForge has
+        # no instruction set to examine them against. The two send a reader to different places -
+        # this one to the curriculum, the other to the hand-over.
+        log.info(
+            "battery_skipped_no_instruction_set",
+            run_ref=run_ref,
+            forge=run.forgeId,
+            module=run.moduleId,
+        )
+        return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_INSTRUCTION_SET)
+
+    # AFTER the lookup, not before (ADR-0090). Reversed, this branch swallowed the one above it:
+    # `module_never_do_list` reads the never-do list OFF the instruction sets, so no instruction
+    # set means an empty list means this returned first, every time, and `instruction_set is None`
+    # was unreachable. Which is why the journal's own hand-diagnosis of `submit_application`
+    # ("zero rows ... so the skip is SKIP_NO_MODULE, not SKIP_NO_NEVER_DO - the module is unknown,
+    # not known-and-empty") named a reason the code could not return: it read the intent of the
+    # two branches and got the order backwards, because one shared constant hid which had fired.
+    #
+    # Ordered this way each reason is true of the state that returns it: nothing submitted at all,
+    # or a submission that declared nothing to hold out.
+    never_do = await module_never_do_list(session, run.forgeId, run.moduleId)
+    if not never_do:
+        return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_NEVER_DO)
 
     # ADR-0062: the same exam, three times, at production settings.
     #
@@ -1312,6 +1360,7 @@ __all__ = [
     "FAILURE_MODE_UNREADABLE",
     "SKIP_BOOTSTRAP_FORGE",
     "SKIP_NOT_UNIT_A",
+    "SKIP_NO_INSTRUCTION_SET",
     "SKIP_NO_MODULE",
     "SKIP_NO_NEVER_DO",
     "SKIP_UNKNOWN_RUN",
