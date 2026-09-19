@@ -1143,20 +1143,25 @@ async def battery_for_run(
         )
         return BatterySkipped(run_ref=run_ref, reason=verdict.reason or "examiner_refused")
 
+    # ADR-0091 - THE SET THE RUN NAMES, NEVER THE NEWEST.
+    #
+    # Keyed on the run's own `instructionContentHash`, with no ordering, because there is nothing
+    # left to order: the hash identifies one row. `createdAt DESC .first()` answered a different
+    # question - "what is the latest curriculum for this module" - and a run is not examined
+    # against the latest curriculum. It is examined against the one it was opened under, which is
+    # the same hash `build_gate_result_request` VOIDs a certification for disagreeing with.
+    #
+    # A probing row proved the cost on 19 September: `property_lookup` briefly held a second set
+    # with one invented never-do entry, and being newer it would have been the one examined.
     instruction_set = (
-        (
-            await session.execute(
-                select(ForgeInstructionSet)
-                .where(
-                    ForgeInstructionSet.forgeId == run.forgeId,
-                    ForgeInstructionSet.moduleId == run.moduleId,
-                )
-                .order_by(ForgeInstructionSet.createdAt.desc())
+        await session.execute(
+            select(ForgeInstructionSet).where(
+                ForgeInstructionSet.forgeId == run.forgeId,
+                ForgeInstructionSet.moduleId == run.moduleId,
+                ForgeInstructionSet.contentHash == run.instructionContentHash,
             )
         )
-        .scalars()
-        .first()
-    )
+    ).scalar_one_or_none()
     if instruction_set is None:
         # ADR-0090. NOT `SKIP_NO_MODULE`: the run named its module and its agent, and SimForge has
         # no instruction set to examine them against. The two send a reader to different places -
@@ -1172,14 +1177,17 @@ async def battery_for_run(
     # AFTER the lookup, not before (ADR-0090). Reversed, this branch swallowed the one above it:
     # `module_never_do_list` reads the never-do list OFF the instruction sets, so no instruction
     # set means an empty list means this returned first, every time, and `instruction_set is None`
-    # was unreachable. Which is why the journal's own hand-diagnosis of `submit_application`
-    # ("zero rows ... so the skip is SKIP_NO_MODULE, not SKIP_NO_NEVER_DO - the module is unknown,
-    # not known-and-empty") named a reason the code could not return: it read the intent of the
-    # two branches and got the order backwards, because one shared constant hid which had fired.
+    # was unreachable. Ordered this way each reason is true of the state that returns it: nothing
+    # submitted under this hash, or a submission that declared nothing to hold out.
     #
-    # Ordered this way each reason is true of the state that returns it: nothing submitted at all,
-    # or a submission that declared nothing to hold out.
-    never_do = await module_never_do_list(session, run.forgeId, run.moduleId)
+    # And it is now THE SAME ROW (ADR-0091), not merely the same module: both reads are keyed on
+    # `run.instructionContentHash`, so the list probed and the set reported cannot come apart the
+    # way they did on `capital-forge/statement_ingest`. The call is kept rather than replaced with
+    # `instruction_set.neverDo` because the parsing and normalisation live behind it - but with
+    # the hash supplied the two are now the same list by construction rather than by convention.
+    never_do = await module_never_do_list(
+        session, run.forgeId, run.moduleId, run.instructionContentHash
+    )
     if not never_do:
         return BatterySkipped(run_ref=run_ref, reason=SKIP_NO_NEVER_DO)
 

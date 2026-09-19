@@ -965,6 +965,11 @@ model ForgeInstructionSet {
   neverDo            Json     @default("[]")
   createdAt          DateTime @default(now())
 
+  // The writer's own key, enforced (ADR-0091). A module may hold several instruction sets - a
+  // second hash is a second row by design - but never two rows for one hash. Three readers keyed
+  // on (forgeId, moduleId) alone until this existed, and on capital-forge/statement_ingest they
+  // picked different rows: one probed the 08-21 never-do list, another reported the 09-07 hash.
+  @@unique([forgeId, moduleId, contentHash])
   @@index([forgeId])
   @@index([moduleId])
 }

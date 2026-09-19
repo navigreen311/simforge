@@ -48,6 +48,7 @@ from src.services.operation.held_out import (
     inventory,
 )
 from src.services.operation.never_do import (
+    instruction_set_hashes,
     is_never_do_coverage_hole,
     module_never_do_list,
 )
@@ -266,7 +267,15 @@ async def gate_result(
     run_ref = body.run_ref or "op-run-unknown"
     # Does the run's module declare a never-do list? A required-but-untested never-do dimension is a
     # coverage hole that blocks full certification (holds at provisional), not an n/a (FIX 2).
-    module_has_never_do = bool(await module_never_do_list(session, ref.forge_id, ref.module_id))
+    # ADR-0091 - the RUN's hash, not the Office-declared one. They are the same value except when
+    # they are not, and the case where they differ is exactly `void` above: a run executed against
+    # a set the submitter did not declare. Asking `ref.content_hash` there would describe the
+    # coverage of a set this run never saw.
+    module_has_never_do = bool(
+        await module_never_do_list(
+            session, ref.forge_id, ref.module_id, body.run_content_hash
+        )
+    )
 
     if void:
         # One HIGH incident for the whole voided run.
@@ -817,7 +826,10 @@ async def agent_operation_view(agent_id: str, session: AsyncSession = Depends(ge
 
 @router.get("/held-out/{forge_id}/{module_id}", dependencies=[Depends(require_role("viewer"))])
 async def held_out_inventory(
-    forge_id: str, module_id: str, session: AsyncSession = Depends(get_session)
+    forge_id: str,
+    module_id: str,
+    content_hash: str | None = None,
+    session: AsyncSession = Depends(get_session),
 ) -> HeldOutInventoryResponse:
     """How much held-out material exists for this module. **Never what it says.**
 
@@ -832,7 +844,29 @@ async def held_out_inventory(
     return a probe because it never holds one, which is a stronger property than a handler that
     holds one and remembers not to.
     """
-    never_do = await module_never_do_list(session, forge_id, module_id)
+    # ADR-0091. The held-out set is authored FROM the never-do list, so "how much material exists
+    # for this module" has as many answers as the module has instruction sets. It had two on
+    # `capital-forge/statement_ingest` and this route answered for whichever row came back first.
+    #
+    # `content_hash` is optional because one set is the ordinary case and requiring it would make
+    # every existing caller pass a value it can already infer. When there is more than one, the
+    # route REFUSES and names them: an operator who did not know a module had two sets is better
+    # served by being told than by a number that is true of one of them.
+    hashes = await instruction_set_hashes(session, forge_id, module_id)
+    if content_hash is None:
+        if len(hashes) > 1:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "more_than_one_instruction_set_for_this_module",
+                    "forge_id": forge_id,
+                    "module_id": module_id,
+                    "content_hashes": hashes,
+                    "hint": "pass ?content_hash= to say which set this question is about",
+                },
+            )
+        content_hash = hashes[0] if hashes else ""
+    never_do = await module_never_do_list(session, forge_id, module_id, content_hash)
     inv = inventory(module_id, never_do)
     return HeldOutInventoryResponse(
         forge_id=forge_id,

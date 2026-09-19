@@ -313,21 +313,56 @@ async def test_the_denominator_is_carried_from_the_hand_over_and_never_invented(
 async def test_a_content_hash_mismatch_voids_and_is_not_softened(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """The run carries the hash it was OPENED with, not the one live at scoring time.
+    """Declared `sha256:declared`, executed `sha256:stale`. Every resulting cert is VOID ->
+    `revoked`, with one HIGH incident, and a perfect battery does not soften it by one step.
 
-    The instruction set was re-authored mid-battery (declared `sha256:declared`, the run executed
-    against `sha256:stale`). Every resulting cert is VOID -> `revoked`, with one HIGH incident, and
-    the agent's perfect battery does not soften it by one step.
+    **ADR-0091 CHANGED WHERE THIS PAYLOAD COMES FROM, AND THE RULE IS WHY IT SURVIVED.**
+
+    This test used to build the mismatch out of `battery_for_run`: a run opened on `sha256:stale`,
+    one instruction set on `sha256:declared`, and the battery would examine the agent against the
+    declared set, hand back both hashes, and let the gate void the lot.
+
+    That is no longer possible, and could not be. The battery now reads the row the run NAMES, so
+    `instruction_set.contentHash` and `run.instructionContentHash` are the same value by
+    construction - `is_content_hash_void` compares a value with itself and can never fire on this
+    path. The old mismatch was not a scenario the battery detected; it was the reader taking the
+    wrong row, reported after the fact.
+
+    **The rule is unharmed, because the rule was never about SimForge's own battery.** A
+    `GateResultRequest` arrives over the wire, and a submitter that declares one hash while its run
+    executed another is exactly what the VOID clause exists to catch. So the payload is now
+    constructed the way such a submitter would send it, which is also the only way it can now
+    arrive.
+
+    The battery half of this - a run naming a hash SimForge holds no set for - is a named skip, in
+    `test_the_set_the_run_names.py`.
     """
     await _seed(db_session, run_ref="op-run-battery-5", run_hash="sha256:stale")
+    # The set the run executed against, beside the declared one. Both rows exist because the
+    # writer's key is (forge, module, hash): re-authoring ADDS a row, it does not overwrite one.
+    db_session.add(
+        ForgeInstructionSet(
+            forgeId=FORGE,
+            moduleId=MODULE,
+            instructionVersion="1.3.0",
+            forgeApiVersion="2.1.3",
+            authoredBy="the-office",
+            contentHash="sha256:stale",
+            neverDo=list(PORTFOLIO_HEALTH_NEVER_DO),
+        )
+    )
+    await db_session.commit()
 
     built = await battery_for_run(
         db_session, "op-run-battery-5", runtime=_runtime(ScriptedProvider(_compliant))
     )
     assert not isinstance(built, BatterySkipped)
     assert built.run_content_hash == "sha256:stale"  # what the run EXECUTED against
-    assert built.instruction_set_ref.content_hash == DECLARED_HASH  # what the Office declared
+    # ADR-0091: the battery's own ref is now the run's hash. The submitter declares the other one.
+    assert built.instruction_set_ref.content_hash == "sha256:stale"
     assert built.agent_outcomes[0].passed is True  # the agent did nothing wrong
+
+    built.instruction_set_ref.content_hash = DECLARED_HASH  # what the Office declared
 
     body = (
         await client.post("/api/operation/gate-result", json=built.model_dump(mode="json"))
