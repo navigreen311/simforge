@@ -248,6 +248,17 @@ class AgentRunOutcome(BaseModel):
     #: a claim about the agent rather than about the run.
     score: float | None = None
     threshold: float | None = None
+    #: WHICH ANSWER KEYS THIS EXAM WAS GRADED AGAINST (ADR-0092 ruling 4).
+    #:
+    #: A digest over the submitted scenarios that were actually put, in authored order, covering
+    #: every field the grader compares. Until this existed the binding was INFERRED - the keys are
+    #: selected by (forge, module, instruction hash), so the answer key was implied by a hash of
+    #: the INSTRUCTIONS. A key could be edited or added without the instruction hash moving, and
+    #: no row could say which version of the curriculum an exam had actually seen.
+    #:
+    #: `None` when no submitted key was put, which is the honest value rather than a digest of
+    #: nothing: a held-out-only exam was graded against no answer key at all.
+    scenario_set_hash: str | None = None
     #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
     #:
     #: Optional on the wire and NOT optional in a certification: `gate_result` refuses to

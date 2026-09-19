@@ -3627,3 +3627,78 @@ build emitted a span, and a commit answers that where an unchanged "1.0.0" never
 
 Seven tests, each written to FAIL on the old rule - every fixture gives the module a second, newer
 set, which is the state where the two rules diverge. Suite 1,109 pass / 2 skip. Scheduler off.
+
+---
+
+# Entry 45 - four certifications for agents that failed three of five dimensions
+
+**19 September 2026.** ADR-0092. Four rulings; 1, 2 and 4 built, 3 executed.
+
+## What the row said
+
+    state                  certified
+    score                  1.0 / threshold 1.0
+    sequence_correctness   FAIL 0.0
+    failure_recognition    FAIL 0.0
+    escalation_discipline  FAIL 0.0
+    never_do_adherence     PASS 1.0
+    protocol_conformance   PASS 1.0
+
+Four of these. Nothing raised.
+
+## Two numbers, two sources, no join
+
+    battery.py    passed  = report.passed                     HELD-OUT attempts, only
+    battery.py    results = merge_dimension_results(both)      both halves
+    operation.py  elif not outcome.passed: FAILED              reads the first, never the second
+
+`ExamReport.passed` is `all(attempt.passed ...)`. Every held-out probe passed - 3 attempts, 11
+probes, 1.0 each. Every submitted competence class failed. The row reported the first as its
+verdict and the second as its record.
+
+**Until ADR-0089 this could not happen.** `submitted_rubric_results` was always empty, so `results`
+WAS the held-out result and the two agreed by construction. Wiring the submitted half in made them
+able to disagree, and nothing was added to make the verdict read the merge. Three days old, ours.
+
+## The second line of defence did not hold either
+
+`is_competence_unexercised` counted a class as exercised when `verdict in (PASS, FAIL)`. Five
+competence classes, all FAIL, read as a broad run. **A failure is not coverage.**
+
+## What the six rows become, replayed through the corrected predicates
+
+    assign_contract  ronan      failed     -> FAILED   (5 failing dimensions, not 1 bad attempt)
+    assign_contract  seraphine  failed     -> FAILED
+    buyer_match      ronan      CERTIFIED  -> FAILED
+    buyer_match      seraphine  CERTIFIED  -> FAILED
+    comp_analysis    victor     CERTIFIED  -> FAILED
+    property_lookup  victor     CERTIFIED  -> FAILED
+
+All six, and each caught TWICE - ruling 1 on the dimensions, ruling 2 on the classes. Not
+redundant: ruling 2 catches the run that passes every dimension it ran while demonstrating no
+competence, which ruling 1 cannot see.
+
+## Voided
+
+Four rows `revoked`, tier cleared, one HIGH SF-OPVOID incident each naming the failing dimensions.
+Backed up first. **Zero certified cre-forge rows remain.** The two failed rows stand.
+
+**Nothing outside SimForge had read them.** The Office's `certification` table: last write
+16 September. `provisioning_gate_result`: 18 September. `sweep_run` has never recorded a
+`verdict_ingest` pass at all. The four rows never left this database.
+
+## Left open on purpose
+
+`score` is still the held-out pass rate, so a FAILED row may carry score 1.0. A merged score is a
+new MEASURE and this repo versions measures deliberately (ADR-0070). The verdict is what was ruled;
+the number beside it is Ivan's.
+
+## Worth keeping
+
+**When two facts are computed from different inputs, name which one the decision reads.** Both
+numbers here were correct. The defect was that the verdict read one and the record showed the
+other, and for three days nothing exercised the case where they differ.
+
+And: the router-reachability walk earned its keep. Importing `VERDICT_FAIL` from `held_out_scoring`
+made the held-out grader reachable from a request handler; ADR-0050's test caught it on the first
+run. The constant lives in `rubric.py`, which the router already reaches.

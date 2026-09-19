@@ -55,6 +55,17 @@ class OperationCertification(Base):
     instructionContentHash: Mapped[str] = mapped_column(String)  # mismatch at run → VOID (Batch 4)
     # SEPARATE from and independent of the domain rubric_version — required, not optional.
     operationRubricVersion: Mapped[str] = mapped_column(String)  # semver
+    #: WHICH ANSWER KEYS THE EXAM WAS GRADED AGAINST (ADR-0092 ruling 4).
+    #:
+    #: `instructionContentHash` says which INSTRUCTIONS the run executed against. It does not say
+    #: which answer keys graded it, and until this column those were bound only by inference:
+    #: `submitted_keys_for` selects by (forge, module, instruction hash), so an edited or added
+    #: key changed the exam while the instruction hash stayed put and every row went on looking
+    #: the same.
+    #:
+    #: Nullable, and the null means something: no submitted key was put, so this exam was graded
+    #: against no answer key. A digest of the empty set would claim otherwise.
+    scenarioSetHash: Mapped[str | None] = mapped_column(String, nullable=True)
     #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
     #:
     #: Everything above describes the EXAM — which instructions, which Forge version,

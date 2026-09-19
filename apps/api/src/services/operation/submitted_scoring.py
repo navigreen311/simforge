@@ -28,6 +28,8 @@ THE PROBE, AND WHY IT IS DECLARED HERE FIRST (ADR-0087)
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -176,6 +178,50 @@ async def submitted_keys_for(
         )
         for r in rows
     ]
+
+
+def scenario_set_hash(keys: Sequence[SubmittedKey]) -> str | None:
+    """A digest naming WHICH ANSWER KEYS an exam was graded against (ADR-0092 ruling 4).
+
+    Over the keys that were actually PUT, in authored order, covering every field the grader
+    compares plus the situation it put. Two exams with the same digest were set the same questions
+    and marked to the same answers; two with different digests were not, and today nothing else in
+    a certification can tell them apart.
+
+    **Not over the instruction hash.** That is the point of the column. The keys are SELECTED by
+    (forge, module, instruction hash), so an edited key or an added one changes the exam without
+    moving that hash by a byte.
+
+    **`None` for an empty set, not a digest of nothing.** A held-out-only exam was graded against
+    no answer key at all, and `sha256(b"")` would say it was graded against one - the same class of
+    false record as a score of 0.0 for a battery that graded no probe.
+
+    Unputtable keys are excluded. A key with no situation was not asked, so it did not shape the
+    exam, and including it would make two exams that asked identical questions hash differently.
+    """
+    puttable = [k for k in keys if k.puttable]
+    if not puttable:
+        return None
+    payload = json.dumps(
+        [
+            {
+                "ref": k.ref,
+                "scenario_class": k.scenario_class,
+                "situation": k.situation,
+                "expected_act": k.expected_act,
+                "expected_record": k.expected_record,
+                "record_subject": k.record_subject,
+                "record_claim": k.record_claim,
+                "record_claim_options": list(k.record_claim_options or ()),
+                "expected_caveat": k.expected_caveat,
+            }
+            for k in puttable
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def probe_for(key: SubmittedKey) -> str | None:
