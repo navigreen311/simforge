@@ -1106,6 +1106,11 @@ model OperationCertification {
   forgeApiVersion        String // semver, earned under
   instructionContentHash String // mismatch at run → VOID
   operationRubricVersion String // semver, SEPARATE from domain rubric_version — required
+  // Which ANSWER KEYS the exam was graded against (ADR-0092). instructionContentHash says which
+  // instructions the run executed against and nothing about the keys; an edited or added key
+  // changed the exam while that hash stayed put. NULL = no submitted key was put, which is not
+  // the same as a digest of the empty set.
+  scenarioSetHash        String?
   // provider/model that ANSWERED the battery, e.g. ollama/llama3.1:8b. Everything above
   // describes the exam; this is the candidate. NULL only where nothing answered: a
   // timed-out run, or a department_context unit cleared by department state.

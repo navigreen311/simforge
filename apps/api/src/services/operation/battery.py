@@ -149,6 +149,7 @@ from src.services.operation.submitted_scoring import (
     grade_submitted_module,
     merge_submitted_attempts,
     probe_for,
+    scenario_set_hash,
     submitted_class_results,
     submitted_dimension_results,
     submitted_keys_for,
@@ -924,6 +925,16 @@ async def run_module_battery(
 # =================================================================================================
 
 
+def _any_dimension_failed(results: list[dict]) -> bool:
+    """Did any dimension in the MERGED rubric result fail (ADR-0092 ruling 1).
+
+    A list of dicts rather than the typed items, because this is called on the merged list before
+    it becomes `OperationRubricResultItem`s - the same list the payload carries, so there is no
+    second representation to keep true.
+    """
+    return any(item.get("verdict") == VERDICT_FAIL for item in results)
+
+
 def build_gate_result_request(
     *,
     report: ExamReport,
@@ -933,6 +944,7 @@ def build_gate_result_request(
     model_identity: dict | None = None,
     submitted_rubric_results: list[dict] | None = None,
     submitted_class_results: list[dict] | None = None,
+    scenario_set_hash: str | None = None,
 ) -> GateResultRequest:
     """Turn one battery's report into the payload `POST /operation/gate-result` accepts.
 
@@ -994,12 +1006,31 @@ def build_gate_result_request(
         forge_id=run.forgeId,
         functions_certified=0,
         functions_in_module=run.coverageDenominator,
-        passed=report.passed,
+        # ADR-0092 RULING 1 - THE VERDICT READS THE MERGED RESULT.
+        #
+        # `report.passed` is `all(attempt.passed ...)` over the HELD-OUT attempts and nothing
+        # else. Until the submitted half was wired in (ADR-0089) that was the whole exam, so this
+        # line and `results` above could not disagree. Once both halves merged into `results` and
+        # this line did not, they could - and on 19 September they did, four times: every held-out
+        # probe passed, every competence class failed, and four agents were certified.
+        #
+        # An agent that fails a competence dimension is not certified, whatever the held-out
+        # attempts scored. Read off `results`, which is the merged list this payload actually
+        # carries, so the verdict and the record cannot come apart again.
+        passed=report.passed and not _any_dimension_failed(results),
         # The run-level numbers, carried because a verdict The Office cannot place is a verdict it
         # will not record: `record_result` REFUSES a `certified` row with no tier, so a battery
         # that sent none produced a PASS that reached the boundary and stopped there.
+        #
+        # **`score` is still the HELD-OUT pass rate, and a FAIL may now carry 1.0.** That is not
+        # an oversight: a merged score would be a new measure, and this repository versions its
+        # measures deliberately (ADR-0070) rather than redefining one in passing. The verdict is
+        # the thing the ruling names; what number should sit beside it is Ivan's to settle.
         score=report.score,
         threshold=report.threshold,
+        # ADR-0092 ruling 4 - WHICH answer keys graded this, recorded on the certification rather
+        # than inferred from the instruction hash for the rest of the row's life.
+        scenario_set_hash=scenario_set_hash,
         # A CEILING this exam justifies, not a tier it measured - see `trust_tier`. The gate-result
         # path caps it by state, so a FAIL or a `provisional` withholds it here without this
         # module having to know which of the three withholds fired.
@@ -1220,7 +1251,7 @@ async def battery_for_run(
     # gradeable, and a submitted-only run would be the mirror image of today's discipline-only one,
     # needing a second clause on the breadth rule to catch. Everything this needs is already in
     # scope here - the run, the gates, the production-settings runtime and the never-do list.
-    submitted = await run_submitted_battery(
+    submitted, submitted_set_hash = await run_submitted_battery(
         session,
         run=run,
         village_ref=village_ref,
@@ -1273,6 +1304,8 @@ async def battery_for_run(
         # by a submitted PASS.
         submitted_rubric_results=submitted_dimension_results(submitted) or None,
         submitted_class_results=submitted_class_results(submitted) or None,
+        # ADR-0092 ruling 4. Travels with the halves it describes.
+        scenario_set_hash=submitted_set_hash,
     )
 
 
@@ -1284,7 +1317,7 @@ async def run_submitted_battery(
     never_do: Sequence[str],
     runtime: AgentRuntime,
     seed: int = 0,
-) -> tuple[ScenarioVerdict, ...]:
+) -> tuple[tuple[ScenarioVerdict, ...], str | None]:
     """The submitted half: put each stored scenario's situation, grade the answer by transcription.
 
     Ivan's rulings, ADR-0089:
@@ -1309,7 +1342,12 @@ async def run_submitted_battery(
         content_hash=run.instructionContentHash,
     )
     if not keys:
-        return ()
+        return (), None
+
+    # ADR-0092 ruling 4 - WHICH keys, recorded rather than inferred. Taken from the set this run
+    # actually put, before any of them is graded, so the digest describes the exam and not its
+    # outcome.
+    set_hash = scenario_set_hash(keys)
 
     context = battery_system_context(run.moduleId, never_do)
     attempts: list[tuple[ScenarioVerdict, ...]] = []
@@ -1330,7 +1368,7 @@ async def run_submitted_battery(
             )
             answers[key.ref] = parse_answer(response.content)
         attempts.append(grade_submitted_module(keys, answers))
-    return merge_submitted_attempts(attempts)
+    return merge_submitted_attempts(attempts), set_hash
 
 
 async def submit_battery_result(
