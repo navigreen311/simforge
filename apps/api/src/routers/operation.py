@@ -156,6 +156,7 @@ async def submit_curriculum(
                 instructionContentHash=ref.content_hash,
                 scenarioClass=scenario.scenario_class,
                 instructionSection=scenario.instruction_section,
+                situation=scenario.situation,
                 expectedBehavior=scenario.expected_behavior,
                 expectedEscalation=scenario.expected_escalation,
                 neverDoEntry=scenario.never_do_entry,

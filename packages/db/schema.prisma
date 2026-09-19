@@ -1001,6 +1001,11 @@ model OperationScenarioSubmission {
   /// The submitter's own pointer back into the manual.
   instructionSection String
 
+  /// What the agent is ASKED (ADR-0087). Distinct from expectedBehavior below, which is
+  /// what a good ANSWER looks like - rendering that into a probe would hand the agent the
+  /// answer. Nullable while The Office is not yet sending it.
+  situation          String?
+
   /// The answer key, in the submitter's words. The approved Greenstone keys run to
   /// several hundred words each and cite their sources.
   expectedBehavior   String
