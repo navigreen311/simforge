@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
+from src.services.operation.views import protocol_versions_of
 
 #: Returned when the run exists and nothing has been observed for it. Distinct from a 404: the run
 #: is real and no battery has reported, which is exactly the state the whole system sat in.
@@ -114,6 +115,9 @@ async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None
             "rubric_dimension_spread": c.rubricDimensionSpread,
             "rubric_spread_measure": getattr(c, "rubricSpreadMeasure", None),
             "withheld_because": getattr(c, "withheldBecause", None) or [],
+            "response_protocol_versions": protocol_versions_of(
+                getattr(c, "examAttempts", None)
+            ),
             "failure_modes_observed": c.failureModesObserved,
             "created_at": c.createdAt.isoformat() if c.createdAt else None,
         }

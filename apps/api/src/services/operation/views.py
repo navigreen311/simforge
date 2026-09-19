@@ -27,6 +27,32 @@ DOMAIN_RUBRIC_DIMENSIONS = 8
 THIN_COVERAGE_THRESHOLD = 0.5
 
 
+
+def protocol_versions_of(exam_attempts: list | None) -> list[str]:
+    """Which response-protocol version(s) a verdict was earned under (ADR-0085).
+
+    Ivan's ruling: *a verdict is shown with the protocol version it was earned under, so a result
+    from two majors ago describes itself instead of reading as a current judgment.*
+
+    **The fact was already stored and nothing read it.** Every attempt record carries
+    `response_protocol_version`; the six Greenstone verdicts of 18 September carry `3.0.0` while
+    the protocol is at 4.0.0, so "earned two majors ago" has been in the database the whole time.
+
+    Returns a LIST, not a string, because three attempts could in principle disagree - a process
+    restarted mid-exam across a protocol change. One entry is the normal case; two is a finding,
+    and collapsing it to the first would hide it.
+    """
+    if not exam_attempts:
+        return []
+    seen: list[str] = []
+    for attempt in exam_attempts:
+        if not isinstance(attempt, dict):
+            continue
+        version = attempt.get("response_protocol_version")
+        if version and version not in seen:
+            seen.append(str(version))
+    return seen
+
 def _humanize(raw: str | None) -> str:
     if not raw:
         return "—"
@@ -59,6 +85,9 @@ def _agent_operation_cert(
         "rubric_spread_measure": c.rubricSpreadMeasure,
         # ADR-0072 - the hold explains itself instead of being re-derived here.
         "withheld_because": c.withheldBecause or [],
+        # ADR-0085 - the verdict says which exam it sat. A result from two protocol majors
+        # ago describes itself instead of reading as a current judgment.
+        "response_protocol_versions": protocol_versions_of(getattr(c, "examAttempts", None)),
         "per_scenario_class_results": [
             {"scenario_class": k, "verdict": v} for k, v in (c.perScenarioClass or {}).items()
         ],
