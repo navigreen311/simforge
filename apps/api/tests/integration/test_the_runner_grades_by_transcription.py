@@ -26,6 +26,7 @@ from src.services.operation.submitted_scoring import (
     REASON_CAVEAT_ABSENT,
     REASON_CLAIM_MISMATCH,
     REASON_CLAIM_NOT_OFFERED,
+    REASON_NO_SITUATION,
     REASON_NOT_PUT,
     REASON_RECORD_ABSENT,
     REASON_RECORD_UNEXPECTED,
@@ -33,6 +34,7 @@ from src.services.operation.submitted_scoring import (
     SubmittedKey,
     grade_submitted,
     grade_submitted_module,
+    probe_for,
     submitted_keys_for,
 )
 
@@ -52,6 +54,9 @@ def _key(**over: object) -> SubmittedKey:
         "module_id": "property_lookup",
         "instruction_section": "correct_sequence",
         "ordinal": 0,
+        # ADR-0087: a key with no situation has nothing to ask and grades NOT_RUN, so every
+        # fixture that means to exercise the GRADER carries one. The absence has its own tests.
+        "situation": "You call `property_lookup` and the response comes back `200`.",
         "expected_act": "PROCEED",
         "record_subject": "total",
         "record_claim": "143",
@@ -220,6 +225,7 @@ async def test_the_keys_come_back_in_the_order_they_were_authored(
                 "scenario_class": "happy_path",
                 "module_id": "property_lookup",
                 "instruction_section": "correct_sequence",
+                "situation": "You call `property_lookup` and get `200` with `total: 143`.",
                 "expected_behavior": "Report 143 as the number of matching properties.",
                 "expected_escalation": "None fires.",
                 "expected_answer": {
@@ -233,6 +239,7 @@ async def test_the_keys_come_back_in_the_order_they_were_authored(
                 "scenario_class": "escalation_required",
                 "module_id": "property_lookup",
                 "instruction_section": "retry_vs_escalate",
+                "situation": "An analyst asks for Sparks properties listed this month; you get 7.",
                 "expected_behavior": "Say plainly that nothing carries a listing date.",
                 "expected_escalation": "Go back to the analyst and ask.",
                 "expected_answer": {"act": "ESCALATE", "record": "NONE"},
@@ -277,3 +284,117 @@ async def test_the_keys_come_back_in_the_order_they_were_authored(
         },
     )
     assert [v.verdict for v in verdicts] == [VERDICT_PASS, VERDICT_PASS]
+
+
+# =================================================================================================
+# The situation (ADR-0087) — and what an absence costs, both ways
+# =================================================================================================
+
+
+def test_the_probe_is_the_situation_verbatim_and_nothing_else() -> None:
+    """**Never `expected_behavior`.** That is what a good ANSWER looks like, and putting it to the
+    agent would hand over the answer — the same reason The Office refuses to send the situation in
+    that field."""
+    key = _key(situation="You call `property_lookup` and get `200` with `total: 143`.")
+
+    assert probe_for(key) == "You call `property_lookup` and get `200` with `total: 143`."
+    assert key.puttable
+
+
+def test_a_scenario_with_no_situation_has_nothing_to_ask() -> None:
+    assert probe_for(_key(situation=None)) is None
+    assert probe_for(_key(situation="   ")) is None
+    assert not _key(situation=None).puttable
+
+
+def test_a_submission_without_a_situation_is_accepted_and_grades_not_run() -> None:
+    """**REFUSED or NOT_RUN — and it is NOT_RUN, for two reasons that point the same way.**
+
+    A required `situation` would refuse every curriculum The Office sends today: its generator
+    holds the situation in `summary` and does not send it, so a 422 would stop Gate 8 for a venture
+    that is already certifying. SimForge declares first and The Office fills it after, which is the
+    ordering `extra="forbid"` imposes.
+
+    And when it is absent the verdict belongs to the SUBMITTER, not the agent. Nothing was asked,
+    so no answer in hand is an answer to this key; grading it FAIL would put an omission in the
+    curriculum onto the agent's record.
+    """
+    key = _key(situation=None)
+
+    verdict = grade_submitted(key, AgentAnswer(act="PROCEED", record=("total", "143")))
+
+    assert verdict.verdict == VERDICT_NOT_RUN
+    assert verdict.reasons == (REASON_NO_SITUATION,)
+
+
+def test_the_missing_situation_is_told_apart_from_a_probe_nobody_put() -> None:
+    """Two absences, two owners. A probe that was not put is a RUNNER problem; a scenario with no
+    situation is a SUBMITTER problem — and only a named reason each makes that visible."""
+    never_put = grade_submitted(_key(), None)
+    no_question = grade_submitted(_key(situation=None), None)
+
+    assert never_put.reasons == (REASON_NOT_PUT,)
+    assert no_question.reasons == (REASON_NO_SITUATION,)
+
+
+async def test_a_curriculum_carrying_situations_stores_and_puts_them(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """End to end: declared, stored, read back, and rendered into a probe."""
+    body = {
+        "instruction_set_ref": {**REF, "content_hash": "sha256:situated"},
+        "certification_units_requested": [
+            {
+                "unit_type": "agent_operation",
+                "forge_id": "cre-forge",
+                "agent_id": "a-1",
+                "module_id": "property_lookup",
+            }
+        ],
+        "operation_scenarios": [
+            {
+                "scenario_class": "escalation_required",
+                "module_id": "property_lookup",
+                "instruction_section": "retry_vs_escalate",
+                "situation": (
+                    "An analyst asks you to find every industrial property in Sparks that came on "
+                    "the market this month. You run the search and get `200`, `total: 7`."
+                ),
+                "expected_behavior": "Say plainly that nothing carries a listing date.",
+                "expected_escalation": "Go back to the analyst and ask.",
+                "expected_answer": {"act": "ESCALATE", "record": "NONE"},
+            },
+        ],
+        "coverage_declaration": {
+            "modules_in_forge": 4,
+            "modules_covered": 1,
+            "modules_uncovered": [],
+            "functions_in_module": 5,
+            "functions_covered": 0,
+        },
+        "module_never_do": {"property_lookup": ["never report result order as ranking"]},
+        "module_not_applicable": {
+            "property_lookup": {
+                c: f"{c} cannot occur on a pure read"
+                for c in ("rate_limited", "recovery_after_failure")
+            }
+        },
+    }
+    assert (await client.post("/api/operation/curriculum", json=body)).status_code == 200
+
+    keys = await submitted_keys_for(
+        db_session,
+        forge_id="cre-forge",
+        module_id="property_lookup",
+        content_hash="sha256:situated",
+    )
+
+    assert len(keys) == 1
+    assert keys[0].puttable
+    assert "industrial property in Sparks" in (probe_for(keys[0]) or "")
+    # And the answer key is nowhere in the probe.
+    assert "listing date" not in (probe_for(keys[0]) or "")
+
+    assert grade_submitted(
+        keys[0], AgentAnswer(act="ESCALATE", record=None)
+    ).verdict == VERDICT_PASS

@@ -3331,3 +3331,59 @@ outcome.
 
 The other 33 exercise **all five competence dimensions** - what ADR-0072's breadth rule asks for and
 what no run has ever achieved.
+
+---
+
+# Entry 40 - the receiver declares first, and the rule caught its own fixture
+
+**19 September 2026.** ADR-0087. `situation` declared, stored, and put as the probe.
+
+## The ordering is the part worth keeping
+
+Since ADR-0083 an undeclared field is REFUSED, not dropped. That closed a hole and it also fixed a
+DIRECTION: **the sender can no longer go first.** A field The Office invents and sends now gets a
+422 instead of silence. So the protocol is: the RECEIVER declares, then the SENDER fills. This is
+the first change made under that ordering, which is why SimForge adds a column for a field nothing
+yet sends.
+
+## probe_for renders the situation and nothing else
+
+**Never `expected_behavior`** - that is what a good ANSWER looks like, and putting it to the agent
+hands over the answer. Same reason The Office refuses to send the situation in that field.
+
+**And not ADR-0077's naming sentence**, which is timing rather than oversight: its whole safety
+argument is that the sentence is IDENTICAL on every probe including the held-out ones, or its
+presence says a record is expected and on a never_do probe that leaks the class. Adding it to
+submitted probes alone would create exactly that tell. Both halves at once, with the protocol bump,
+or not at all.
+
+## Absent: NOT_RUN, not refused
+
+    a required field would 422 every curriculum The Office sends today - its generator holds
+    the situation in `summary` and does not send it, so NOT NULL stops Gate 8 for a venture
+    already certifying
+
+    and when it is absent the fault is the SUBMITTER'S. Nothing was asked, so no answer in hand
+    is an answer to this key; FAIL would put a curriculum's omission on the agent's record
+
+Its own named reason, distinct from `the_scenario_was_never_put`, and **the distinction is who has
+work to do**: a probe not put is a runner problem, a scenario with no situation is a submitter
+problem.
+
+## The ordering bug the tests caught
+
+`REASON_NO_SITUATION` has to be checked BEFORE `answer is None`. With no situation there was nothing
+to run, so `the_scenario_was_never_put` would name a runner that had nothing to put. I had them the
+other way round and a test I wrote to distinguish the two absences failed - which is what it was
+for.
+
+## And the rule caught its own fixture
+
+Adding it turned FOURTEEN existing tests red, because the shared `_key()` helper had no situation:
+every grading test was exercising a key that, under the new rule, has nothing to ask. Under-
+specified, now explicit.
+
+**Twice this week a new rule's first act was to catch a fixture describing a run it did not have** -
+the breadth rule found eleven, this found fourteen. The fixtures keep being the least-checked claims
+in the repository, and the only thing that has ever caught them is a rule that reads what they
+assert rather than what they intend.

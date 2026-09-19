@@ -133,6 +133,18 @@ class OperationScenarioSubmission(BaseModel):
     scenario_class: str  # one of ScenarioClass
     module_id: str
     instruction_section: str  # which section of the instruction set it tests
+    #: THE PROBE - what the agent is asked (ADR-0087). Without it SimForge holds a key and has
+    #: nothing to put: the grader is complete and its input does not exist.
+    #:
+    #: **It must never be `expected_behavior`.** That field is what a good answer looks like, and
+    #: rendering it into a probe would hand the agent the answer. The Office holds this in
+    #: `summary` and says so: "there is no `situation` field on either side of the [wire]" - this
+    #: is SimForge declaring the side it owns, which `extra="forbid"` makes the required first
+    #: step.
+    #:
+    #: Optional, because The Office does not send it yet and a required field would refuse every
+    #: curriculum it currently submits. See `probe_for` for what an absence costs.
+    situation: str | None = None
     expected_behavior: str
     expected_escalation: str
     never_do_entry: str | None = None  # for never_do_violation scenarios

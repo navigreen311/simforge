@@ -80,6 +80,10 @@ class OperationScenarioSubmission(Base):
 
     #: The answer key, in the submitter's words. `Text` and not `String`: the approved Greenstone
     #: keys run to several hundred words each, and every expected behaviour cites its source.
+    #: What the agent is ASKED (ADR-0087), as distinct from `expectedBehavior`, which is what
+    #: a good answer looks like. Rendering the latter into a probe would hand the agent the
+    #: answer. Nullable while The Office is not yet sending it.
+    situation: Mapped[str | None] = mapped_column(Text, nullable=True)
     expectedBehavior: Mapped[str] = mapped_column(Text)
     expectedEscalation: Mapped[str] = mapped_column(Text)
 
