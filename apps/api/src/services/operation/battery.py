@@ -131,6 +131,7 @@ from src.services.operation.held_out_scoring import (
     ObservedBehaviour,
     Probe,
     ProtocolViolation,
+    ScenarioVerdict,
     run_held_out_battery_async,
 )
 from src.services.operation.never_do import module_never_do_list
@@ -143,6 +144,14 @@ from src.services.operation.rubric import (
     VERDICT_NOT_RUN,
     VERDICT_PASS,
     merge_dimension_results,
+)
+from src.services.operation.submitted_scoring import (
+    grade_submitted_module,
+    merge_submitted_attempts,
+    probe_for,
+    submitted_class_results,
+    submitted_dimension_results,
+    submitted_keys_for,
 )
 from src.services.operation.trust_tier import BATTERY_TIER_CEILING
 from src.services.village.model_config import VillageConfigError, read_village_agent_model
@@ -1148,6 +1157,22 @@ async def battery_for_run(
         for attempt in range(EXAM_ATTEMPTS)
     ]
     report = ExamReport.of(*attempts)
+
+    # ADR-0089 - THE SUBMITTED HALF, INSIDE THIS FUNCTION AND NOT BESIDE IT.
+    #
+    # Ivan ruled against a second entry point: two of them could disagree about whether a run is
+    # gradeable, and a submitted-only run would be the mirror image of today's discipline-only one,
+    # needing a second clause on the breadth rule to catch. Everything this needs is already in
+    # scope here - the run, the gates, the production-settings runtime and the never-do list.
+    submitted = await run_submitted_battery(
+        session,
+        run=run,
+        village_ref=village_ref,
+        never_do=never_do,
+        runtime=at_production,
+        seed=seed,
+    )
+
     log.info(
         "exam_ran",
         run_ref=run_ref,
@@ -1160,6 +1185,8 @@ async def battery_for_run(
         probes=report.probes_put,
         unreadable=report.unreadable_answers,
         passed=report.passed,
+        submitted_scenarios=len(submitted),
+        submitted_failed=sum(1 for v in submitted if v.verdict == VERDICT_FAIL),
     )
     return build_gate_result_request(
         report=report,
@@ -1179,7 +1206,75 @@ async def battery_for_run(
         # `None` when the provider cannot describe itself, which the gate-result path refuses to
         # certify rather than papering over here.
         model_identity=examiner.as_record() if examiner else None,
+        # P3 (ADR-0089). Both halves, and the builder already refuses one without the other:
+        # dimensions are a score and classes are their source, so a merged result carrying
+        # submitted dimensions and no submitted classes would read downstream as a battery of
+        # SimForge's own devising.
+        #
+        # `merge_dimension_results` takes the WORSE verdict per dimension, which matters on
+        # `failure_recognition` - the one dimension both halves report into, held-out
+        # `silent_failure` beside submitted `partial_failure`. A held-out FAIL is never softened
+        # by a submitted PASS.
+        submitted_rubric_results=submitted_dimension_results(submitted) or None,
+        submitted_class_results=submitted_class_results(submitted) or None,
     )
+
+
+async def run_submitted_battery(
+    session: AsyncSession,
+    *,
+    run: OperationRun,
+    village_ref: str,
+    never_do: Sequence[str],
+    runtime: AgentRuntime,
+    seed: int = 0,
+) -> tuple[ScenarioVerdict, ...]:
+    """The submitted half: put each stored scenario's situation, grade the answer by transcription.
+
+    Ivan's rulings, ADR-0089:
+
+    **Three attempts, at 44 scenarios.** *A pass means passed every time. If it proves too slow,
+    the answer is fewer scenarios or a faster model, never fewer attempts.* Same count, same
+    distinct seeds and same weakest-wins reduction as the held-out half, because the two merge into
+    one rubric and a different rule on each would make the merged number mean neither.
+
+    **The run's own content hash**, never the instruction set's current one. An instruction set
+    re-authored mid-run must not silently change what an exam was set from - the same distinction
+    `build_gate_result_request` draws to VOID a cert whose hashes disagree.
+
+    **The system context is shared with the held-out half.** A submitted probe and a held-out probe
+    must be indistinguishable in everything but the situation; a different context between them is
+    a tell, and the agent that notices it knows which probes are the graded refusals.
+    """
+    keys = await submitted_keys_for(
+        session,
+        forge_id=run.forgeId,
+        module_id=run.moduleId,
+        content_hash=run.instructionContentHash,
+    )
+    if not keys:
+        return ()
+
+    context = battery_system_context(run.moduleId, never_do)
+    attempts: list[tuple[ScenarioVerdict, ...]] = []
+    for attempt in range(EXAM_ATTEMPTS):
+        answers: dict[str, object | None] = {}
+        for key in keys:
+            probe = probe_for(key)
+            if probe is None:
+                # No situation - nothing to ask. `grade_submitted` reports it as the submitter's
+                # omission rather than the agent's failure, and re-asking on the next attempt
+                # would put the same nothing twice.
+                continue
+            response = await runtime.turn(
+                village_ref,
+                [{"role": "scenario", "content": probe}],
+                seed + attempt,
+                extra_system=context,
+            )
+            answers[key.ref] = parse_answer(response.content)
+        attempts.append(grade_submitted_module(keys, answers))
+    return merge_submitted_attempts(attempts)
 
 
 async def submit_battery_result(

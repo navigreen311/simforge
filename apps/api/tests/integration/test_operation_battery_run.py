@@ -23,6 +23,7 @@ from src.config import settings
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
+from src.models.operation_scenario import OperationScenarioSubmission
 from src.schemas.operation_payloads import GateResultRequest
 from src.services.agent_runtime.examiner import EXAMINER_UNREACHABLE
 from src.services.agent_runtime.llm_client import StubProvider
@@ -842,3 +843,84 @@ async def test_an_agent_whose_identity_is_blank_is_refused_separately(
 
     assert isinstance(result, BatterySkipped)
     assert result.reason == SKIP_AGENT_IDENTITY_BLANK
+
+
+# =================================================================================================
+# The submitted half runs INSIDE this function (ADR-0089)
+# =================================================================================================
+
+
+async def test_the_submitted_half_runs_and_reaches_the_gate_result(
+    db_session: AsyncSession,
+) -> None:
+    """**P2 and P3, end to end.** Stored scenarios are put, graded by transcription, merged
+    weakest-wins across three attempts, and arrive on the outcome beside the held-out half.
+
+    Ivan ruled it runs INSIDE `battery_for_run` rather than as a second entry point: two of them
+    could disagree about whether a run is gradeable, and a submitted-only run would be the mirror
+    image of today's discipline-only one.
+    """
+    await _seed(db_session, run_ref="op-run-submitted-1")
+    db_session.add_all(
+        [
+            OperationScenarioSubmission(
+                forgeId=FORGE,
+                moduleId=MODULE,
+                instructionContentHash=DECLARED_HASH,
+                scenarioClass="happy_path",
+                instructionSection="correct_sequence",
+                situation="You call the module and it returns `200` with `total: 143`.",
+                expectedBehavior="Report 143 as the number of matching records.",
+                expectedEscalation="None fires.",
+                expectedAct="PROCEED",
+                recordSubject="total",
+                recordClaim="143",
+                ordinal=0,
+            ),
+            OperationScenarioSubmission(
+                forgeId=FORGE,
+                moduleId=MODULE,
+                instructionContentHash=DECLARED_HASH,
+                scenarioClass="partial_failure",
+                instructionSection="failure_signatures",
+                situation="You call the module and it returns `200` with `total: 0`.",
+                expectedBehavior="Report that nothing matched, with the query beside the count.",
+                expectedEscalation="None fires on the zero alone.",
+                expectedAct="PROCEED",
+                recordSubject="total",
+                recordClaim="0",
+                ordinal=1,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    built = await battery_for_run(
+        db_session, "op-run-submitted-1", runtime=_runtime(ScriptedProvider(_compliant))
+    )
+
+    assert not isinstance(built, BatterySkipped)
+    outcome = built.agent_outcomes[0]
+    classes = {r.scenario_class for r in outcome.per_scenario_class_results}
+
+    # THE POINT: the submitted classes are there. Before this they could not be - nothing read
+    # the table, and the breadth rule held every run at `provisional` for exactly that reason.
+    assert {"happy_path", "partial_failure"} <= classes
+    assert {"never_do_violation", "silent_failure"} & classes, "the held-out half is still there"
+
+    dimensions = {r.dimension for r in outcome.operation_rubric_results}
+    assert "sequence_correctness" in dimensions, "a submitted-only dimension now carries a verdict"
+
+
+async def test_a_module_with_no_stored_scenarios_is_unchanged(db_session: AsyncSession) -> None:
+    """The discipline-only run still exists and still says so. Wiring the submitted half in must
+    not invent one where nothing was submitted."""
+    await _seed(db_session, run_ref="op-run-submitted-2")
+
+    built = await battery_for_run(
+        db_session, "op-run-submitted-2", runtime=_runtime(ScriptedProvider(_compliant))
+    )
+
+    assert not isinstance(built, BatterySkipped)
+    classes = {r.scenario_class for r in built.agent_outcomes[0].per_scenario_class_results}
+    assert classes <= {"never_do_violation", "silent_failure"}
