@@ -7,6 +7,8 @@ numbers**, because a single number can only ever say what it was told.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter
 
 from src.build_info import STARTED_COMMIT, checkout_commit, commits_differ
@@ -42,9 +44,24 @@ _REPORTED_PRESENCE: tuple[str, ...] = (
     "database_url",
     "office_tenant_token",
     "clerk_secret_key",
-    "village_db_path",
-    "village_config_path",
     "anthropic_api_key",
+)
+
+#: Settings that name a FILE, and the environment variable that sets each.
+#:
+#: **Reported by whether they RESOLVE, not by whether they have a value** (ADR-0088). For two days
+#: `village_db_path` read as `configured: true` while pointing at a file that does not exist -
+#: because it has a default, and a default is a value. `configured` answered "is there a string",
+#: and for a path the useful question is "is there a file".
+#:
+#: `is_default` is the other half of that, and it is compared against the FIELD'S DEFAULT rather
+#: than against `os.environ`. A value set in `.env` is not in the process environment - pydantic
+#: reads the file into the settings object - so an environment check would report every configured
+#: path as unconfigured, which is the same class of wrong answer in the opposite direction.
+_REPORTED_PATHS: tuple[str, ...] = (
+    "village_config_path",
+    "village_db_path",
+    "village_data_path",
 )
 
 
@@ -63,7 +80,30 @@ def _launch_environment() -> dict:
     for name in _REPORTED_PRESENCE:
         value = getattr(settings, name, None)
         present[name] = bool(value)
-    return {"modes": modes, "configured": present}
+    return {"modes": modes, "configured": present, "paths": _path_report()}
+
+
+def _path_report() -> dict:
+    """Each file-valued setting: set, from where, and **whether it is actually there.**
+
+    The value itself is not reported. An absolute path carries a username and this route is
+    public; `resolves` is what an operator needs and `value` is not.
+
+    Relative paths resolve against the process's working directory, which is what the application
+    itself would do - so a path that reads `resolves: false` here fails for the application too,
+    rather than only for this report.
+    """
+    out: dict = {}
+    for name in _REPORTED_PATHS:
+        raw = (getattr(settings, name, None) or "").strip()
+        field = type(settings).model_fields.get(name)
+        default = "" if field is None or field.default is None else str(field.default)
+        out[name] = {
+            "value_set": bool(raw),
+            "is_default": raw == default.strip(),
+            "resolves": bool(raw) and Path(raw).exists(),
+        }
+    return out
 
 
 @router.get("")

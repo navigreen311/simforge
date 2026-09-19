@@ -3387,3 +3387,56 @@ specified, now explicit.
 the breadth rule found eleven, this found fourteen. The fixtures keep being the least-checked claims
 in the repository, and the only thing that has ever caught them is a rule that reads what they
 assert rather than what they intend.
+
+---
+
+# Entry 41 - the environment stops being the blocker, and the endpoint lies twice in two days
+
+**19 September 2026.** ADR-0088.
+
+## The settings, in `.env`, where a restart keeps them
+
+    VILLAGE_CONFIG_PATH   .../village1.0.2/config.yaml
+    VILLAGE_DB_PATH       .../village1.0.2/village.db
+    EXAM_MODEL_DIGEST     sha256:ac896e5b...c69dba
+    SCHEDULER_ENABLED     false
+
+**The `sha256:` prefix is load-bearing and nearly went in wrong.** Ollama's /api/tags returns BARE
+HEX; `llm_client.py:326` writes `f"sha256:{digest}"`. A pin copied straight off the API would
+compare unequal and report EXAMINER_TAG_MOVED - "every certification earned under the old pin is
+against a model that no longer exists here" - a drift event that never happened, in the most
+alarming words the module owns. Checked against the code before writing it.
+
+## The endpoint lied twice, in opposite directions
+
+    v1   `configured: true` for a path pointing at nothing - because a default IS a value
+    v2   `from_environment: false` for every path set in `.env` - because pydantic reads the
+         file into the settings object and never touches os.environ
+
+The second was mine, written while fixing the first, and caught by looking at the output rather
+than by a test. It now reports `is_default`, compared against the FIELD'S default, which is the
+only question that survives both. **A version endpoint that has produced a misleading green and a
+misleading red inside two days is an argument for the tests that now pin both.**
+
+And no path VALUE is reported: an absolute path carries a username and the route is public.
+
+## What a battery would refuse on now - checked, not started
+
+    pin   sha256:ac896e5b...c69dba
+    live  sha256:ac896e5b...c69dba
+    EXAMINER: OK        identity source: village_db
+    victor_serath OK  ronan_valek OK  seraphine_valek OK
+
+All six examiner refusals pass, including the two that were blocking. Identity resolves from
+village.db for all three Greenstone agents - **the hand-corrected rows of September are no longer
+needed.**
+
+What would still stop one, in order:
+
+    1. nothing STARTS it - SCHEDULER_ENABLED=false, and no endpoint may trigger a battery
+    2. underwrite_deal skips - SKIP_NO_MODULE; four of five modules have an instruction set
+    3. any run still reaches PROVISIONAL, not certified - nothing submits a `situation`, so every
+       submitted key is NOT_RUN and the breadth rule holds it
+
+**The environment is no longer what blocks a verdict.** The remaining three are a scheduler switch,
+an instruction set The Office owns, and one field on its payload.
