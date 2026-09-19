@@ -3816,3 +3816,71 @@ ADR-0082 split this key and **the split keys are not the ones submitted.**
 was ruled on 18 September with the measurement already in it - subject match equalled record
 presence in all twenty cells. It sat unbuilt for one day, and in that day an exam ran, four agents
 were certified, and every competence dimension failed partly because of it.
+
+---
+
+# Entry 48 - one draw is not a rate, and two of mine were wrong
+
+**19 September 2026.** ADR-0095, and [one-draw-is-not-a-rate](../one-draw-is-not-a-rate-2026-09-19.md).
+400 probes, production settings, every figure replicated across two runs of 20. No battery.
+
+## The ruling
+
+A rate is never reported from a single draw. One probe at 0.7 says nothing about a rate;
+measurements quoted in reports are replicated, as the exam itself already requires with three
+attempts.
+
+## Two corrections to what I reported this morning
+
+    CLAIMED  malformed_input's act was DECLINE at 4.0.0, and 5.0.0 broke it
+    MEASURED DECLINE 9/40. REFUSE was ALREADY 25/40. Not right -> wrong;
+             mostly-wrong -> almost-always-wrong (2/40 DECLINE at 5.0.0)
+
+    CLAIMED  the naming sentence did not prevent a spurious record
+    MEASURED it HALVES them.  4.0.0 19/40  ->  5.0.0 8/40
+
+The real effect on the act replicated (5->0, 4->2) and it is **the probe, not the protocol**:
+5.0.0-with-bare-probe reproduces 4.0.0 to within one draw in forty.
+
+ESCALATE is **0/120** across every arm. That key is unsatisfiable on the act, full stop.
+
+## The mechanism, tested: REFUSED in the options pulls the act
+
+`comp_analysis/malformed_input`, 40 draws per arm, only the option strings differ:
+
+    as submitted  `ACCEPTED`, `REFUSED - NOT A UUID`      DECLINE 3/40   REFUSE 35/40
+    neutral       `ACCEPTED`, `NOT A UUID`                DECLINE 4/40   REFUSE 25/40
+    swapped       `ACCEPTED`, `DECLINED - NOT A UUID`     DECLINE 6/40   REFUSE 30/40
+    no options    (open claim)                            DECLINE 9/40   REFUSE 28/40
+    no naming at all                                      DECLINE 9/40   REFUSE 25/40
+
+**Holds, cleanly, on REFUSE.** Removing the word takes REFUSE to 25/40 - EXACTLY the no-naming
+baseline. The word accounts for the entire excess.
+
+**Not symmetric.** DECLINED moves DECLINE 3->6 and REFUSE 35->30. Right direction, a fraction of the
+size, suggestive not established.
+
+**A second effect the hypothesis does not cover:** a closed list of ANY wording suppresses DECLINE,
+9/40 -> 4/40. Constraining the claim discourages the act that records nothing.
+
+**And the biggest fact is neither:** REFUSE is 62% with nothing suggestive in the probe at all. The
+option wording is a 10-point effect on top of an act that was already wrong six times in ten.
+
+## What it means for the corpus
+
+    44 keys / 25 with options / 5 whose options contain an act word
+    5 of 5 name REFUSE, and NOT ONE of them expects REFUSE
+
+Four expect DECLINE. One - `property_lookup/happy_path` - expects **PROCEED** and shows the agent a
+permitted claim reading `REFUSED AS EMPTY`.
+
+**The Office's curriculum, not SimForge's rendering.** A claim can say `NOT A UUID` or `INVALID` and
+carry the same fact without naming an act. SimForge renders what it is given and should.
+
+## And an invented noun, caught mid-investigation
+
+My first act-word count hard-coded an `underwrite_deal` hash - correct for 24 characters, invented
+after that. It matched nothing, the module contributed zero keys, and the script reported **31 keys
+and 13 option lists** without erroring. Reading the hashes out of the table gives 44 and 25.
+
+Third time this pattern has cost something. **Never write down an identifier you can look up.**
