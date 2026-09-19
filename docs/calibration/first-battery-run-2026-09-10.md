@@ -3251,3 +3251,83 @@ protocol is at 4.0.0 and the naming design makes it 5.0.0. Every attempt record 
 version, so "earned under a protocol two majors ago" is already stored and **nothing reads it**. A
 reader that showed the protocol version beside a verdict would retire these six by making them
 self-describing, and every future one automatically.
+
+---
+
+# Entry 39 - the grader is built and there is nothing to ask it about
+
+**19 September 2026.** ADR-0085 and ADR-0086.
+
+## The six verdicts stay, and the marker was already stored
+
+    revoked means VOIDED - a hash mismatch, drift, an incident. These were none of those.
+    phi4 genuinely failed those probes and ADR-0068's 8 -> 0 was measured on them.
+
+Every attempt record carries `response_protocol_version`. The six carry **3.0.0**; the protocol is
+at 4.0.0. "Earned two majors ago" has been in the database since the day it happened and nothing
+read it. `protocol_versions_of()` reads it now, and both of SimForge's own reads carry it beside
+the verdict.
+
+**Why this retires them better than a column.** A `supersededBy` column has to be WRITTEN, by a
+script somebody remembers to run. The protocol version is already written, by the run that earned
+it, and it retires every future verdict automatically the moment the protocol moves. **A marker that
+has to be applied is one that can be forgotten.**
+
+## P2: the grader is built. The probe is blocked on one field.
+
+**SimForge cannot put a submitted probe. There is nothing to ask.**
+
+`OperationScenarioSubmission` carries expectedBehavior, expectedEscalation, instructionSection,
+neverDoEntry and the expected answer - and NO SITUATION. The Office's own generator says it:
+
+    "there is no `situation` field on either side of the [wire]"
+
+Their approved keys all have one. It lives in `summary` and is not sent.
+
+And SimForge must not invent it: the only prose it holds is `expected_behavior`, and rendering that
+into a probe would hand the agent the answer.
+
+**Grading an answer to a question nobody can ask is not a useful runner.** It is the half that had
+to exist first, and building it surfaced a missing field that two months of design documents had
+not.
+
+## The grader, and the first reader that table has ever had
+
+P1 stored those rows in September and nothing consulted them - validated and discarded, then stored
+and unread, one layer apart.
+
+Eight named reasons, and **every fault fires rather than the first**: an answer with the wrong act
+AND the wrong subject says both, or a fix lands on one and the agent re-sits an exam it fails the
+same way twice.
+
+Two distinctions earned their own reason: a claim that was NOT ON THE LIST versus one the key does
+not expect (the permitted claims were NAMED, so writing something else is a different mistake); and
+a key with no expected answer is NOT_RUN, not FAIL - **the submitter's omission must not land on the
+agent.**
+
+**Case is not folded**, because the ruling says exact. It bites: mistral wrote subjects in upper
+case where four other models wrote them lower. A test asserts it rather than a quiet `.lower()`.
+
+## What each of the seven classes would score
+
+    class                     n  record  options  caveat   competence dimension
+    happy_path               13      13        8       1   sequence_correctness
+    partial_failure          12      12        5       3   failure_recognition
+    malformed_input           6       6        6       0   -- NONE --
+    permission_denied         5       2        2       0   -- NONE --
+    escalation_required       5       1        1       0   escalation_discipline
+    recovery_after_failure    3       3        3       0   recovery
+    rate_limited              0       -        -       -   -- NONE --
+
+**ELEVEN OF THE FORTY-FOUR FEED NO COMPETENCE DIMENSION.** `malformed_input` and
+`permission_denied` map only to `protocol_conformance`, which is excluded from the spread pool and
+from the count of dimensions that could have discriminated. They would be graded, produce verdicts,
+and move nothing about whether the agent certifies.
+
+And the sharpest edge: **six of the eleven are `malformed_input`, the class where the five models
+most disagreed with the key** - gemma2 and qwen2.5 wrote REFUSE 19-20 of 20 where the ruling says
+DECLINE. The class with the largest measured disagreement is one whose verdict cannot affect the
+outcome.
+
+The other 33 exercise **all five competence dimensions** - what ADR-0072's breadth rule asks for and
+what no run has ever achieved.
