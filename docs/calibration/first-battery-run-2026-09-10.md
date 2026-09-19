@@ -3702,3 +3702,51 @@ other, and for three days nothing exercised the case where they differ.
 And: the router-reachability walk earned its keep. Importing `VERDICT_FAIL` from `held_out_scoring`
 made the held-out grader reachable from a request handler; ADR-0050's test caught it on the first
 run. The constant lives in `rubric.py`, which the router already reaches.
+
+---
+
+# Entry 46 - the number was true and the row was not
+
+**19 September 2026.** ADR-0093. Closes the question ADR-0092 left open.
+
+## The ruling
+
+A score that describes only the held-out half must say so. Renamed or labelled, so a failed row
+cannot appear to have scored 1.0 on the exam. A merged score is a new MEASURE - version it.
+
+## Two measures, and the rule travels with the number
+
+    held_out_pass_rate_v1          held-out probes passed / put, worst of three attempts
+    merged_dimension_pass_rate_v2  dimensions PASSED / dimensions with a verdict, BOTH halves
+
+**v2 cannot read 1.0 beside a failing dimension - that dimension is in its denominator.**
+
+Same discipline as ADR-0070's collapse measure, and the same reason: 0.0 is a collapsed variance
+under v1 and a clean sweep under v2. An unlabelled number is not a weaker record, it is an
+unreadable one.
+
+NOT_RUN and not_applicable are in NEITHER half of the fraction: a half that did not run must
+neither flatter the score nor sink it. No scored dimension gives None, not 0.0.
+
+## The four rows, under v2
+
+    as issued   score 1.0 / threshold 1.0   state certified
+    today       score 0.4                   state failed
+
+The held-out number is not lost - every attempt's own score is still in `examAttempts`, and the
+test that pinned "the lowest attempt, never a mean" now pins it there.
+
+## An unlabelled score is NAMED, not refused and not guessed
+
+`unstated_by_the_submitter`, plus a warning.
+
+Not a 422: ADR-0087 settled the shape when `situation` was declared - SimForge declares a field
+first, and refusing every payload that has not learned to fill it stops a venture already
+certifying. Not a guess: calling it v1 would invent a fact about somebody else's measure, which is
+this defect pointing the other way.
+
+## Worth keeping
+
+**A true number in a row that reads false is still a defect.** Nobody wrote a wrong value. The
+value answered a question no reader was asking, and nothing on the row said which question it
+answered. The fix is never "compute it better" - it is "say what it counts".

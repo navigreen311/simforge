@@ -56,6 +56,7 @@ from src.services.operation.recert import is_content_hash_void, raise_high_incid
 from src.services.operation.rubric import (
     FAILURE_MODE_UNREADABLE,
     OPERATION_RUBRIC_VERSION,
+    SCORE_MEASURE_UNSTATED,
     VERDICT_FAIL,
     WITHHOLD_COMPETENCE_UNEXERCISED,
     WITHHOLD_EVIDENCE_ABSENT,
@@ -428,6 +429,27 @@ async def gate_result(
         # Reached only for `certified`. A `provisional` hold has no certification to qualify, and
         # the withhold above has already caught the one case - no model file - that a complete
         # record could still be wrong about.
+        # ADR-0093 - A SCORE SAYS WHAT IT MEASURES, AND AN UNLABELLED ONE SAYS SO BY NAME.
+        #
+        # Not a 422. ADR-0087 settled this shape when `situation` was declared: SimForge declares
+        # a field first, and refusing every payload that has not yet learned to fill it would stop
+        # a venture that is already certifying. Not a guess either - labelling an unlabelled number
+        # `held_out_pass_rate_v1` would invent a fact about somebody else's measure, which is the
+        # defect being repaired pointing the other way.
+        #
+        # `unstated_by_the_submitter` says exactly what is known, satisfies the CHECK, and is one
+        # grep away for whoever asks how many rows still carry a number nobody described.
+        score_measure = (outcome.score_measure or "").strip() or None
+        if outcome.score is not None and score_measure is None:
+            score_measure = SCORE_MEASURE_UNSTATED
+            log.warning(
+                "gate_result_score_names_no_measure",
+                run_ref=run_ref,
+                agent=outcome.agent_id,
+                module=outcome.module_id,
+                score=outcome.score,
+            )
+
         if state == OperationState.CERTIFIED.value:
             missing_identity = identity_is_complete(outcome.model_identity)
             if missing_identity:
@@ -504,6 +526,10 @@ async def gate_result(
             # exam was graded against no answer key, and a digest of the empty set would say it
             # was graded against one.
             scenarioSetHash=outcome.scenario_set_hash,
+            # ADR-0093. The number and the rule that produced it, on the row that is read on its
+            # own. A score with no measure is refused by a CHECK rather than stored unreadable.
+            score=outcome.score,
+            scoreMeasure=score_measure,
             operationRubricVersion=op_rubric_version,
             agentId=outcome.agent_id,
             moduleId=outcome.module_id,

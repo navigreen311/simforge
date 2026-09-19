@@ -1130,6 +1130,11 @@ model OperationCertification {
   maxCertifiedTrustTier String? // auto_execute | propose | suggest
   perScenarioClass      Json? // { scenario_class: verdict }
   operationRubricResults Json? // NAMED LIST: [{dimension, verdict, score?, threshold?}]
+  // The run-level score and WHICH RULE produced it (ADR-0093). held_out_pass_rate_v1 describes
+  // SimForge's half alone; merged_dimension_pass_rate_v2 describes both and cannot read 1.0
+  // beside a failing dimension. A score with no measure is refused, not stored - see the CHECK.
+  score                 Float?
+  scoreMeasure          String?
   rubricDimensionSpread Float? // collapse check - a VARIANCE under v1, a RANGE under v2
   /// Which rule produced rubricDimensionSpread (ADR-0070). The measure is versioned, not
   /// migrated: pre-v2 rows keep their variance and are labelled population_variance_v1.

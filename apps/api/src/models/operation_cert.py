@@ -107,6 +107,14 @@ class OperationCertification(Base):
     perScenarioClass: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {class: verdict}
     # NAMED LIST: [{dimension, verdict, score?, threshold?}] — not fixed columns.
     operationRubricResults: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: The run-level score this row was decided on, and WHAT IT MEASURES (ADR-0093).
+    #:
+    #: Stored here rather than only on the run, because a certification outlives the run it came
+    #: from and is read on its own. `scoreMeasure` is a CHECK away from being optional: a number
+    #: whose rule is unknown reads as 1.0-out-of-1.0 whatever it counted, which is how four rows
+    #: came to look like clean passes beside three failing dimensions.
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    scoreMeasure: Mapped[str | None] = mapped_column(String, nullable=True)
     rubricDimensionSpread: Mapped[float | None] = mapped_column(Float, nullable=True)  # collapse
     #: WHICH RULE produced `rubricDimensionSpread` (ADR-0070). The measure is versioned, not
     #: migrated: rows written before v2 keep the population variance they were computed with and

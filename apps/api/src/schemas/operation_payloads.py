@@ -248,6 +248,15 @@ class AgentRunOutcome(BaseModel):
     #: a claim about the agent rather than about the run.
     score: float | None = None
     threshold: float | None = None
+    #: WHAT `score` MEASURES (ADR-0093). A score and the rule that produced it travel together or
+    #: not at all - the same discipline `rubricSpreadMeasure` applies to the collapse number.
+    #:
+    #: `held_out_pass_rate_v1` describes SimForge's held-out half alone. `merged_dimension_pass_
+    #: rate_v2` describes both halves and is what a battery reports today. A number without this
+    #: label is not a weaker record, it is an unreadable one: 1.0 means "every held-out probe
+    #: passed" under v1 and "every scored dimension passed" under v2, and on 19 September four
+    #: rows carried the first while reading as the second.
+    score_measure: str | None = None
     #: WHICH ANSWER KEYS THIS EXAM WAS GRADED AGAINST (ADR-0092 ruling 4).
     #:
     #: A digest over the submitted scenarios that were actually put, in authored order, covering

@@ -144,6 +144,7 @@ from src.services.operation.rubric import (
     VERDICT_NOT_RUN,
     VERDICT_PASS,
     merge_dimension_results,
+    merged_dimension_score,
 )
 from src.services.operation.submitted_scoring import (
     grade_submitted_module,
@@ -993,6 +994,9 @@ def build_gate_result_request(
     # is a fact about answers to held-out probes it never sees - so there is nothing to merge
     # against, and passing it through `merge_dimension_results` would invite one.
     results = [*results, report.protocol_conformance_result]
+    # ADR-0093. Computed from the same merged list the verdict reads, so the number, the label and
+    # the verdict cannot describe three different things.
+    merged_score, score_measure = merged_dimension_score(results)
     outcome = AgentRunOutcome(
         # TWO IDENTITIES, AND THIS IS THE FAR SIDE'S (ADR-0083).
         #
@@ -1022,11 +1026,18 @@ def build_gate_result_request(
         # will not record: `record_result` REFUSES a `certified` row with no tier, so a battery
         # that sent none produced a PASS that reached the boundary and stopped there.
         #
-        # **`score` is still the HELD-OUT pass rate, and a FAIL may now carry 1.0.** That is not
-        # an oversight: a merged score would be a new measure, and this repository versions its
-        # measures deliberately (ADR-0070) rather than redefining one in passing. The verdict is
-        # the thing the ruling names; what number should sit beside it is Ivan's to settle.
-        score=report.score,
+        # ADR-0093 - THE SCORE SAYS WHAT IT MEASURES, AND MEASURES THE WHOLE EXAM.
+        #
+        # This was `report.score`, the held-out pass rate, and ADR-0092 left it alone as an open
+        # question. Ivan settled it: a score describing only the held-out half must say so, and a
+        # failed row must not appear to have scored 1.0 on the exam.
+        #
+        # So the number is the MERGED dimension pass rate and the label travels with it. It cannot
+        # read 1.0 beside a failing dimension, because that dimension is in its denominator. The
+        # held-out number is not lost - every attempt's own score is in `attempts` below, which is
+        # where a reader goes to see what each of the three sittings did.
+        score=merged_score,
+        score_measure=score_measure,
         threshold=report.threshold,
         # ADR-0092 ruling 4 - WHICH answer keys graded this, recorded on the certification rather
         # than inferred from the instruction hash for the rest of the row's life.

@@ -29,6 +29,7 @@ from src.services.operation.battery import (
     run_module_battery,
 )
 from src.services.operation.battery_result import battery_result_for
+from src.services.operation.rubric import SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2
 from src.services.village.reader import VillageReader
 from tests.integration.test_operation_battery_run import AGENT, MODULE, _runtime, _seed
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
@@ -167,9 +168,21 @@ async def test_one_failed_attempt_fails_the_exam(db_session: AsyncSession) -> No
 
     assert [a["passed"] for a in attempts] == [True, True, False]
     assert outcome.passed is False, "two of three is a fail"
-    # The score is the LOWEST, not a mean: a mean would read like a near-miss and describe a run
-    # in which the agent did a forbidden thing.
-    assert outcome.score == min(a["score"] for a in attempts if a["score"] is not None)
+    # **The HELD-OUT score is still the lowest attempt, not a mean** - a mean would read like a
+    # near-miss and describe a run in which the agent did a forbidden thing. That number lives in
+    # `attempts`, where a reader goes to see what each of the three sittings did.
+    assert min(a["score"] for a in attempts if a["score"] is not None) == pytest.approx(1 / 12)
+
+    # ADR-0093: `outcome.score` is no longer that number. It is the MERGED dimension pass rate,
+    # and it says so. The two measure different things and 1.0 meant different things under each,
+    # which is how four rows were certified on 19 September beside three failing dimensions.
+    scored = [
+        r for r in outcome.operation_rubric_results if r.verdict in ("PASS", "FAIL")
+    ]
+    assert outcome.score_measure == SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2
+    assert outcome.score == pytest.approx(
+        sum(1 for r in scored if r.verdict == "PASS") / len(scored)
+    )
 
 
 def test_the_exam_collapses_weakest_wins_on_every_axis() -> None:
