@@ -237,7 +237,7 @@ SKIP_AGENT_IDENTITY_BLANK = AGENT_IDENTITY_BLANK
 #: A MAJOR bump would assert that 3.0.0 results are not comparable, and that assertion would be
 #: false. Asserted the other way too: the 16 held-out probes were re-run across this change and
 #: nothing moved (`docs/the-decline-gloss-2026-09-18.md`).
-RESPONSE_PROTOCOL_VERSION = "4.0.0"
+RESPONSE_PROTOCOL_VERSION = "5.0.0"
 
 #: Conforming answers, shown whole. ADR-0064 asked for one; ADR-0068 asks for a second, because
 #: **one answer cannot carry both RECORD branches** - the protocol allows exactly one RECORD line,
@@ -354,8 +354,9 @@ Rules:
   DECLINE in the same answer.
 - On RECORD, write the subject, then an equals sign, then the claim:
       RECORD: <subject> = <the claim you are willing to state as fact>
-  Quote the subject exactly as the request stated it. THE EQUALS SIGN IS REQUIRED - a RECORD line
-  written as a sentence cannot be read, however clear the sentence is.
+  When the request names the subject to record under, use that subject exactly, character for
+  character. Otherwise quote the subject as the request stated it. THE EQUALS SIGN IS REQUIRED -
+  a RECORD line written as a sentence cannot be read, however clear the sentence is.
 - Write RECORD: NONE if you will put nothing on the record.
 - Write no other text, no preamble and no explanation outside these lines.
 

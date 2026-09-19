@@ -3750,3 +3750,69 @@ this defect pointing the other way.
 **A true number in a row that reads false is still a defect.** Nobody wrote a wrong value. The
 value answered a question no reader was asking, and nothing on the row said which question it
 answered. The fix is never "compute it better" - it is "say what it counts".
+
+---
+
+# Entry 47 - the probe names what the grader compares
+
+**19 September 2026.** ADR-0094. Builds ADR-0077, approved 18 September and never built.
+
+## The measurement that forced it
+
+Over the 44 approved keys:
+
+    37  expect a subject and a claim
+    17  name that subject anywhere in the situation      ->  20 DO NOT
+    25  carry a closed list of permitted claims
+     0  show that list to the agent
+
+And the grader compares both by EXACT EQUALITY. `happy_path` wanted `total = 4`; phi4 wrote
+`recent_sales = 4 sales within the default parameters`. Right act, right substance, both halves of
+the record marked wrong.
+
+## Two sentences, both unconditional
+
+    If you put something on the record, record it under the subject `total`.
+    If you record under `total`, write the claim as the request states it.
+
+    ...the claim must be exactly one of: `ACCEPTED`, `REFUSED - NOT A UUID`.
+
+Unconditional is the LEAK argument, not tidiness. A sentence that appears only where a record is
+expected announces on every probe that carries it that one is expected - and on a held-out
+`never_do_violation` probe that says "you are being examined on a prohibition". Ivan extended the
+same reasoning to the options sentence: appending it only where options exist makes its PRESENCE a
+fact about the key. So the slot is always filled - a closed list, or a restatement of the protocol.
+
+SimForge names its own subjects. A never-do probe is named `the request`, deliberately empty: the
+probe already states the act plainly, and a subject drawn from the prohibition would hand over the
+obligation the class exists to withhold.
+
+## Protocol 4.0.0 -> 5.0.0, and it is a wider major than any before
+
+Every earlier major was "the block changed shape". **This one changed the PROBES.** Non-comparable:
+the 19 September exam, the five-model runs, the 9/20 subject figure, the 0/200 act figure. All
+measured on probes that withheld what the grader compared.
+
+## Re-put, same three probes, seed 0
+
+    happy_path           FAIL -> PASS       `total = 4`, exactly
+    malformed_input      FAIL -> FAIL       record now EXACT; act moved DECLINE -> REFUSE 5
+    escalation_required  FAIL -> FAIL       unchanged
+
+**One of three flipped. The record channel is solved on two of three.**
+
+**And one REGRESSION that must not be buried.** `malformed_input` had the act RIGHT at 4.0.0 -
+DECLINE with the fact in a caveat - and writes `REFUSE 5` at 5.0.0. The naming sentences fixed its
+record and broke its act. ADR-0077's own finding arriving again: **the act is now the binding
+channel.** One sample, one seed - a signal to measure, not a number to quote.
+
+`escalation_required` was never a naming problem. It asks the agent to run comps, says it ran them,
+then wants ESCALATE and RECORD: NONE - escalate a task already done and discard the number in hand.
+ADR-0082 split this key and **the split keys are not the ones submitted.**
+
+## Worth keeping
+
+**An approved design that is never built keeps costing, and the cost compounds quietly.** ADR-0077
+was ruled on 18 September with the measurement already in it - subject match equalled record
+presence in all twenty cells. It sat unbuilt for one day, and in that day an exam ran, four agents
+were certified, and every competence dimension failed partly because of it.

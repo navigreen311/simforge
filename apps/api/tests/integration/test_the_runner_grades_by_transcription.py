@@ -291,13 +291,24 @@ async def test_the_keys_come_back_in_the_order_they_were_authored(
 # =================================================================================================
 
 
-def test_the_probe_is_the_situation_verbatim_and_nothing_else() -> None:
+def test_the_probe_is_the_situation_verbatim_plus_the_naming_sentences() -> None:
     """**Never `expected_behavior`.** That is what a good ANSWER looks like, and putting it to the
     agent would hand over the answer — the same reason The Office refuses to send the situation in
-    that field."""
-    key = _key(situation="You call `property_lookup` and get `200` with `total: 143`.")
+    that field.
 
-    assert probe_for(key) == "You call `property_lookup` and get `200` with `total: 143`."
+    **And the situation is no longer the whole probe (ADR-0094).** SimForge appends the two naming
+    sentences, because the grader compares the subject and the claim by exact equality and until
+    now the agent was never shown either. The situation itself is still verbatim: the appended text
+    is SimForge's, added after it, and nothing in the submitter's words is rewritten.
+    """
+    key = _key(situation="You call `property_lookup` and get `200` with `total: 143`.")
+    probe = probe_for(key)
+
+    assert probe.startswith("You call `property_lookup` and get `200` with `total: 143`.")
+    assert "record it under the subject" in probe
+    # `SubmittedKey` does not even CARRY `expected_behavior` - the projection drops it at the
+    # source rather than remembering not to render it.
+    assert not hasattr(key, "expected_behavior")
     assert key.puttable
 
 

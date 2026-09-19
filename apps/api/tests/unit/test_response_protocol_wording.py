@@ -220,13 +220,23 @@ def test_the_version_says_this_is_a_different_exam() -> None:
     described the grammar incorrectly, the grammar itself did not move, and the 16 probes came back
     identical across it.
 
-    **4.0.0 is major on the same test every earlier major was taken on: the block changed shape.**
-    ADR-0074 adds a third worked answer, so the exam an agent reads is a different exam - and the
-    correction it completes did not work as words alone, which is the measured reason it exists.
+    4.0.0 was major on the same test every earlier major was taken on: the block changed shape.
+    ADR-0074 added a third worked answer, so the exam an agent read was a different exam.
+
+    **5.0.0 is major on a wider test than any of those: the PROBES changed, not only the block.**
+    ADR-0094 appends two naming sentences to every probe - the subject to record under, and the
+    permitted claims where a key names them - and corrects the protocol's own subject sentence to
+    match. Every agent now sees a different question as well as a different instruction, so nothing
+    measured at 4.x or below describes the same exam.
+
+    **What that makes non-comparable, named rather than implied:** every record rate, subject rate,
+    claim rate and act rate in this workstream. The five-model runs, the 9/20 subject figure for
+    `happy_path`, the 0/200 for `escalation_required`, and the 19 September exam that certified four
+    agents. They were measured on probes that withheld what the grader compared.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "4.0.0"
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "4", (
-        "a MAJOR asserts prior results are not comparable - ADR-0074 asserts exactly that"
+    assert RESPONSE_PROTOCOL_VERSION == "5.0.0"
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "5", (
+        "a MAJOR asserts prior results are not comparable - ADR-0094 asserts exactly that"
     )
 
 

@@ -37,6 +37,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_scenario import OperationScenarioSubmission
+from src.services.operation.held_out import name_the_record
 from src.services.operation.held_out_scoring import (
     VERDICT_FAIL,
     VERDICT_NOT_RUN,
@@ -225,23 +226,30 @@ def scenario_set_hash(keys: Sequence[SubmittedKey]) -> str | None:
 
 
 def probe_for(key: SubmittedKey) -> str | None:
-    """What to put to the agent for one submitted scenario, or `None` when there is nothing to ask.
+    """What to put to the agent: the situation, verbatim, plus the two naming sentences.
 
-    **The situation, verbatim, and nothing else.** Two things it deliberately does not add:
+    `None` when the key carries no situation - nothing was asked, and `grade_submitted` reports
+    that as the submitter's omission rather than the agent's failure.
 
-    `expected_behavior` is never rendered. It is what a good ANSWER looks like, and putting it to
-    the agent would hand over the answer - the same reason The Office refuses to send the situation
-    in that field.
+    **Never `expected_behavior`.** That is what a good answer looks like; rendering it into a probe
+    would hand the agent the answer.
 
-    **The naming sentence from ADR-0077 is not added either, and that is a timing decision rather
-    than an omission.** That design has the probe name the subject to record under
-    (`If you put something on the record, record it under the subject `total`.`), and its whole
-    safety argument is that the sentence is IDENTICAL on every probe including the held-out ones -
-    otherwise its presence says a record is expected, and on a `never_do_violation` probe that
-    leaks the class. Adding it to submitted probes alone would create exactly that tell. It lands
-    on both halves at once, with the protocol bump, or not at all.
+    **And now the naming sentences (ADR-0094).** Until this, the grader compared the RECORD subject
+    and claim by exact equality against strings the agent had never been shown. Measured over the
+    44 approved keys: 20 of the 37 that expect a subject never named it in the situation, and 0 of
+    the 25 that carry a closed list of claims ever showed it. `comp_analysis/happy_path` wanted
+    `total = 4` and phi4 wrote `recent_sales = 4 sales within the default parameters`; the act was
+    right, the substance was right, and both halves of the record were marked wrong.
+
+    The sentences come from `name_the_record`, which the held-out side calls too, so the two halves
+    cannot drift and the sentence's presence cannot tell them apart.
     """
-    return key.situation.strip() if key.puttable else None
+    if not key.puttable:
+        return None
+    naming = name_the_record(
+        key.record_subject or "the request", key.record_claim_options
+    )
+    return f"{key.situation.strip()} {naming}"
 
 
 def grade_submitted(key: SubmittedKey, answer: object | None) -> ScenarioVerdict:
