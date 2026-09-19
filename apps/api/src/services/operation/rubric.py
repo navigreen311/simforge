@@ -110,6 +110,54 @@ VERDICT_NOT_APPLICABLE = "not_applicable"
 # dead code kept for sentiment: they are how a v1 row is read, and they are correct for it.
 
 #: v1 - population variance over the scored competence dimensions, compared against 0.02.
+#: WHAT A RUN-LEVEL SCORE MEASURES (ADR-0093). Versioned, not migrated - the same discipline
+#: ADR-0070 applied to the collapse number, and for the same reason: an unlabelled number is not a
+#: weaker record, it is an unreadable one.
+#:
+#: **v1 - the held-out pass rate.** Every held-out probe that passed, over every held-out probe
+#: put, worst attempt of three. It describes SimForge's own half of the exam and nothing else, and
+#: that is exactly how it went wrong: on 19 September four rows read `score 1.0 / threshold 1.0`
+#: beside three competence dimensions at FAIL. The number was true. What it measured was not
+#: what "scored 1.0 on the exam" means to anybody reading the row.
+SCORE_MEASURE_HELD_OUT_PASS_RATE_V1 = "held_out_pass_rate_v1"
+#: **v2 - the merged dimension pass rate.** Dimensions that PASSED over dimensions that carried a
+#: verdict, across BOTH halves. It answers the question the row is read for - how much of this
+#: exam did the agent pass - and it cannot read 1.0 while a dimension is FAIL, because a FAIL is in
+#: its denominator.
+#:
+#: NOT_RUN and not_applicable dimensions are excluded from both, so a half that never ran neither
+#: flatters the score nor sinks it. A run with no scored dimension has no rate, and `None` is the
+#: honest value: 0.0 would be a claim about the agent rather than about the run.
+SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2 = "merged_dimension_pass_rate_v2"
+CURRENT_SCORE_MEASURE = SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2
+#: **The submitter sent a number and did not say what it counts.**
+#:
+#: Not a refusal, and the reason is the one ADR-0087 gave for making `situation` nullable: SimForge
+#: declares a field first and a NOT NULL on it would refuse every payload The Office currently
+#: sends, stopping a venture that is already certifying. A 422 here would be this repository
+#: breaking its own boundary the week it asked the other side to fill a new field.
+#:
+#: Not a guess either. Labelling an unlabelled number `held_out_pass_rate_v1` would be inventing a
+#: fact about somebody else's measure - which is the defect being repaired, pointing the other way.
+#: This value says exactly what is known: there is a number and nobody said what it counts.
+SCORE_MEASURE_UNSTATED = "unstated_by_the_submitter"
+
+
+def merged_dimension_score(results: list[dict]) -> tuple[float | None, str]:
+    """The v2 score and the name of the rule that produced it, travelling together.
+
+    Returns `(None, CURRENT_SCORE_MEASURE)` when no dimension carried a PASS or FAIL. The measure
+    is returned even then, because a caller storing a null score still needs to know which rule
+    would have produced one - and because returning the pair unconditionally is what stops a score
+    and its label being written from two different places.
+    """
+    scored = [r for r in results if r.get("verdict") in (VERDICT_PASS, VERDICT_FAIL)]
+    if not scored:
+        return None, CURRENT_SCORE_MEASURE
+    passes = sum(1 for r in scored if r.get("verdict") == VERDICT_PASS)
+    return passes / len(scored), CURRENT_SCORE_MEASURE
+
+
 SPREAD_MEASURE_VARIANCE_V1 = "population_variance_v1"
 #: v2 - the range (max - min), with a ceiling band and a count of independently-sourced classes.
 SPREAD_MEASURE_RANGE_V2 = "dimension_range_v2"
