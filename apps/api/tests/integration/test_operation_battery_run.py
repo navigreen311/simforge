@@ -32,6 +32,8 @@ from src.services.operation.battery import (
     SKIP_AGENT_IDENTITY_BLANK,
     SKIP_AGENT_NOT_IN_VILLAGE,
     SKIP_BOOTSTRAP_FORGE,
+    SKIP_NO_INSTRUCTION_SET,
+    SKIP_NO_MODULE,
     SKIP_NO_NEVER_DO,
     SKIP_NOT_UNIT_A,
     SKIP_UNKNOWN_RUN,
@@ -924,3 +926,102 @@ async def test_a_module_with_no_stored_scenarios_is_unchanged(db_session: AsyncS
     assert not isinstance(built, BatterySkipped)
     classes = {r.scenario_class for r in built.agent_outcomes[0].per_scenario_class_results}
     assert classes <= {"never_do_violation", "silent_failure"}
+
+
+# =================================================================================================
+# Two conditions, two reasons (ADR-0090)
+# =================================================================================================
+
+
+async def test_a_run_naming_no_module_says_the_run_is_incomplete(
+    db_session: AsyncSession,
+) -> None:
+    """The hand-over is what needs fixing, and the reason names it."""
+    await open_run(
+        db_session,
+        run_ref="op-run-no-module",
+        unit="A",
+        forge_id=FORGE,
+        instruction_content_hash=DECLARED_HASH,
+        rubric_kind="operation",
+        rubric_version=OPERATION_RUBRIC_VERSION,
+        module_id=None,
+        agent_id=AGENT,
+    )
+    await db_session.commit()
+
+    result = await battery_for_run(
+        db_session, "op-run-no-module", runtime=_runtime(ScriptedProvider(_compliant))
+    )
+
+    assert isinstance(result, BatterySkipped)
+    assert result.reason == SKIP_NO_MODULE
+
+
+async def test_a_module_with_no_instruction_set_says_so_instead(
+    db_session: AsyncSession,
+) -> None:
+    """**The one that used to lie.**
+
+    The run names its module and its agent; SimForge holds no instruction set for them. Under the
+    shared constant this reported `the_run_declares_no_module_or_agent` — false of this run, and it
+    sent a reader to a hand-over payload that was correct.
+    """
+    await open_run(
+        db_session,
+        run_ref="op-run-no-instructions",
+        unit="A",
+        forge_id=FORGE,
+        instruction_content_hash=DECLARED_HASH,
+        rubric_kind="operation",
+        rubric_version=OPERATION_RUBRIC_VERSION,
+        module_id="a_module_nobody_submitted",
+        agent_id=AGENT,
+    )
+    await db_session.commit()
+
+    result = await battery_for_run(
+        db_session, "op-run-no-instructions", runtime=_runtime(ScriptedProvider(_compliant))
+    )
+
+    assert isinstance(result, BatterySkipped)
+    assert result.reason == SKIP_NO_INSTRUCTION_SET
+
+
+async def test_no_instruction_set_and_an_empty_never_do_list_are_not_the_same_skip(
+    db_session: AsyncSession,
+) -> None:
+    """The distinction the reorder restores: nothing submitted, versus a submission that held
+    nothing out. Before ADR-0090 the second reason answered for both, because the never-do list is
+    read off the instruction sets — so no instruction set produced an empty list, and the empty
+    list was reported instead."""
+    await _seed(db_session, run_ref="op-run-empty-never-do", never_do=())
+    await open_run(
+        db_session,
+        run_ref="op-run-nothing-submitted",
+        unit="A",
+        forge_id=FORGE,
+        instruction_content_hash=DECLARED_HASH,
+        rubric_kind="operation",
+        rubric_version=OPERATION_RUBRIC_VERSION,
+        module_id="a_module_nobody_submitted",
+        agent_id=AGENT,
+    )
+    await db_session.commit()
+
+    runtime = _runtime(ScriptedProvider(_compliant))
+    known_and_empty = await battery_for_run(db_session, "op-run-empty-never-do", runtime=runtime)
+    unknown = await battery_for_run(db_session, "op-run-nothing-submitted", runtime=runtime)
+
+    assert isinstance(known_and_empty, BatterySkipped)
+    assert isinstance(unknown, BatterySkipped)
+    assert known_and_empty.reason == SKIP_NO_NEVER_DO
+    assert unknown.reason == SKIP_NO_INSTRUCTION_SET
+
+
+def test_the_two_reasons_are_distinct_strings() -> None:
+    """A reader greps the reason. Two conditions sharing one string is two conditions nobody can
+    tell apart from a log line."""
+    assert SKIP_NO_MODULE != SKIP_NO_INSTRUCTION_SET
+    assert "module_or_agent" in SKIP_NO_MODULE
+    assert "instruction_set" in SKIP_NO_INSTRUCTION_SET

@@ -3506,3 +3506,55 @@ nothing was ASKED. And if the situations arrived tomorrow, the five-model run sa
 `escalation_discipline` would fail hardest - 0/200 - **not because the agent is wrong** but because
 all five models answer the half they can, which is the PROCEED half of the split. That dimension
 only means something once the SPLIT keys are the ones submitted.
+
+---
+
+# Entry 43 - one reason for two conditions, and the branch it was hiding
+
+**19 September 2026.** ADR-0090.
+
+## The ruling
+
+`SKIP_NO_MODULE` came back from two guards. Split them, so a reader is sent to the right place.
+
+    not run.moduleId or not run.agentId    the HAND-OVER is incomplete      -> whoever opened it
+    instruction_set is None                no CURRICULUM for that module    -> whoever submits it
+
+On the second, the reason's own value is **false**: the run declares both. A reader following it
+opened `OperationRunStartRequest` and found a payload that was correct.
+
+## The split found the branch was dead
+
+`module_never_do_list` reads the never-do list OFF the instruction sets. So no instruction set
+means an empty list, means the never-do guard - which ran first - returned every time.
+`instruction_set is None` was **unreachable**.
+
+Lookup first now, and each reason is true of the state that returns it:
+
+    nothing submitted at all                  no_instruction_set_for_this_forge_and_module
+    submitted, declared nothing to hold out   the_module_declares_no_never_do_list
+
+## And this journal got it wrong, in writing
+
+Entry above, hand-diagnosing the September batch:
+
+> **`submit_application` has zero rows in SimForge.** So the skip is `SKIP_NO_MODULE`, not
+> `SKIP_NO_NEVER_DO` - the module is unknown, not known-and-empty.
+
+**That prediction was wrong.** Zero rows meant an empty never-do list, so the skip was
+`SKIP_NO_NEVER_DO` - the reason the entry ruled out. The distinction it drew was the right one.
+The code could not make it, and one constant standing for two conditions is why nobody could tell
+that reading the code would not have settled it either.
+
+Worth keeping as the general shape: **a reason shared by two conditions does not only blur them -
+it can make one of them unreachable and nobody notices, because the log line looks the same.**
+
+## Tested
+
+    run with no module                          SKIP_NO_MODULE
+    module + agent, no instruction set          SKIP_NO_INSTRUCTION_SET
+    the two side by side                        they differ
+
+The third fails on the old ordering. The second could not have been written at all.
+
+Suite 1,099 pass / 2 skip. Scheduler off.
