@@ -7,6 +7,12 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# One-way: `build_info` imports os, subprocess and pathlib and nothing from this package, so there
+# is no cycle. It deliberately reads `os.environ` rather than these settings - a value that came
+# from `.env` is not in the process environment, and the commit a process is RUNNING must not be
+# answerable by a file the checkout can edit underneath it.
+from src.build_info import STARTED_COMMIT
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -17,7 +23,24 @@ class Settings(BaseSettings):
     )
 
     # App
-    app_version: str = Field(default="1.0.0", alias="APP_VERSION")
+    #: What `openapi.info.version` publishes, and what The Office's Gate 8 reads to confirm which
+    #: build it is talking to.
+    #:
+    #: ADR-0091 - THE DEFAULT IS THE COMMIT, NOT A RELEASE STRING. "1.0.0" was a label the
+    #: launcher wrote on the box: it said the same thing whatever code was inside, and on
+    #: 19 September it said it while the process ran a commit sixteen behind its own checkout.
+    #: `STARTED_COMMIT` is resolved once at import from `SIMFORGE_GIT_COMMIT`, then `APP_VERSION`
+    #: when that looks like a SHA, then the working tree - so the default cannot go stale the way
+    #: a written-down string does.
+    #:
+    #: **The default was never the problem on its own.** `.env` set `APP_VERSION=1.0.0`
+    #: explicitly, and an explicit value beats a default, so this field would have gone on
+    #: publishing "1.0.0" however it was declared. That line is deleted in the same change; a
+    #: default that a config file always overrides is not a default.
+    #:
+    #: Setting `APP_VERSION` still wins, and still works: a container image stamps it with its own
+    #: SHA, and `_started_commit` reads the same variable, so the two agree rather than diverge.
+    app_version: str = Field(default=STARTED_COMMIT, alias="APP_VERSION")
     cors_origins_raw: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
     # Core datastores

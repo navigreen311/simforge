@@ -290,19 +290,67 @@ def coverage_status(
     return STATUS_TESTED
 
 
-async def module_never_do_lists(session: AsyncSession) -> dict[tuple[str, str], list[str]]:
-    """Every (forge, module) → its declared never-do list (from any instruction set that carries
-    one). Absent or empty ⇒ the module has no never-do rules."""
-    out: dict[tuple[str, str], list[str]] = {}
+async def module_never_do_lists(
+    session: AsyncSession,
+) -> dict[tuple[str, str, str], list[str]]:
+    """Every (forge, module, **content hash**) → the never-do list that row declares.
+
+    ADR-0091 made the key a TRIPLE, and the reason is that the pair was not a key. A module may
+    hold several instruction sets - the writer upserts on forge + module + hash, so a second hash
+    is a second row BY DESIGN - and this function keyed only the first two. The `not out.get(key)`
+    guard then meant *the first row the database happened to return wins*, over a `select` with no
+    `ORDER BY` at all.
+
+    It was not hypothetical. `capital-forge/statement_ingest` held two rows, and a battery there
+    probed the never-do list of the 2026-08-21 row while reporting the version and hash of the
+    2026-09-07 one. Two rows, one exam, and nothing in either answer said so.
+
+    With the hash in the key there is no contention left to resolve: every row is its own entry,
+    the scan order cannot matter, and a caller that wants one list must say which set it means.
+    """
+    out: dict[tuple[str, str, str], list[str]] = {}
     for iset in (await session.execute(select(ForgeInstructionSet))).scalars().all():
-        key = (iset.forgeId, iset.moduleId)
-        if iset.neverDo and not out.get(key):
-            out[key] = list(iset.neverDo)
+        if iset.neverDo:
+            out[(iset.forgeId, iset.moduleId, iset.contentHash)] = list(iset.neverDo)
     return out
 
 
-async def module_never_do_list(session: AsyncSession, forge_id: str, module_id: str) -> list[str]:
-    return (await module_never_do_lists(session)).get((forge_id, module_id), [])
+async def module_never_do_list(
+    session: AsyncSession, forge_id: str, module_id: str, content_hash: str
+) -> list[str]:
+    """The never-do list of ONE instruction set, named by its hash.
+
+    `content_hash` is required rather than optional. An optional one would have a default, and the
+    only available default is "whichever row turns up" - which is the behaviour ADR-0091 removed.
+    A caller that does not know which set it means is asking a question with more than one true
+    answer, and should be made to say.
+    """
+    return (await module_never_do_lists(session)).get((forge_id, module_id, content_hash), [])
+
+
+async def instruction_set_hashes(
+    session: AsyncSession, forge_id: str, module_id: str
+) -> list[str]:
+    """Every content hash held for one forge and module, newest first.
+
+    For callers that must REPORT the ambiguity rather than resolve it - an operator route asked
+    about a module with two sets can now say which two, instead of silently answering for one.
+    """
+    rows = (
+        (
+            await session.execute(
+                select(ForgeInstructionSet)
+                .where(
+                    ForgeInstructionSet.forgeId == forge_id,
+                    ForgeInstructionSet.moduleId == module_id,
+                )
+                .order_by(ForgeInstructionSet.createdAt.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [r.contentHash for r in rows]
 
 
 def never_do_status(

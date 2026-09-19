@@ -14,12 +14,13 @@ way.
 from __future__ import annotations
 
 import os
+from unittest import mock
 
 from httpx import AsyncClient
 
 from src import build_info
 from src.build_info import UNKNOWN, commits_differ
-from src.config import settings
+from src.config import Settings, settings
 
 
 async def test_it_reports_both_commits_and_whether_they_differ(client: AsyncClient) -> None:
@@ -160,3 +161,49 @@ async def test_no_path_value_is_reported(client: AsyncClient) -> None:
     raw = (await client.get("/api/version")).text
     assert "village1.0.2-recovered" not in raw
     assert "C:/" not in raw and "C:\\\\" not in raw
+
+
+# =================================================================================================
+# The published version defaults to the commit (ADR-0091)
+# =================================================================================================
+
+
+async def test_openapi_version_is_the_started_commit_not_a_release_string(
+    client: AsyncClient,
+) -> None:
+    """**What The Office's Gate 8 reads.**
+
+    `openapi.info.version` is `settings.app_version`. Its default was "1.0.0" - a label the
+    launcher wrote on the box, which said the same thing whatever code was inside, and said it
+    while this process ran a commit sixteen behind its own checkout.
+
+    Now the default is `STARTED_COMMIT`, so an unstamped process publishes the commit it is
+    running rather than a release number nobody maintains.
+    """
+    from src.build_info import STARTED_COMMIT
+
+    assert settings.app_version == STARTED_COMMIT
+
+    body = (await client.get("/openapi.json")).json()
+    assert body["info"]["version"] == STARTED_COMMIT
+    assert body["info"]["version"] == (await client.get("/api/version")).json()["started_commit"]
+
+
+def test_a_stamped_app_version_still_wins_and_the_two_agree() -> None:
+    """An image stamps `APP_VERSION` with its own SHA, and `_started_commit` reads the SAME
+    variable. So the stamped case does not bypass the default, it agrees with it - which is the
+    property that made the environment variable safe to keep."""
+    from src.build_info import _started_commit
+
+    with mock.patch.dict(os.environ, {"APP_VERSION": "f" * 40}, clear=False):
+        assert _started_commit() == "f" * 40
+        assert Settings(APP_VERSION="f" * 40).app_version == "f" * 40
+
+
+def test_a_release_string_in_app_version_is_not_mistaken_for_a_commit() -> None:
+    """`APP_VERSION` also carries release strings. "1.0.0" is not hex, so `_started_commit` falls
+    through to the working tree rather than reporting it as the commit."""
+    from src.build_info import _started_commit
+
+    with mock.patch.dict(os.environ, {"APP_VERSION": "1.0.0"}, clear=False):
+        assert _started_commit() != "1.0.0"

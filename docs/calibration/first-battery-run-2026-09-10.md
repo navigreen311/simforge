@@ -3558,3 +3558,72 @@ it can make one of them unreachable and nobody notices, because the log line loo
 The third fails on the old ordering. The second could not have been written at all.
 
 Suite 1,099 pass / 2 skip. Scheduler off.
+
+---
+
+# Entry 44 - the set the run names, and the key nobody enforced
+
+**19 September 2026.** ADR-0091.
+
+## The ruling
+
+A battery examines a run against the instruction set the run NAMES, never the newest.
+
+## One writer's key, three readers that ignored it
+
+    writer   operation.py            (forgeId, moduleId, contentHash)   upsert
+    reader   battery.py              (forgeId, moduleId)  createdAt DESC, first
+    reader   module_never_do_lists   (forgeId, moduleId)  NO ORDER BY, first non-empty
+    reader   held_out_inventory      whatever the above returned
+
+And nothing made the writer's key real - no unique constraint, no index on contentHash.
+
+## The proof was in the database
+
+`capital-forge/statement_ingest`:
+
+    sha256:adr47-live               v1.0.0 office 09-07  ['never post to the ledger']
+    sha256:statement_ingest_v1_2_0  v1.2.0 ivan   08-21  ['overwrite_prior_statement']
+
+A battery there **probed the 08-21 rule and reported the 09-07 version and hash.** Two rows, one
+exam, and neither number said which. `cre-forge/property_lookup` came within hours of the same
+thing - a probing row with one invented never-do entry, newer, therefore the one that would have
+been examined. Deleted before a battery ran.
+
+## The cost, named: four runs
+
+Every open capital-forge run carries a hash SimForge holds **no** instruction set for -
+`sha256:si`, `sha256:office-bridge-first-call`, `sha256:port-move`, `sha256:adr47`. They silently
+borrowed the newest row. They are now **SKIP_NO_INSTRUCTION_SET** - yesterday's reason, earning its
+keep the day after it was built. The six Greenstone runs each have an exact row and are unaffected.
+
+## What it changed that nobody asked for
+
+**The VOID clause is no longer reachable from the battery.** `instruction_set_ref.content_hash` is
+now read off the row the run names, so it equals `run_content_hash` by construction.
+
+That is not a lost rule - it is a rule that existed to clean up after the reader taking the wrong
+row. A run whose hash SimForge does not hold is now a skip: same judgement, earlier, and without
+36 model calls spent on a result that was going to be voided. The clause still fires where it
+belongs, on a payload arriving over the wire.
+
+**Worth keeping:** when a bug is fixed, check what was compensating for it. A rule that only ever
+fired because of the defect is not load-bearing, and leaving it looking load-bearing is its own
+kind of lie.
+
+## app_version
+
+`openapi.info.version` published "1.0.0" - a label the launcher wrote on the box, said while this
+process ran a commit 16 behind its checkout. Default is now STARTED_COMMIT.
+
+**The default was never the problem on its own.** `.env` set it explicitly and an explicit value
+beats a default. That line is deleted in the same change; a default a config file always overrides
+is not a default.
+
+OTel `service.version` becomes a 40-char SHA. Acceptable: a resource attribute exists to say which
+build emitted a span, and a commit answers that where an unchanged "1.0.0" never did.
+
+## Tested
+
+Seven tests, each written to FAIL on the old rule - every fixture gives the module a second, newer
+set, which is the state where the two rules diverge. Suite 1,109 pass / 2 skip. Scheduler off.

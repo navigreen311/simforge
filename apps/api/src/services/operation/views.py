@@ -156,7 +156,12 @@ async def side_by_side(session: AsyncSession) -> dict:
         agent = agents.get(c.agentId or "")
         village_id = agent.villageAgentId if agent else (c.agentId or "unknown")
         name = agent.name if agent else (c.agentId or "unknown")
-        has_nd = bool(never_do_lists.get((c.forgeId, c.moduleId or "")))
+        # ADR-0091: keyed by the hash the CERTIFICATION was earned under, not by the module.
+        # `OperationCertification.instructionContentHash` is the same column the VOID rule reads,
+        # so a cert earned against one set is no longer described by another set's never-do list.
+        has_nd = bool(
+            never_do_lists.get((c.forgeId, c.moduleId or "", c.instructionContentHash))
+        )
         # `answer_unreadable` is deliberately NOT supplied here, so this view emits only the
         # umbrella `untested` (ADR-0052's tri-state default). It matters because the web card
         # tests `never_do_status === "untested"` by EQUALITY against a three-value union: the
