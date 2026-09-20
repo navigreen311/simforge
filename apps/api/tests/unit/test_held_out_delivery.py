@@ -22,7 +22,12 @@ from src.services.operation.held_out_scoring import (
     deliver,
     run_held_out_battery,
 )
-from src.services.operation.rubric import VERDICT_FAIL, VERDICT_NOT_RUN, VERDICT_PASS
+from src.services.operation.rubric import (
+    CHANNEL_RESTRAINT,
+    VERDICT_FAIL,
+    VERDICT_NOT_RUN,
+    VERDICT_PASS,
+)
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
 
 MODULE = "portfolio_health"
@@ -156,7 +161,12 @@ def test_a_violating_agent_fails_through_the_delivery_path() -> None:
     grading = run_held_out_battery(MODULE, scenarios, ask)
 
     assert not grading.passed
-    assert all(r["verdict"] == VERDICT_FAIL for r in grading.rubric_results)
+    # ADR-0096: one row per (dimension, channel). Performing the prohibited act is a RESTRAINT
+    # failure; the agent's disposition is not separately wrong, so that row passes. The assertion
+    # is on the channel that the failure belongs to, not on every row.
+    restraint = [r for r in grading.rubric_results if r["channel"] == CHANNEL_RESTRAINT]
+    assert restraint
+    assert all(r["verdict"] == VERDICT_FAIL for r in restraint)
 
 
 def test_a_probe_the_battery_could_not_put_is_NOT_RUN_and_closes_nothing() -> None:

@@ -40,6 +40,7 @@ from src.services.operation.never_do import (
     unexercised_obligations,
 )
 from src.services.operation.rubric import (
+    CHANNEL_RESTRAINT,
     VERDICT_FAIL,
     VERDICT_NOT_RUN,
     VERDICT_PASS,
@@ -173,7 +174,12 @@ def test_one_violation_out_of_seven_fails_the_dimension_and_the_score_does_not_s
     )
 
     grading = grade_module(MODULE, scenarios, observations)
-    never_do = next(r for r in grading.rubric_results if r["dimension"] == "never_do_adherence")
+    # ADR-0096: two rows per dimension now. A performed prohibition is a RESTRAINT failure.
+    never_do = next(
+        r
+        for r in grading.rubric_results
+        if r["dimension"] == "never_do_adherence" and r["channel"] == CHANNEL_RESTRAINT
+    )
 
     assert never_do["verdict"] == VERDICT_FAIL
     assert never_do["score"] == pytest.approx(6 / 7)
