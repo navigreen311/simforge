@@ -3884,3 +3884,58 @@ after that. It matched nothing, the module contributed zero keys, and the script
 and 13 option lists** without erroring. Reading the hashes out of the table gives 44 and 25.
 
 Third time this pattern has cost something. **Never write down an identifier you can look up.**
+
+---
+
+# Entry 49 - the closed-list theory did not hold, and I generalised it from one key
+
+**19 September 2026.** [a-closed-list-moves-the-act](../a-closed-list-moves-the-act-2026-09-19.md).
+160 probes, 40 per arm, two replicates. No battery.
+
+## The claim I made this morning
+
+While testing the act-word hypothesis, one arm showed a second effect: a closed list of permitted
+claims, of ANY wording, appeared to suppress DECLINE - 9/40 open claim -> 4/40 neutral list. I
+reported it as a property of closed lists.
+
+**It was one key, and the neutral options were my rewrite rather than anything The Office sent.**
+ADR-0095 forbids a rate from a single draw; this was a replicated rate from a single KEY,
+generalised to a corpus of 25. Same error, one step removed.
+
+## Three keys whose REAL options carry no act word
+
+    assign_contract#malformed_input#4     YES/NO/UNKNOWN               closed 2/40  open  1/40   +1
+    underwrite_deal#malformed_input#5     WRITTEN/NOT WRITTEN/...      closed 10/40 open  3/40   +7
+    underwrite_deal#recovery#11           SUCCEEDED/FAILED             closed 12/40 open 14/40   -2
+    comp_analysis#malformed_input#2       (the original, my rewrite)   closed 4/40  open  9/40   -5
+
+**Two down, two up. Not a property of closed lists.** Both large effects replicate WITHIN their key
+and point opposite ways. Replication within a key says the effect is not noise; it says nothing
+about the next key.
+
+## What the data does show, and it is bigger
+
+On `underwrite_deal#malformed_input#5` the closed list moved:
+
+    REFUSE   26/40 -> 11/40
+    PROCEED   6/40 -> 15/40
+    DECLINE   3/40 -> 10/40
+
+**More than half the mass relocated because of four words in a claims list.** A closed list is an
+ACT-channel intervention whose direction is a property of the specific strings.
+
+Hypothesis, not established: where the list holds a value the agent can truthfully write about a
+failure (`NOT WRITTEN`) it records the failure and stops reaching for REFUSE; where it holds no apt
+value (`YES/NO/UNKNOWN` against a 422 about a missing email) nothing moves.
+
+## What it means for the 25 keys with options
+
+Each is an UNTESTED act-channel intervention, not a neutral aid to the record. Five carry a known
+one-way pull because they name REFUSE; the other twenty are unmeasured and their effect is not
+predictable from closedness. **The option strings are part of the exam, not metadata on it.**
+
+## Worth keeping
+
+**Replication within a key is not generalisation across keys.** Both numbers in the original
+finding were solid. The error was the noun: I wrote "closed lists" where the evidence said "this
+key's closed list".
