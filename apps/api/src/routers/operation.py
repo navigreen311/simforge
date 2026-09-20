@@ -54,6 +54,8 @@ from src.services.operation.never_do import (
 )
 from src.services.operation.recert import is_content_hash_void, raise_high_incident
 from src.services.operation.rubric import (
+    CHANNEL_RESTRAINT,
+    CHANNEL_UNSTATED,
     FAILURE_MODE_UNREADABLE,
     OPERATION_RUBRIC_VERSION,
     SCORE_MEASURE_UNSTATED,
@@ -63,10 +65,12 @@ from src.services.operation.rubric import (
     WITHHOLD_NEVER_DO_UNTESTED,
     WITHHOLD_NO_MODEL_FILE,
     WITHHOLD_RUBRIC_UNDISCRIMINATING,
+    channels_failed,
     collapse_measure,
     count_classes_exercised,
     is_evidence_absent,
     is_rubric_undiscriminating,
+    tier_for_channels,
 )
 from src.services.operation.run_registry import (
     UnitOutcome,
@@ -248,7 +252,9 @@ async def submit_curriculum(
 
 
 def _out_dim(item: OperationRubricResultItem) -> dict:
-    d: dict = {"dimension": item.dimension, "verdict": item.verdict}
+    # ADR-0096: the channel travels with the verdict. Dropping it here would have every row read
+    # as `unstated_by_the_submitter` one line after the submitter stated it.
+    d: dict = {"dimension": item.dimension, "channel": item.channel, "verdict": item.verdict}
     if item.score is not None:
         d["score"] = item.score
     if item.threshold is not None:
@@ -358,7 +364,9 @@ async def gate_result(
         # refusing the payload would lose the result. The verdict is corrected instead, and the
         # row records both halves - `state` failed, `operationRubricResults` saying why.
         dimensions_failed = [
-            r["dimension"] for r in results_dicts if r.get("verdict") == VERDICT_FAIL
+            r["dimension"]
+            for r in results_dicts
+            if r.get("verdict") == VERDICT_FAIL and r.get("channel") == CHANNEL_RESTRAINT
         ]
         if dimensions_failed and outcome.passed:
             log.warning(
@@ -369,9 +377,30 @@ async def gate_result(
                 failed_dimensions=dimensions_failed,
             )
 
+        # ADR-0096 - A TIER READS THE CHANNEL IT NEEDS.
+        #
+        # `propose` requires RESTRAINT alone: a person reads every output, and in every sampled
+        # case the caveat was correct even where the label was wrong. `auto_execute` requires both,
+        # because a mislabelled escalation never reaches a human.
+        #
+        # So a disposition failure no longer fails the run. It CAPS it. ADR-0092 ruling 1 said an
+        # agent that fails a competence dimension is not certified, and this refines it rather
+        # than reversing it: the question "failed at what?" now has an answer, and the tier is
+        # where it is answered.
+        channel_tier = tier_for_channels(results_dicts, outcome.max_certified_trust_tier)
+        restraint_failed = CHANNEL_RESTRAINT in channels_failed(results_dicts)
+        unstated_failed = CHANNEL_UNSTATED in channels_failed(results_dicts)
+        if unstated_failed:
+            log.warning(
+                "gate_result_verdict_names_no_channel",
+                run_ref=run_ref,
+                agent=outcome.agent_id,
+                module=outcome.module_id,
+            )
+
         if void:
             state = OperationState.REVOKED.value
-        elif not outcome.passed or dimensions_failed:
+        elif not outcome.passed or restraint_failed or unstated_failed:
             state = OperationState.FAILED.value
         elif withheld:
             state = OperationState.PROVISIONAL.value
@@ -470,7 +499,11 @@ async def gate_result(
         # decided above, from the rubric, the spread and the coverage holes. Trusting the declared
         # value would write `propose` onto a `failed` row - which `views.py` already has to hide
         # at render time, a symptom of the cap living nowhere.
-        tier = tier_for_state(state, outcome.max_certified_trust_tier)
+        # ADR-0096. Two caps, in order: the channels decide the strongest tier the exam justifies,
+        # and the state decides whether any tier is carried at all. `tier_for_state` still refuses
+        # a tier on anything but `certified`, so a failed row carries none whatever the channels
+        # said.
+        tier = tier_for_state(state, channel_tier)
 
         # A pass must carry the basis it was earned on, for the same reason it must name the model.
         #

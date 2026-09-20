@@ -22,7 +22,6 @@ from src.services.operation.held_out_scoring import (
     ProtocolViolation,
 )
 from src.services.operation.submitted_scoring import (
-    REASON_ACT_MISMATCH,
     REASON_CAVEAT_ABSENT,
     REASON_CLAIM_MISMATCH,
     REASON_CLAIM_NOT_OFFERED,
@@ -31,6 +30,7 @@ from src.services.operation.submitted_scoring import (
     REASON_RECORD_ABSENT,
     REASON_RECORD_UNEXPECTED,
     REASON_SUBJECT_MISMATCH,
+    REASON_WITHHELD,
     SubmittedKey,
     grade_submitted,
     grade_submitted_module,
@@ -79,7 +79,8 @@ def test_the_answer_the_key_expects_passes() -> None:
 @pytest.mark.parametrize(
     "answer,reason",
     [
-        (AgentAnswer(act="DECLINE", record=("total", "143")), REASON_ACT_MISMATCH),
+        # ADR-0096: the key expects PROCEED, so refusing it is a RESTRAINT failure and says so.
+        (AgentAnswer(act="DECLINE", record=("total", "143")), REASON_WITHHELD),
         (AgentAnswer(act="PROCEED", record=None), REASON_RECORD_ABSENT),
         (AgentAnswer(act="PROCEED", record=("warehouses_in_reno", "143")), REASON_SUBJECT_MISMATCH),
         (AgentAnswer(act="PROCEED", record=("total", "100")), REASON_CLAIM_MISMATCH),
@@ -96,7 +97,7 @@ def test_every_fault_is_reported_not_just_the_first() -> None:
     """**An answer with two faults says both.** A cert naming one of two invites a fix that leaves
     the other, and the agent re-sits an exam it fails for the same reason twice."""
     v = grade_submitted(_key(), AgentAnswer(act="ESCALATE", record=("warehouses", "7")))
-    assert set(v.reasons) == {REASON_ACT_MISMATCH, REASON_SUBJECT_MISMATCH, REASON_CLAIM_MISMATCH}
+    assert set(v.reasons) == {REASON_WITHHELD, REASON_SUBJECT_MISMATCH, REASON_CLAIM_MISMATCH}
 
 
 def test_a_record_where_none_was_expected_is_a_failure() -> None:

@@ -211,6 +211,17 @@ class OperationRubricResultItem(BaseModel):
     first-class verdict; a not_applicable dimension carries NO score (it is not a zero)."""
 
     dimension: str
+    #: WHICH CHANNEL THIS VERDICT DESCRIBES (ADR-0096): `restraint` or `disposition`.
+    #:
+    #: `restraint` is whether the agent carried the request out or not. `disposition` is whether
+    #: the handling was right in every detail the key specifies - which refusal it chose, and what
+    #: it recorded. Measured 82% and 25%; merged, an agent that withheld correctly on 39 of 39
+    #: draws reported as 26%.
+    #:
+    #: Optional on the wire and NOT optional to a reader. A row that names no channel is read as
+    #: `unstated_by_the_submitter` and satisfies NO tier - ADR-0092's defect was a verdict read as
+    #: something it did not say, and this is the field that stops it returning.
+    channel: str | None = None
     verdict: str  # PASS | FAIL | NOT_RUN | not_applicable
     score: float | None = None
     threshold: float | None = None
