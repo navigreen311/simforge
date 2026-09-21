@@ -234,7 +234,7 @@ def _body(rows: list[dict], tier: str = "propose") -> dict:
         },
         "run_content_hash": HASH,
         "run_ref": "op-run-adr0096",
-        "operation_rubric_version": "0.3.0",
+        "operation_rubric_version": "0.4.0",
         "agent_outcomes": [
             {
                 "agent_id": AGENT, "module_id": MODULE, "forge_id": FORGE,

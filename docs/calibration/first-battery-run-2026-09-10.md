@@ -4263,3 +4263,32 @@ written. A real answer needs the exams re-run under the corrected builder.
 **A test that posts the payload does not test the code that builds it.** Two ADRs in a row were
 verified end-to-end at the wrong end. The boundary is a seam a test can start at, which makes it
 exactly the seam a test can fail to cross.
+
+---
+
+# Entry 55 - a grading change bumps the version
+
+**21 September 2026.** ADR-0100.
+
+ADR-0099 changed how a verdict is COMPUTED and left `OPERATION_RUBRIC_VERSION` at 0.3.0, because it
+was framed as a repair. From a reader's side there is no such distinction.
+
+    merge_dimension_results   keys by (dimension, channel) - both channels survive
+    passed                    reads restraint alone, where it read every channel
+    max_certified_trust_tier  capped by tier_for_channels, where it was the flat ceiling
+
+0.3.0 -> **0.4.0**.
+
+    0.2.0   everything before the split
+    0.3.0   ADR-0096: verdicts carry a channel
+    0.4.0   ADR-0099: the merge keeps both; passed reads restraint; the tier is capped
+
+**The four certs of 21 September stay at 0.3.0.** That is true of them - they were computed by that
+rule and they are the rows ADR-0099 exists because of. Nothing is backfilled, the same discipline
+ADR-0070 and ADR-0093 applied to their measures.
+
+## Worth keeping
+
+**"Repair" is a word about intent, not about output.** A fix that changes what the same exam
+produces is a grading change whatever it is called, and the version is the only thing standing
+between an old verdict and a reader who assumes it is current.
