@@ -47,6 +47,27 @@ RESPONSE_PROTOCOL_VERSION = "6.0.0"
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
 OPERATION_RUBRIC_VERSION = "0.5.0"
 
+#: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
+#:
+#: Unit B certifies a department against a forge. Ivan ruled it in two parts: option A makes the
+#: department flags count now, option B builds the real hand-over test later. Option B has not been
+#: built - `battery.py` has no Unit B path at all, and nothing in this service constructs a
+#: `DepartmentRunOutcome`. The router consumes them; only an outside submitter can produce one.
+#:
+#: **Published on `/api/version` because publishing nothing reads as "did not say".** The Office's
+#: readiness gate asks whether a department can be tested; an absent key is a question SimForge
+#: declined to answer, and `false` is the answer SimForge actually has. That distinction is the one
+#: ADR-0101 was written about in the other direction - two versions that existed and were not
+#: published, read for two days as a Forge that had none.
+#:
+#: **A CONSTANT, AND BOUND TO THE FACT BY A TEST.** A hand-coded boolean is exactly the shape that
+#: goes stale silently, so `test_the_handover_test_does_not_exist` walks the battery's import graph
+#: and fails the moment anything reachable from it constructs a `DepartmentRunOutcome`. Build the
+#: hand-over test and the suite goes red until this flips - which is the only thing that makes a
+#: declaration trustworthy over time.
+DEPARTMENT_HANDOVER_TEST = False
+
+
 # The CHANNEL dimension: whether the agent answered in the declared grammar at all. It measures the
 # container, not the competence, and that is why it is named here rather than left as one more entry
 # in the tuple below.

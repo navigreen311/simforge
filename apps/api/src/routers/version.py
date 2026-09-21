@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from src.build_info import STARTED_COMMIT, checkout_commit, commits_differ
 from src.config import settings
 from src.services.operation.rubric import (
+    DEPARTMENT_HANDOVER_TEST,
     OPERATION_RUBRIC_VERSION,
     RESPONSE_PROTOCOL_VERSION,
 )
@@ -151,6 +152,19 @@ async def version() -> dict:
         "exam": {
             "response_protocol_version": RESPONSE_PROTOCOL_VERSION,
             "operation_rubric_version": OPERATION_RUBRIC_VERSION,
+            # THE HAND-OVER TEST DOES NOT EXIST, AND SAYING SO IS THE POINT.
+            #
+            # The Office's readiness gate asks whether a department can be tested. Publishing
+            # nothing reads as "SimForge did not say" - the same silence ADR-0101 found when the
+            # two versions above existed and were unpublished, and a Forge that was answering read
+            # for two days as one that had none. `false` is the answer this service actually has.
+            #
+            # IN THE `exam` BLOCK, WHICH IS THE SHAPE SIMFORGE DECLARES. The Office reads exam
+            # facts out of this block and drops keys it does not transcribe, so it reads
+            # `exam.department_handover_test` or it reads nothing. A flat key would be this side
+            # guessing at the other side's nesting, which is the defect that cost two days when
+            # the guess ran the other way.
+            "department_handover_test": DEPARTMENT_HANDOVER_TEST,
         },
         "launch_environment": _launch_environment(),
     }
