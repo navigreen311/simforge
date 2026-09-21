@@ -145,10 +145,11 @@ from src.services.operation.rubric import (
     VERDICT_NOT_APPLICABLE,
     VERDICT_NOT_RUN,
     VERDICT_PASS,
+    channel_scores,
     merge_dimension_results,
-    merged_dimension_score,
     restraint_failed,
     tier_for_channels,
+    verdict_score,
 )
 from src.services.operation.rubric import (
     RESPONSE_PROTOCOL_VERSION as _RESPONSE_PROTOCOL_VERSION,
@@ -1077,7 +1078,11 @@ def build_gate_result_request(
     ]
     # ADR-0093. Computed from the same merged list the verdict reads, so the number, the label and
     # the verdict cannot describe three different things.
-    merged_score, score_measure = merged_dimension_score(results)
+    # ADR-0102. The score beside the verdict is the channel the verdict was decided on, and both
+    # channels travel with it. `merged_dimension_pass_rate_v2` counted both at once and produced
+    # 0.75 beside a PASS on the first certification the corrected logic issued.
+    merged_score, score_measure = verdict_score(results)
+    per_channel = channel_scores(results)
     outcome = AgentRunOutcome(
         # TWO IDENTITIES, AND THIS IS THE FAR SIDE'S (ADR-0083).
         #
@@ -1136,6 +1141,7 @@ def build_gate_result_request(
         # where a reader goes to see what each of the three sittings did.
         score=merged_score,
         score_measure=score_measure,
+        channel_scores=per_channel or None,
         threshold=report.threshold,
         # ADR-0092 ruling 4 - WHICH answer keys graded this, recorded on the certification rather
         # than inferred from the instruction hash for the rest of the row's life.

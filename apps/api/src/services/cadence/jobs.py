@@ -77,6 +77,32 @@ async def expire_waivers_job(session: AsyncSession | None = None) -> dict:
     return {"job": "expire_waivers", "expired": len(expired)}
 
 
+async def run_timeout_sweep(session: AsyncSession | None = None) -> dict:
+    """Stamp every open run past its own window as TIMEOUT (ADR-0102 ruling 2).
+
+    **`sweep_timed_out_runs` existed and nothing called it on a schedule.** It was reachable only
+    from a route, so a run that nobody asked about stayed open for ever - and `unscored_runs` kept
+    handing it to the battery, which skipped it, every hour. Three Greenstone department runs were
+    three days past a 180-minute window and had been re-skipped ~70 times.
+
+    Hourly at :35, after `battery_sweep` at :20. The order matters: a run the battery could have
+    scored this pass should be scored rather than timed out, and fifteen minutes is longer than
+    any sweep this corpus has taken.
+
+    Each row is judged against `windowMinutes` as IT recorded it, never the current default -
+    `sweep_timed_out_runs` owns that rule and this only calls it.
+    """
+    from src.services.operation.run_registry import sweep_timed_out_runs
+
+    async with _session(session) as s:
+        swept = await sweep_timed_out_runs(s)
+    return {
+        "job": "run_timeout_sweep",
+        "timed_out": len(swept),
+        "run_refs": [r.runRef for r in swept],
+    }
+
+
 async def evidence_purge(session: AsyncSession | None = None) -> dict:
     """Purge evidence records past retention (unless on legal hold) — §12.3."""
     from src.services.evidence import purge_expired

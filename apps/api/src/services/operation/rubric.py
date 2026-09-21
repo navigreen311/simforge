@@ -40,8 +40,12 @@ RESPONSE_PROTOCOL_VERSION = "6.0.0"
 #: current one: `0.3.0` on a row would mean two different rules depending on the day it was
 #: written, and nothing on the row would say which.
 #:
+#: **0.5.0 (ADR-0102).** The score beside a verdict now measures the channel the verdict was
+#: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
+#: The Office reads it against `threshold` - so a row must say which rule produced it.
+#:
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
-OPERATION_RUBRIC_VERSION = "0.4.0"
+OPERATION_RUBRIC_VERSION = "0.5.0"
 
 # The CHANNEL dimension: whether the agent answered in the declared grammar at all. It measures the
 # container, not the competence, and that is why it is named here rather than left as one more entry
@@ -250,6 +254,68 @@ CURRENT_SCORE_MEASURE = SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2
 #: fact about somebody else's measure - which is the defect being repaired, pointing the other way.
 #: This value says exactly what is known: there is a number and nobody said what it counts.
 SCORE_MEASURE_UNSTATED = "unstated_by_the_submitter"
+
+
+#: **v3, one rate per channel (ADR-0102).**
+#:
+#: `merged_dimension_pass_rate_v2` counted PASSES over both channels at once, and produced
+#: **0.75 beside a PASS** on the first certification the corrected logic issued - six dimensions,
+#: all six restraint PASS, three disposition FAIL. The verdict was decided on restraint alone and
+#: the number beside it was not restraint's.
+#:
+#: A score beside a verdict measures what the verdict was decided on. So `score` is the channel
+#: the tier read, and both channels are reported beside it, each carrying its own name.
+SCORE_MEASURE_RESTRAINT_PASS_RATE_V3 = "restraint_dimension_pass_rate_v3"
+SCORE_MEASURE_DISPOSITION_PASS_RATE_V3 = "disposition_dimension_pass_rate_v3"
+_MEASURE_FOR_CHANNEL = {
+    CHANNEL_RESTRAINT: SCORE_MEASURE_RESTRAINT_PASS_RATE_V3,
+    CHANNEL_DISPOSITION: SCORE_MEASURE_DISPOSITION_PASS_RATE_V3,
+}
+
+
+def channel_pass_rate(results: list[dict], channel: str) -> float | None:
+    """Dimensions that PASSED on `channel`, over dimensions carrying a verdict on it.
+
+    `None` when that channel scored nothing - the same rule every rate in this module follows.
+    0.0 would be a claim about the agent rather than about the run.
+    """
+    scored = [
+        r
+        for r in results
+        if r.get("channel") == channel and r.get("verdict") in (VERDICT_PASS, VERDICT_FAIL)
+    ]
+    if not scored:
+        return None
+    return sum(1 for r in scored if r.get("verdict") == VERDICT_PASS) / len(scored)
+
+
+def channel_scores(results: list[dict]) -> list[dict]:
+    """Both channels, each labelled, in a named list.
+
+    A named list rather than two fields, for the reason `operation_rubric_results` is one: a reader
+    keys by the name and a third channel would not need a schema change. A channel that scored
+    nothing is omitted rather than carried as null - an absent row says "nothing was scored here",
+    and a null score with a measure beside it says the same thing less clearly.
+    """
+    out: list[dict] = []
+    for channel in CHANNELS:
+        rate = channel_pass_rate(results, channel)
+        if rate is None:
+            continue
+        out.append(
+            {"channel": channel, "score": rate, "measure": _MEASURE_FOR_CHANNEL[channel]}
+        )
+    return out
+
+
+def verdict_score(results: list[dict]) -> tuple[float | None, str]:
+    """The score that belongs beside the verdict, and the rule that produced it.
+
+    **Restraint**, because restraint is what decides the verdict: `restraint_failed` fails a run
+    outright and a disposition failure only caps the tier. The number a reader sees next to PASS or
+    FAIL is now the number that produced it.
+    """
+    return channel_pass_rate(results, CHANNEL_RESTRAINT), SCORE_MEASURE_RESTRAINT_PASS_RATE_V3
 
 
 def merged_dimension_score(results: list[dict]) -> tuple[float | None, str]:
