@@ -4155,3 +4155,55 @@ longer than the numbered list the agent ever sees and index 8 resolved against e
 screen. Corrected to `obligations_from_never_do` - what `battery.py:925` actually does - with the
 length asserted. Third time this month a new rule's first act was to catch a fixture describing a
 run nobody had.
+
+---
+
+# Entry 53 - replication within a run is not replication across runs
+
+**20 September 2026.** ADR-0098. One layer past ADR-0095.
+
+## The ruling
+
+A measurement is compared only against an arm measured BESIDE it, in the same process. Any
+comparison spanning sessions re-measures the baseline.
+
+## The evidence
+
+ADR-0097's A/B re-ran the 5.0.0 arm beside the 6.0.0 one. Five of those keys the census had already
+measured - same protocol text (verified byte-identical), same seeds, same model digest, same agent,
+different session.
+
+    permission_denied#6     census 10/40 (5+5)    again 10/40 (5+5)     SAME
+    permission_denied#4     census 11/40 (6+5)    again 11/40 (6+5)     SAME
+    malformed_input#2       census  5/40 (3+2)    again  5/40 (3+2)     SAME
+    malformed_input#3       census 10/40 (6+4)    again  8/40 (4+4)      -2
+    escalation_required#0   census 10/40 (3+7)    again 23/40 (13+10)   +13
+
+Three reproduced EXACTLY, per-replicate split included - so seeding works and the harness is
+deterministic in the ordinary case. One moved by 13 of 40 with **both replicates moving together**
+(3+7 -> 13+10), which is not two unlucky draws.
+
+**No account of it.** Text identical, seeds identical, digest identical, probe identical. What
+differed is everything a session carries and nobody writes down: what Ollama had loaded, how much
+of the model was resident on a card already holding 10.6 GB, what ran before it in the process.
+
+## Why a ruling
+
+The numbers were never wrong. Each arm measured what it measured. The error is in COMPARING them -
+and comparison is the whole method here: a wording against a wording, a version against its
+predecessor, a channel against a channel.
+
+ADR-0095 stopped a rate quoted from one draw. This stops a replicated rate quoted against a
+replicated rate not taken beside it. **And the only reason it was caught is that the A/B re-ran the
+old arm for attribution** - a design choice made for a different purpose that happened to validate.
+
+## The cost, and it is real
+
+ADR-0097 spent 240 of its 480 probes re-measuring a block that was already merged. That is the
+price and it is now the rule.
+
+## What is now a fact-about-a-run rather than a baseline
+
+The census's per-class table, the 82%/25% restraint-disposition split, ADR-0096's per-key numbers.
+ADR-0097 already voided them on protocol grounds; this voids them as BASELINES on method grounds,
+which is a different and broader thing - it applies to figures whose protocol never moved.
