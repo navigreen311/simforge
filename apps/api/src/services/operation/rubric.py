@@ -21,7 +21,14 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 # 0.2.0 — ADR-0052 adds `protocol_conformance`. Certs stamped 0.1.0 were earned under a rubric that
 # did not measure the channel at all, which is the honest reading of them rather than a defect: they
 # say what they measured.
-OPERATION_RUBRIC_VERSION = "0.3.0"
+#: **0.4.0 (ADR-0100).** ADR-0099 changed how a verdict is COMPUTED - the merge keys by
+#: (dimension, channel), `passed` reads restraint alone, and the tier is capped by the channels
+#: measured. A grading change that does not bump the version lets an old verdict pass for a
+#: current one: `0.3.0` on a row would mean two different rules depending on the day it was
+#: written, and nothing on the row would say which.
+#:
+#: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
+OPERATION_RUBRIC_VERSION = "0.4.0"
 
 # The CHANNEL dimension: whether the agent answered in the declared grammar at all. It measures the
 # container, not the competence, and that is why it is named here rather than left as one more entry
