@@ -21,6 +21,19 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 # 0.2.0 — ADR-0052 adds `protocol_conformance`. Certs stamped 0.1.0 were earned under a rubric that
 # did not measure the channel at all, which is the honest reading of them rather than a defect: they
 # say what they measured.
+#: WHICH RESPONSE GRAMMAR THE EXAM PUTS (ADR-0101).
+#:
+#: **Declared here rather than in `battery.py`, and the reason is ADR-0050.** A request handler may
+#: not reach the held-out corpus, and `test_the_router_cannot_reach_the_battery` walks the import
+#: graph to prove it. `/api/version` has to publish this string, so the string cannot live beside
+#: the probes. `battery.py` re-exports it and owns the TEXT; this module owns the NUMBER, beside
+#: the other version a reader needs to place a verdict.
+#:
+#: 6.0.0 - ADR-0097, the ordered test and five worked examples.
+#: 5.0.0 - ADR-0094, the naming sentences on every probe.
+#: 4.0.0 - ADR-0074, the third worked example.
+RESPONSE_PROTOCOL_VERSION = "6.0.0"
+
 #: **0.4.0 (ADR-0100).** ADR-0099 changed how a verdict is COMPUTED - the merge keys by
 #: (dimension, channel), `passed` reads restraint alone, and the tier is capped by the channels
 #: measured. A grading change that does not bump the version lets an old verdict pass for a
