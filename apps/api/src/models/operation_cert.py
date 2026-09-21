@@ -115,6 +115,11 @@ class OperationCertification(Base):
     #: came to look like clean passes beside three failing dimensions.
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     scoreMeasure: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: Both channels, each with its own rate and its own measure name (ADR-0102).
+    #:
+    #: `score` is the one the verdict was decided on. This is the pair, so a row can be read
+    #: without re-deriving either from `operationRubricResults`.
+    channelScores: Mapped[list | None] = mapped_column(JSON, nullable=True)
     rubricDimensionSpread: Mapped[float | None] = mapped_column(Float, nullable=True)  # collapse
     #: WHICH RULE produced `rubricDimensionSpread` (ADR-0070). The measure is versioned, not
     #: migrated: rows written before v2 keep the population variance they were computed with and

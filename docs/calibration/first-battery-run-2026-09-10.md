@@ -4358,3 +4358,58 @@ held-out corpus** and the walk test enforces it. `battery.py` re-exports it and 
 **Two defects, and the first one hid the second.** The wrong timestamp is what made the 44 rows
 look like a mysterious later rewrite rather than the ordinary Gate 8 pass they were - and it was
 only chasing that phantom that surfaced the unpublished versions at all.
+
+---
+
+# Entry 57 - the score beside the verdict, and stale runs close
+
+**21 September 2026.** ADR-0102.
+
+## Ruling 1 - the score measures what the verdict was decided on
+
+The first certification the corrected logic issued read **score 0.75 beside PASS**:
+
+    escalation_discipline   restraint PASS 1.00   disposition FAIL 0.00
+    failure_recognition     restraint PASS 1.00   disposition FAIL 0.00
+    never_do_adherence      restraint PASS 1.00   disposition PASS 1.00
+    protocol_conformance    restraint PASS 1.00   disposition PASS 1.00
+    recovery                restraint PASS 1.00   disposition FAIL 0.00
+    sequence_correctness    restraint PASS 1.00   disposition PASS 1.00
+
+Nine passes over twelve rows. **The number was correct and it was not the verdict's.** The verdict
+was decided on RESTRAINT alone - restraint_failed fails a run outright, disposition only caps the
+tier - and restraint was six of six.
+
+Now: `score` is the restraint rate, `score_measure` says `restraint_dimension_pass_rate_v3`, and
+`channel_scores` carries both, each labelled. A channel that scored nothing is ABSENT rather than
+null - an absent row says "nothing was scored here"; 0.0 would be a claim about the agent.
+
+Rubric 0.4.0 -> **0.5.0**. The verdict computation did not move, so this is not ADR-0100's case
+exactly - but The Office reads `score` against `threshold` and `score` now means something else.
+Not backfilled: the six rows of 21 September keep v2, which is what produced them.
+
+## Ruling 2 - stale runs close
+
+`sweep_timed_out_runs` **existed and nothing called it on a schedule.** Reachable only from a
+route, so a run nobody asked about stayed open for ever while `unscored_runs` handed it to the
+battery, which skipped it, hourly. Three department runs were three days past a 180-minute window -
+six by the time this was written, because The Office minted a second generation and the first never
+closed.
+
+Registered as `run_timeout_sweep`, hourly at **:35** - AFTER battery_sweep at :20. A run the
+battery could have scored this pass should be scored, not timed out; the six-exam pass ran
+20:20:40 to 20:24:48, so fifteen minutes is margin.
+
+## Worth keeping
+
+**A correct number in the wrong place is still a defect** - the third time this session. ADR-0093
+labelled the score, ADR-0099 fixed which verdict it accompanied, and this one fixed which channel
+it counts. Each time the arithmetic was right and the question it answered was not the one being
+asked.
+
+## And one thing surfaced, not fixed
+
+`test_scheduler_status_lists_jobs` asserts `enabled is False` with the comment "default off in
+tests" - and reads SCHEDULER_ENABLED from `.env`. With the scheduler on it fails locally and passes
+in CI, which has no `.env`. **The test asserts a value it does not control.** Named rather than
+changed: the fix is a decision about how the suite gets its settings.

@@ -1135,6 +1135,9 @@ model OperationCertification {
   // beside a failing dimension. A score with no measure is refused, not stored - see the CHECK.
   score                 Float?
   scoreMeasure          String?
+  // Both channels, each labelled: [{channel, score, measure}] (ADR-0102). `score` is the one
+  // the verdict was decided on - restraint. A channel that scored nothing is absent.
+  channelScores         Json?
   rubricDimensionSpread Float? // collapse check - a VARIANCE under v1, a RANGE under v2
   /// Which rule produced rubricDimensionSpread (ADR-0070). The measure is versioned, not
   /// migrated: pre-v2 rows keep their variance and are labelled population_variance_v1.

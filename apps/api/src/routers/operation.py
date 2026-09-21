@@ -563,6 +563,8 @@ async def gate_result(
             # own. A score with no measure is refused by a CHECK rather than stored unreadable.
             score=outcome.score,
             scoreMeasure=score_measure,
+            # ADR-0102. Both channels, each labelled, on the row that is read on its own.
+            channelScores=outcome.channel_scores,
             operationRubricVersion=op_rubric_version,
             agentId=outcome.agent_id,
             moduleId=outcome.module_id,

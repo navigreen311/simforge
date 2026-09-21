@@ -92,6 +92,13 @@ JOBS: tuple[CadenceJob, ...] = (
         triggerable=False,
     ),
     CadenceJob(
+        "run_timeout_sweep",
+        "hourly",
+        {"minute": 35},
+        "Stamp open runs past their own window as TIMEOUT (ADR-0102).",
+        jobs.run_timeout_sweep,
+    ),
+    CadenceJob(
         "expire_waivers",
         "hourly",
         {"minute": 10},

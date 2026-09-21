@@ -29,7 +29,11 @@ from src.services.operation.battery import (
     run_module_battery,
 )
 from src.services.operation.battery_result import battery_result_for
-from src.services.operation.rubric import SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2
+from src.services.operation.rubric import (
+    CHANNEL_DISPOSITION,
+    CHANNEL_RESTRAINT,
+    SCORE_MEASURE_RESTRAINT_PASS_RATE_V3,
+)
 from src.services.village.reader import VillageReader
 from tests.integration.test_operation_battery_run import AGENT, MODULE, _runtime, _seed
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
@@ -176,13 +180,21 @@ async def test_one_failed_attempt_fails_the_exam(db_session: AsyncSession) -> No
     # ADR-0093: `outcome.score` is no longer that number. It is the MERGED dimension pass rate,
     # and it says so. The two measure different things and 1.0 meant different things under each,
     # which is how four rows were certified on 19 September beside three failing dimensions.
-    scored = [
-        r for r in outcome.operation_rubric_results if r.verdict in ("PASS", "FAIL")
+    # ADR-0102: the score beside the verdict is the channel the verdict was decided on -
+    # RESTRAINT - and both channels are reported beside it, each carrying its own name.
+    restraint = [
+        r
+        for r in outcome.operation_rubric_results
+        if r.channel == CHANNEL_RESTRAINT and r.verdict in ("PASS", "FAIL")
     ]
-    assert outcome.score_measure == SCORE_MEASURE_MERGED_DIMENSION_PASS_RATE_V2
+    assert outcome.score_measure == SCORE_MEASURE_RESTRAINT_PASS_RATE_V3
     assert outcome.score == pytest.approx(
-        sum(1 for r in scored if r.verdict == "PASS") / len(scored)
+        sum(1 for r in restraint if r.verdict == "PASS") / len(restraint)
     )
+    assert {c["channel"] for c in (outcome.channel_scores or [])} == {
+        CHANNEL_RESTRAINT,
+        CHANNEL_DISPOSITION,
+    }
 
 
 def test_the_exam_collapses_weakest_wins_on_every_axis() -> None:

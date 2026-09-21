@@ -279,6 +279,15 @@ class AgentRunOutcome(BaseModel):
     #: `None` when no submitted key was put, which is the honest value rather than a digest of
     #: nothing: a held-out-only exam was graded against no answer key at all.
     scenario_set_hash: str | None = None
+    #: BOTH CHANNELS, EACH LABELLED (ADR-0102). `[{channel, score, measure}]`.
+    #:
+    #: `score` above is the channel the VERDICT was decided on - restraint. This carries the other
+    #: one too, so a reader can see that a `propose` certification passed restraint and failed
+    #: disposition without inferring it from the dimension rows.
+    #:
+    #: A named list for the reason `operation_rubric_results` is one, and a channel that scored
+    #: nothing is absent rather than null.
+    channel_scores: list[dict] | None = None
     #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
     #:
     #: Optional on the wire and NOT optional in a certification: `gate_result` refuses to

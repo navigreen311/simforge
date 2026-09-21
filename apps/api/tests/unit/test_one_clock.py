@@ -105,4 +105,4 @@ def test_the_protocol_version_lives_where_a_router_may_reach_it() -> None:
     and still owns the TEXT."""
     assert RESPONSE_PROTOCOL_VERSION == FROM_BATTERY
     assert RESPONSE_PROTOCOL_VERSION == "6.0.0"
-    assert OPERATION_RUBRIC_VERSION == "0.4.0"
+    assert OPERATION_RUBRIC_VERSION == "0.5.0"
