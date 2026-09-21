@@ -150,6 +150,9 @@ from src.services.operation.rubric import (
     restraint_failed,
     tier_for_channels,
 )
+from src.services.operation.rubric import (
+    RESPONSE_PROTOCOL_VERSION as _RESPONSE_PROTOCOL_VERSION,
+)
 from src.services.operation.submitted_scoring import (
     grade_submitted_module,
     merge_submitted_attempts,
@@ -241,7 +244,10 @@ SKIP_AGENT_IDENTITY_BLANK = AGENT_IDENTITY_BLANK
 #: A MAJOR bump would assert that 3.0.0 results are not comparable, and that assertion would be
 #: false. Asserted the other way too: the 16 held-out probes were re-run across this change and
 #: nothing moved (`docs/the-decline-gloss-2026-09-18.md`).
-RESPONSE_PROTOCOL_VERSION = "6.0.0"
+#: Re-exported from `rubric` (ADR-0101), which is a leaf a request handler may reach. The text
+#: below stays here; only the number moved, so `/api/version` can publish it without making the
+#: held-out corpus reachable from a router.
+RESPONSE_PROTOCOL_VERSION = _RESPONSE_PROTOCOL_VERSION
 
 #: Conforming answers, shown whole. ADR-0064 asked for one; ADR-0068 asks for a second, because
 #: **one answer cannot carry both RECORD branches** - the protocol allows exactly one RECORD line,

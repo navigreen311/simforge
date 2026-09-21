@@ -4292,3 +4292,69 @@ ADR-0070 and ADR-0093 applied to their measures.
 **"Repair" is a word about intent, not about output.** A fix that changes what the same exam
 produces is a grading change whatever it is called, and the version is the only thing standing
 between an old verdict and a reader who assumes it is current.
+
+---
+
+# Entry 56 - one clock, and the exam publishes its versions
+
+**21 September 2026.** ADR-0101.
+
+## The ruling
+
+Timestamps are stored one way across a service. A column that silently reinterprets a value it was
+given makes forensics lie - and it did.
+
+## The defect
+
+    108 columns   timestamp WITHOUT time zone, holding naive UTC
+      3 of ours   timestamp WITH time zone, from one hand-written migration
+
+The ORM writes naive UTC. Postgres reads a naive literal against a timestamptz column in the
+SESSION zone - `America/Los_Angeles` here - so 04:50 UTC was stored as 04:50 PDT = 11:50 UTC.
+**Seven hours late, no error, and correct-looking to anyone who prints the column in UTC.**
+
+## The sentence it produced
+
+> "All 44 scenario rows were rewritten at 09-21 11:50, six hours after the sweep."
+
+They were written THIRTY MINUTES BEFORE it, in the same Gate 8 pass that opened the runs the sweep
+graded. Four things said so and the timestamp outvoted all of them: xmin adjacency, a 41ms
+sub-second gap, the interleaved call log, and scenario-set hashes matching the certs.
+
+**A timestamp is the one field a reader trusts without checking.** An absent timestamp asks a
+question; a wrong one answers it.
+
+## The repair is the INVERSE of the damage, not a UTC cast
+
+    damage   take a naive value, read it as America/Los_Angeles
+    repair   render the stored instant in America/Los_Angeles, keep the wall clock
+
+`AT TIME ZONE 'UTC'` is the obvious cast and it PRESERVES the seven-hour error. A test asserts the
+migration does not use it.
+
+    before  2026-09-21 04:50:08.921-07   (= 11:50:08 UTC)
+    after   2026-09-21 04:50:08.921      naive UTC
+    runs    2026-09-21 04:50:08.962      41ms later
+
+44 rows moved back seven hours. TrainingProposal has zero rows. Nothing else touched.
+
+**Stated, not buried:** the inverse is right provided every row was written by that path with the
+session zone at LA. All 44 were. A row written from another zone would be corrected by the wrong
+offset **and there is no way to tell it apart afterwards** - the second reason the mismatch had to
+go rather than be documented.
+
+## The versions
+
+`/api/version` now publishes `exam.response_protocol_version` and `exam.operation_rubric_version`.
+The Office mints a run ref from the exam's identity and puts both in it; neither was published, so
+`assign_contract` minted the same ref across two protocol MAJORs and a rubric bump and could not be
+re-examined at all.
+
+`RESPONSE_PROTOCOL_VERSION` moved to `rubric.py` because **ADR-0050 forbids a router reaching the
+held-out corpus** and the walk test enforces it. `battery.py` re-exports it and still owns the text.
+
+## Worth keeping
+
+**Two defects, and the first one hid the second.** The wrong timestamp is what made the 44 rows
+look like a mysterious later rewrite rather than the ordinary Gate 8 pass they were - and it was
+only chasing that phantom that surfaced the unpublished versions at all.

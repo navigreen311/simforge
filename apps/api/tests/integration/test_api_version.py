@@ -207,3 +207,35 @@ def test_a_release_string_in_app_version_is_not_mistaken_for_a_commit() -> None:
 
     with mock.patch.dict(os.environ, {"APP_VERSION": "1.0.0"}, clear=False):
         assert _started_commit() != "1.0.0"
+
+
+# =================================================================================================
+# The exam's own versions (ADR-0101)
+# =================================================================================================
+
+
+async def test_the_route_publishes_the_protocol_and_rubric_versions(client: AsyncClient) -> None:
+    """**The Office mints a run ref from the exam's identity and reads both from here.**
+
+    Neither was published, so a module whose instructions and scenarios had not changed minted the
+    same ref across two protocol MAJORs and a rubric bump, `open_run` returned the closed run, and
+    `assign_contract` could not be re-examined at all.
+    """
+    from src.services.operation.rubric import (
+        OPERATION_RUBRIC_VERSION,
+        RESPONSE_PROTOCOL_VERSION,
+    )
+
+    exam = (await client.get("/api/version")).json()["exam"]
+
+    assert exam["response_protocol_version"] == RESPONSE_PROTOCOL_VERSION
+    assert exam["operation_rubric_version"] == OPERATION_RUBRIC_VERSION
+
+
+async def test_the_exam_versions_are_not_settings(client: AsyncClient) -> None:
+    """Beside `started_commit`, not inside `launch_environment`. Nothing configures them; they are
+    facts about the code this process is running, which is what this route reports."""
+    body = (await client.get("/api/version")).json()
+
+    assert "exam" in body
+    assert "response_protocol_version" not in body["launch_environment"]["modes"]

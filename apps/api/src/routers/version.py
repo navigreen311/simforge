@@ -13,6 +13,10 @@ from fastapi import APIRouter
 
 from src.build_info import STARTED_COMMIT, checkout_commit, commits_differ
 from src.config import settings
+from src.services.operation.rubric import (
+    OPERATION_RUBRIC_VERSION,
+    RESPONSE_PROTOCOL_VERSION,
+)
 
 router = APIRouter()
 
@@ -133,5 +137,20 @@ async def version() -> dict:
         "checkout_commit": checkout,
         "differs": commits_differ(started, checkout),
         "app_version": settings.app_version,
+        # ADR-0101 - THE EXAM'S OWN VERSIONS, PUBLISHED.
+        #
+        # The Office puts both in the identity it mints a run ref from, and reads them from here.
+        # Neither was published, so a module whose instructions and scenarios had not changed
+        # minted the same ref across two protocol MAJORs and a rubric bump, `open_run` returned
+        # the closed run, and `assign_contract` could not be re-examined at all - it carries a
+        # verdict earned under 4.0.0 / 0.2.0 and has no way back to the exam.
+        #
+        # Beside `started_commit` rather than inside `launch_environment`, because these are not
+        # settings. Nothing configures them; they are facts about the code this process is running,
+        # which is exactly what this route is for.
+        "exam": {
+            "response_protocol_version": RESPONSE_PROTOCOL_VERSION,
+            "operation_rubric_version": OPERATION_RUBRIC_VERSION,
+        },
         "launch_environment": _launch_environment(),
     }
