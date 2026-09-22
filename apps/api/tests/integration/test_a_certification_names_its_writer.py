@@ -145,8 +145,18 @@ def test_the_restart_rotates_the_logs_and_never_truncates() -> None:
     redirect_at = code.index("-RedirectStandardOutput")
     assert rotate_at < redirect_at, "the rotation must happen BEFORE anything can truncate"
 
+    # AND AFTER THE STOP, which the first version of this script got wrong: the child holds both
+    # log files open, so `Move-Item` on a live process fails with "being used by another process"
+    # and the restart dies half done. Stopping first is still safe - the only thing that truncates
+    # is `Start-Process`, and that is downstream of the rename either way.
+    assert code.index("Stop-Process") < rotate_at
+
+    # A rotation that cannot complete must not be followed by a start. Truncating a log to keep
+    # the service up is the trade this whole script refuses.
+    assert "throw" in code
+
     # `>` and `Out-File` without -Append are the other two ways to destroy a log here.
-    assert not re.search(r"Out-File(?![^\r\n]*-Append)", text)
+    assert not re.search(r"Out-File(?![^|]*-Append)", code)
 
 
 def test_the_restart_records_creation_date_for_both_launcher_and_child() -> None:

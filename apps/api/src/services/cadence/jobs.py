@@ -96,11 +96,22 @@ async def run_timeout_sweep(session: AsyncSession | None = None) -> dict:
 
     async with _session(session) as s:
         swept = await sweep_timed_out_runs(s)
-    return {
-        "job": "run_timeout_sweep",
-        "timed_out": len(swept),
-        "run_refs": [r.runRef for r in swept],
-    }
+        # READ THE REFS BEFORE THE COMMIT. After it the instances are expired, and reading an
+        # attribute would issue lazy IO outside the greenlet - a MissingGreenlet, not a value.
+        refs = [run.runRef for run in swept]
+        if swept and session is None:
+            # AND COMMIT, WHICH THE FIRST VERSION OF THIS JOB DID NOT.
+            #
+            # `sweep_timed_out_runs` only FLUSHES - its sole caller was a route, and a request
+            # handler owns its own commit. Run from the scheduler the flush was rolled back when
+            # the session closed, so the job returned `timed_out: 7` at 00:35 and again at 01:35
+            # with seven rows still open, and `battery_sweep` went on re-skipping every one of
+            # them. The report was right about what it had found and wrong about what it had done.
+            #
+            # Only when this job OWNS the session. A caller that passes one owns the commit, the
+            # same rule `_session` is built on.
+            await s.commit()
+    return {"job": "run_timeout_sweep", "timed_out": len(swept), "run_refs": refs}
 
 
 async def evidence_purge(session: AsyncSession | None = None) -> dict:
