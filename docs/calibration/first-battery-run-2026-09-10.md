@@ -4615,3 +4615,75 @@ md5 against the pre-restart hashes.
 session had the same shape as the twelve phantoms in the PAF audit and as ADR-0096's three: the
 report was right and the effect was absent. The check that caught both was the same one - go and
 look at the thing the work was supposed to change.
+
+# Entry 61 - a job's test asserts the row
+
+**22 September 2026.** ADR-0105.
+
+## The ruling
+
+A job's test asserts the row the job changes, read from a fresh session, through the scheduler's
+own path. Measured: `run_timeout_sweep` shipped passing and closed nothing.
+
+## The two properties that let it through
+
+    out = await run_timeout_sweep(db_session)
+    assert out["timed_out"] == 1
+
+**It asserted the return value** - a claim about what the job FOUND. And **it passed a session**,
+so it borrowed the test's transaction and never entered the branch APScheduler takes. The defect
+lived entirely in the path no test reached.
+
+## Built
+
+`tests/integration/scheduler_path.py`: `run_scheduled(name, session)` calls the job with NO session
+argument against the test engine; `fresh_session` answers from the database rather than the
+identity map. Two things worth writing down, because both cost time:
+
+- `session.bind` is the AsyncEngine; `get_bind()` returns the sync one and `async_sessionmaker`
+  rejects it with an error naming neither.
+- Every job imports its callee INSIDE the function body, so a stand-in must be patched on the
+  callee's own module. An attribute set on `jobs` is never read, and the test silently runs the
+  real thing.
+
+`fresh_session` does not prove cross-connection visibility - in-memory SQLite on a StaticPool
+shares one connection. It proves the COMMIT, which is what was missing.
+
+## evidence_purge first, because it destroys
+
+Four tests, and it had none. **And it does not delete** - `purge_expired` sets `purgedAt` and moves
+the record to `tier = "cold"`. A tombstone, because removing a record would break every
+chain-of-custody anchor downstream of it. Better than the name suggests.
+
+The one that matters: **a legal hold survives the scheduled purge.** The old test asserted
+`purged == ["h1"]`, which a purge that tombstoned the HELD record and reported the other one would
+satisfy. Counsel's hold is a fact about a row.
+
+## safe_mode_auto_trigger second
+
+Every fifteen minutes in the live process, no job-level test. The function was tested; the caller
+was not. Now: five failures write the row with `autoTriggered` and global scope; four write NOTHING
+(`activated: None` has to mean no row, not an unsaved one); two passes raise ONE safe mode.
+
+## The three cadence tests
+
+`assert "scanned_certs" in result` over a database with nothing in it. No fixture existed for any
+of them to act on, so every count was 0 and the assertion could not have failed however the job
+behaved - it would pass against a literal. Each now sets up a row and asserts it, through the
+ROUTE; the scheduler path is a second caller, covered separately. Both branches run in production.
+
+## Negative controls
+
+Two, because a test that catches nothing is the failure mode under discussion.
+
+- `run_timeout_sweep`'s commit removed -> the owned-session test fails ALONE.
+- `purge_expired`'s commit changed to a flush -> three of four evidence tests fail, legal hold
+  among them.
+
+1,220 pass, 2 skip, random order.
+
+## Worth keeping
+
+Every naive report here has now misled at least once: a score counting the wrong channel (0102), a
+version that existed unpublished (0101), a verdict read off the wrong half (0099), a sweep
+reporting seven closures it never made. **The instrument that caught all four was the same one.**

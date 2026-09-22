@@ -153,9 +153,9 @@ async def test_it_stamps_a_run_past_its_own_window(db_session: AsyncSession) -> 
     from sqlalchemy import select
 
     from src.models.operation_run import OperationRun
-    from src.services.cadence.jobs import run_timeout_sweep
     from src.services.operation.rubric import OPERATION_RUBRIC_VERSION as RV
     from src.services.operation.run_registry import open_run
+    from tests.integration.scheduler_path import fresh_session, run_scheduled
 
     await open_run(
         db_session,
@@ -175,7 +175,19 @@ async def test_it_stamps_a_run_past_its_own_window(db_session: AsyncSession) -> 
     row.startedAt = datetime.utcnow() - timedelta(days=3)
     await db_session.commit()
 
-    out = await run_timeout_sweep(db_session)
+    # ADR-0105. THIS TEST SHIPPED ASSERTING ONLY THE TWO LINES BELOW, and both are true of a job
+    # that writes nothing - which is exactly what it did for four days. The row is the assertion;
+    # `run_scheduled` enters the branch the scheduler takes, and `fresh_session` answers from the
+    # database rather than from the identity map of the session that made the change.
+    out = await run_scheduled("run_timeout_sweep", db_session)
 
     assert out["timed_out"] == 1
     assert "op-run-0102-stale" in out["run_refs"]
+    async with fresh_session(db_session) as fresh:
+        stamped = (
+            await fresh.execute(
+                select(OperationRun).where(OperationRun.runRef == "op-run-0102-stale")
+            )
+        ).scalar_one()
+        assert stamped.verdict == "TIMEOUT"
+        assert stamped.timedOutAt is not None
