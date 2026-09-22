@@ -64,6 +64,14 @@ async def test_legal_hold_blocks_purge(db_session: AsyncSession) -> None:
     await set_legal_hold(db_session, "h0", True, "counsel")
     purged = await purge_expired(db_session)
     assert purged == ["h1"]
+    # ADR-0105. THE RETURNED LIST IS NOT THE GUARANTEE. A purge that tombstoned the held record
+    # and reported the other one would satisfy the line above, and counsel's hold is a fact about
+    # a row. See `test_a_job_asserts_its_row.py` for the same guarantee under the scheduled job.
+    rows = {
+        r.bundleId: r for r in (await db_session.execute(select(EvidenceRecord))).scalars().all()
+    }
+    assert rows["h0"].purgedAt is None and rows["h0"].tier == "hot"
+    assert rows["h1"].purgedAt is not None and rows["h1"].tier == "cold"
 
 
 def test_redaction_classes() -> None:

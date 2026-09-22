@@ -57,6 +57,9 @@ async def test_expire_waivers_sweep(client: AsyncClient, db_session: AsyncSessio
     expired = await expire_waivers(db_session)
     assert w.id in expired
     assert (await db_session.execute(select(Waiver))).scalars().first().status == "expired"
+    # ADR-0105. This asserts the row, which is right - and it calls the FUNCTION. The hourly job
+    # `expire_waivers_job` is a second caller with a session of its own, and that is the branch
+    # `run_timeout_sweep` lost its commit in. Covered in `test_a_job_asserts_its_row.py`.
 
 
 async def _issue_and_revoke_cert(client: AsyncClient) -> str:

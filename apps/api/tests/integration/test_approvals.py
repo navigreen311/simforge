@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -125,9 +127,33 @@ async def test_bad_kind_rejected(client: AsyncClient) -> None:
     assert resp.status_code == 400 and "kind" in resp.json()["detail"].lower()
 
 
-async def test_escalation_job_runs_on_demand(client: AsyncClient) -> None:
+async def test_escalation_job_expires_a_stale_request(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """ADR-0105. This asserted `"count" in result` over a database with no stale request in it -
+    true of a job that returned a literal. The row is the assertion.
+
+    The scheduler path, where the job opens a session of its own, is covered in
+    `test_a_job_asserts_its_row.py`.
+    """
+    req = await _create(client)
+    row = (
+        await db_session.execute(select(ApprovalRequest).where(ApprovalRequest.id == req["id"]))
+    ).scalar_one()
+    row.expiresAt = utcnow() - timedelta(hours=1)
+    await db_session.commit()
+
     result = (await client.post("/api/scheduler/run/hourly_approval_escalation")).json()
-    assert result["job"] == "hourly_approval_escalation" and "count" in result
+
+    assert result["job"] == "hourly_approval_escalation"
+    assert result["count"] == 1
+    db_session.expire_all()
+    after = (
+        await db_session.execute(select(ApprovalRequest).where(ApprovalRequest.id == req["id"]))
+    ).scalar_one()
+    assert after.status == "expired"
+    assert after.resolution == "expired"
+    assert after.resolvedAt is not None
 
 
 @pytest.mark.parametrize("kind", ["cert_issuance", "rubric_amendment", "policy_change"])

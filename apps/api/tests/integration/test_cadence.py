@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.agent import Agent
+from src.models.cert import AgentCert
+from src.utils.time import utcnow
 
 
 async def test_scheduler_status_lists_jobs(client: AsyncClient) -> None:
@@ -20,22 +28,81 @@ async def test_scheduler_status_lists_jobs(client: AsyncClient) -> None:
         assert j["schedule"] and j["description"]
 
 
-async def test_trigger_regression_job_on_demand(client: AsyncClient) -> None:
+# ADR-0105. THE THREE TESTS BELOW ASSERTED THE REPORT OVER AN EMPTY DATABASE.
+#
+# `assert "scanned_certs" in result` was true of a job that returned a literal, and no fixture
+# existed for any of them to act on - so `scanned_certs` was 0, `expired` was 0, and the assertion
+# could not have failed however the job behaved. Each now sets up a row and asserts that row.
+#
+# These run the job through its ROUTE, which supplies a request session. The scheduler path, where
+# the job opens a session of its own, is a different caller and is covered separately in
+# `test_a_job_asserts_its_row.py` - that is the branch `run_timeout_sweep` lost its commit in.
+
+
+async def test_trigger_regression_job_suspends_the_covering_cert(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A prior-pass/now-fail flip suspends the cert covering the cap."""
+    from tests.integration.test_regression_sweep import (
+        _greenstone,
+        _issue_active_cert,
+        _run_with_card,
+        _seed_scenario,
+    )
+
+    await client.post("/api/packs/", json={"pack_dir": _greenstone()})
+    agent, scenario = await _seed_scenario(db_session)
+    cert = await _issue_active_cert(db_session, agent)
+    cert_id = cert.id  # read BEFORE expire_all below; after it this is a lazy load
+    await _run_with_card(db_session, agent, scenario, passed=True, minutes_ago=120)
+    await _run_with_card(db_session, agent, scenario, passed=False, minutes_ago=5)
+    await db_session.commit()
+
     result = (await client.post("/api/scheduler/run/daily_regression")).json()
+
     assert result["job"] == "daily_regression"
-    assert "scanned_certs" in result and "suspended_cert_ids" in result
+    assert cert_id in result["suspended_cert_ids"]
+    db_session.expire_all()
+    row = (
+        await db_session.execute(select(AgentCert).where(AgentCert.id == cert_id))
+    ).scalar_one()
+    assert row.status == "suspended"
 
 
-async def test_trigger_cert_lifecycle_job_on_demand(client: AsyncClient) -> None:
+async def test_trigger_cert_lifecycle_job_expires_a_past_due_cert(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """And leaves an expiring-soon one active, which `{"expired": 1}` on its own cannot say."""
+    from tests.integration.test_regression_sweep import _greenstone, _issue_active_cert
+
+    await client.post("/api/packs/", json={"pack_dir": _greenstone()})
+    agent = (
+        await db_session.execute(select(Agent).where(Agent.villageAgentId == "david_kim"))
+    ).scalar_one()
+    cert = await _issue_active_cert(db_session, agent)
+    cert.expiresAt = utcnow() - timedelta(days=1)
+    cert_id = cert.id  # read BEFORE expire_all below
+    await db_session.commit()
+
     result = (await client.post("/api/scheduler/run/nightly_cert_lifecycle")).json()
+
     assert result["job"] == "nightly_cert_lifecycle"
-    assert "expired" in result and "expiring_soon" in result
+    assert result["expired"] == 1
+    db_session.expire_all()
+    row = (
+        await db_session.execute(select(AgentCert).where(AgentCert.id == cert_id))
+    ).scalar_one()
+    assert row.status == "expired"
 
 
 async def test_snapshot_job_degrades_without_village_data(client: AsyncClient) -> None:
-    # In CI the Village data path may be absent → the job skips gracefully, never 500s.
+    """**Left as a report assertion, and deliberately.** This one is about the degraded path: with
+    no Village data the job must skip rather than 500, and a skip has no row to assert. The
+    wrapper's session handling is covered in `test_a_job_asserts_its_row.py`; the capture itself
+    remains uncovered, because it needs Village data a test cannot supply."""
     result = (await client.post("/api/scheduler/run/daily_snapshot")).json()
     assert result["job"] == "daily_snapshot"
+    assert "skipped" in result or "captured" in result
 
 
 async def test_unknown_job_404(client: AsyncClient) -> None:
