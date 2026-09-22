@@ -4488,3 +4488,83 @@ down for the part of the answer the protocol invited.
 And: the aggregates separated, the per-key rows did not. One key ran 2 then 9 on the same arm. Two
 replicates of ten is enough to rank three arms and not enough to rank six keys - which is the
 reading the totals are quoted for and the per-key table is printed against.
+
+# Entry 59 - a certification names its writer
+
+**21 September 2026.** ADR-0104. Three rulings, all from one failed investigation.
+
+## What could not be answered
+
+Six certifications written 19 September, 16:48:52 to 16:52:50 UTC. Which process wrote them?
+
+Thirty-five columns on the row. `forgeApiVersion='1.4.0'` is a DECLARED string, not a build.
+`agentModelIdentity` describes the EXAMINEE. `operationRubricVersion` dates the rules. **Not one
+column names the writer.**
+
+The only handle was `started_commit` on a LIVE process - and every process from that day had been
+restarted several times since. Closed unattributed.
+
+## Ruling 1 - the row carries its writer
+
+`writtenBy`: started_commit, pid, host, process_started_at, and **process_start_source**.
+
+Five fields rather than four, because `kernel` (GetProcessTimes, or /proc/self) and `import` are
+not the same measurement - import time is later than creation by however long the interpreter took
+to start. Reporting both under one name would be this ADR's own defect one layer down.
+
+Two traps in the kernel path, and each one fails SILENTLY INTO THE FALLBACK:
+
+- `datetime(1601,1,1).timestamp()` raises OSError on Windows. Use a timedelta.
+- Without declared argtypes, `GetCurrentProcess` returns its pseudo-handle as a C int, the call
+  returns 0, and the function reports `import` while looking like it measured something.
+
+**A column default, not a keyword at three write sites.** The next site will not remember; a
+default cannot be omitted. Fresh dict per row - a shared one hangs one mutable object off every
+certification in the session. NULL for existing rows: a guessed writer reads as a record.
+
+## Rulings 2 and 3 - the restart
+
+`scripts/restart-api.ps1`.
+
+`Start-Process -RedirectStandardOutput` TRUNCATES. On 21 September that destroyed the previous
+launch's whole record - startup line, scheduler registration, every sweep - while the question
+above was being asked. Now both files are RENAMED aside first. A rename, not a copy: a rotation
+that fails part way leaves the original whole.
+
+The same restart captured PID and command line for the processes it killed and NOT `CreationDate`.
+Both are now written down before anything is stopped, each tagged launcher or child, and appended
+to `simforge-api-8110.restarts.jsonl` - a ledger nothing rotates, which is what survives after the
+logs have rolled and the processes are gone.
+
+## The pair
+
+`.venv\Scripts\python.exe` is a LAUNCHER that spawns the base interpreter. One uvicorn launch is
+always two processes: the launcher, and a child holding the socket whose ExecutablePath is the
+SYSTEM Python. The same shape on Village OS (19620 -> 3528) and The Office (16900 -> 19704). The
+system Python's site-packages holds pip and nothing else.
+
+**I reported that pair as "one under the system Python rather than the venv" and it sent the
+investigation down an hour of the wrong path.** The roles are now labelled in the script rather
+than left to be inferred from a path.
+
+## The incident
+
+Closed, unattributed. Most consistent with the long-lived process last seen at `3628c23` - the
+checkout sat there from 18 Sept 23:26:49 until the first pull on the 19th at 12:28:02, which
+brackets a process that imported before 09:44:25 and was alive at 09:48.
+
+The pre-restart pair is ruled out: `started_commit 93eac59`, which was not HEAD until 21 Sept
+10:54:41, and that value cannot move within a process's life.
+
+Not provable now. Prefetch is off (zero files). The Security log needs admin, so 4688 records can
+be neither confirmed nor excluded. The processes are gone with their creation times. And the log
+that might have held the startup line was truncated by the restart - a limit the investigation
+introduced, not one it found.
+
+## Worth keeping
+
+**Every instrument here existed to date CODE, and the question was about a PROCESS.**
+`started_commit`, `operationRubricVersion`, `forgeApiVersion`, the model digest - four fields that
+between them pin the exact bytes that ran, and none that says who ran them. ADR-0084 built the
+first of those after a stale process served old code for two days; this is the same lesson arriving
+from the other side.

@@ -24,6 +24,7 @@ from datetime import datetime
 from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from src.build_info import process_identity
 from src.models.base import Base, _new_id, _now
 
 
@@ -120,6 +121,25 @@ class OperationCertification(Base):
     #: `score` is the one the verdict was decided on. This is the pair, so a row can be read
     #: without re-deriving either from `operationRubricResults`.
     channelScores: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: **THE PROCESS THAT WROTE THIS ROW** (ADR-0104 ruling 1): `started_commit`, `pid`, `host`,
+    #: `process_started_at` and the source that time came from.
+    #:
+    #: The six certifications of 19 September 2026 name no process, no commit and no host. When
+    #: the question came - which process wrote them - the only handle was `started_commit` on a
+    #: LIVE process, and every process from that day had been restarted several times since. The
+    #: attribution closed unattributed. Nothing on the row could help: `forgeApiVersion` is a
+    #: declared string, `agentModelIdentity` describes the EXAMINEE, and no column named the writer.
+    #:
+    #: **A COLUMN DEFAULT, not a keyword at each write site.** There are three sites today and the
+    #: next one will not remember. A default cannot be forgotten, and the callable returns a fresh
+    #: dict per row because a shared one would hang a single mutable object off every certification
+    #: in the session.
+    #:
+    #: Nullable, for the rows written before this existed. A backfilled guess would be the one
+    #: thing worse than the silence it replaces.
+    writtenBy: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, default=process_identity
+    )
     rubricDimensionSpread: Mapped[float | None] = mapped_column(Float, nullable=True)  # collapse
     #: WHICH RULE produced `rubricDimensionSpread` (ADR-0070). The measure is versioned, not
     #: migrated: rows written before v2 keep the population variance they were computed with and
