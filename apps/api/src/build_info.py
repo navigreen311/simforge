@@ -18,7 +18,9 @@ Two numbers, and the second is the one no single-value check can have.
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 #: Where `.git` lives relative to this file: apps/api/src/build_info.py -> repo root.
@@ -85,3 +87,98 @@ def commits_differ(started: str, checkout: str) -> bool | None:
     if started == UNKNOWN or checkout == UNKNOWN:
         return None
     return started != checkout
+
+
+# =================================================================================================
+# WHICH PROCESS, not only which code (ADR-0104 ruling 1).
+#
+# The six certifications of 19 September 2026 name no process, no commit and no host. When the
+# question came - which process wrote them - the only handle was `started_commit` on a LIVE
+# process, and every process alive that day had been restarted several times since. The attribution
+# closed unattributed, and the rows themselves could not help: `forgeApiVersion` is a declared
+# string, `agentModelIdentity` describes the examinee, and nothing anywhere named the writer.
+#
+# So a certification carries its writer. Four facts, frozen at import because none of them can
+# change while the process lives.
+# =================================================================================================
+
+
+
+def _process_started_at() -> tuple[str, str]:
+    """When this process was created, and **where the answer came from**.
+
+    Two sources and a fallback, and the third value is reported rather than hidden:
+
+    * `kernel` - Windows `GetProcessTimes`, or `/proc/self` on Linux. The real creation time.
+    * `import` - the instant this module was imported, used where neither is available.
+
+    The source travels with the value because they are not the same measurement. Import time is
+    later than creation by however long the interpreter took to start, and a reader comparing a
+    log line against a process must know which of the two they hold. Reporting them under one name
+    would be the defect this whole ADR is about, one layer down.
+    """
+    try:  # Windows: the kernel's own answer, no dependency.
+        import ctypes  # noqa: PLC0415
+        import ctypes.wintypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        # ARGTYPES AND RESTYPES DECLARED, and they are not decoration. Without them
+        # `GetCurrentProcess` returns its pseudo-handle (-1) as a C int, the call fails with 0,
+        # and this function falls back to `import` while looking like it measured something.
+        # That is the shape of defect this ADR exists about, so it is spelled out here.
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        pointer = ctypes.POINTER(wintypes.FILETIME)
+        kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [pointer] * 4
+        kernel32.GetProcessTimes.restype = wintypes.BOOL
+
+        creation = wintypes.FILETIME()
+        other = [wintypes.FILETIME() for _ in range(3)]
+        ok = kernel32.GetProcessTimes(
+            kernel32.GetCurrentProcess(),
+            ctypes.byref(creation),
+            *(ctypes.byref(f) for f in other),
+        )
+        if ok:
+            # FILETIME is 100-nanosecond ticks since 1601-01-01 UTC.
+            #
+            # Added as a timedelta rather than through `.timestamp()`: on Windows,
+            # `datetime(1601, 1, 1).timestamp()` raises OSError because the platform cannot
+            # convert a pre-1970 instant - which is exactly how this silently fell back to
+            # `import` the first time it ran.
+            ticks = (creation.dwHighDateTime << 32) | creation.dwLowDateTime
+            started = datetime(1601, 1, 1, tzinfo=UTC) + timedelta(
+                microseconds=ticks // 10
+            )
+            return (started.isoformat(), "kernel")
+    except Exception:
+        pass
+    try:  # Linux: /proc/self is created when the process is.
+        stat = Path("/proc/self").stat()
+        return (
+            datetime.fromtimestamp(stat.st_ctime, tz=UTC).isoformat(),
+            "kernel",
+        )
+    except Exception:
+        pass
+    return (datetime.now(tz=UTC).isoformat(), "import")
+
+
+_STARTED_AT, _STARTED_AT_SOURCE = _process_started_at()
+
+#: This process, as a row can record it. **Frozen at import**, for the reason `STARTED_COMMIT` is:
+#: none of these can change while the process lives, and a value that moved under a caller would
+#: describe some later moment as the one that wrote the row.
+PROCESS_IDENTITY: dict[str, object] = {
+    "started_commit": STARTED_COMMIT,
+    "pid": os.getpid(),
+    "host": socket.gethostname(),
+    "process_started_at": _STARTED_AT,
+    "process_start_source": _STARTED_AT_SOURCE,
+}
+
+
+def process_identity() -> dict[str, object]:
+    """A COPY, because this is used as a column default and a shared dict would be one object
+    hung off every row in the session - mutate it once and every certification changes."""
+    return dict(PROCESS_IDENTITY)
