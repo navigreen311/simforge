@@ -66,23 +66,44 @@ if ($before.Count -gt 0) {
     Write-Host "Nothing running on port $Port."
 }
 
-# --- 2 - Rotate the logs. NEVER truncate --------------------------------------------------------
-# A rename, not a copy: the old bytes are never rewritten, so a rotation that fails part way
-# leaves the original whole rather than half of it.
-foreach ($file in @($log, $err)) {
-    if (Test-Path $file) {
-        $rotated = [IO.Path]::ChangeExtension($file, $null).TrimEnd('.') + ".$stamp" +
-                   [IO.Path]::GetExtension($file)
-        Move-Item -LiteralPath $file -Destination $rotated
-        Write-Host "Rotated $(Split-Path $file -Leaf) -> $(Split-Path $rotated -Leaf)"
-    }
-}
-
-# --- 3 - Stop them, child first -----------------------------------------------------------------
+# --- 2 - Stop them, child first -----------------------------------------------------------------
+# BEFORE the rotation, and the first run of this script is why. The child holds both log files
+# open, so `Move-Item` on a live process fails with "being used by another process" - which left
+# the API stopped and the rotation half done. Stopping first is also safe: the only thing that
+# TRUNCATES is `Start-Process` below, and that is still downstream of the rename.
 foreach ($proc in ($before | Sort-Object { $_.role } -Descending)) {
     Stop-Process -Id $proc.pid -Force -ErrorAction SilentlyContinue
 }
 if ($before.Count -gt 0) { Start-Sleep -Seconds 2 }
+
+# --- 3 - Rotate the logs. NEVER truncate --------------------------------------------------------
+# A rename, not a copy: the old bytes are never rewritten, so a rotation that fails part way
+# leaves the original whole rather than half of it.
+#
+# Retried, because a handle can outlive the process that held it by a moment. And if it still
+# cannot be moved, THIS THROWS AND NOTHING IS STARTED. That is the correct failure: an API that
+# is down can be started by hand, and a log that has been truncated is gone.
+foreach ($file in @($log, $err)) {
+    if (Test-Path $file) {
+        $rotated = [IO.Path]::ChangeExtension($file, $null).TrimEnd('.') + ".$stamp" +
+                   [IO.Path]::GetExtension($file)
+        $moved = $false
+        foreach ($attempt in 1..5) {
+            try {
+                Move-Item -LiteralPath $file -Destination $rotated -ErrorAction Stop
+                $moved = $true
+                break
+            } catch {
+                Start-Sleep -Milliseconds 500
+            }
+        }
+        if (-not $moved) {
+            throw ("Could not rotate $file - it is still held open. Nothing was started; the " +
+                   "log is intact. Find the process holding it before restarting.")
+        }
+        Write-Host "Rotated $(Split-Path $file -Leaf) -> $(Split-Path $rotated -Leaf)"
+    }
+}
 
 # --- 4 - Start, and record BOTH halves of the new pair ------------------------------------------
 $after = @()

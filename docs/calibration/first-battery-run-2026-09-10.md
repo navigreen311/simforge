@@ -4568,3 +4568,50 @@ introduced, not one it found.
 between them pin the exact bytes that ran, and none that says who ran them. ADR-0084 built the
 first of those after a stale process served old code for two days; this is the same lesson arriving
 from the other side.
+
+# Entry 60 - two things that reported success and did nothing
+
+**22 September 2026.** Found by running them, not by reading them. Both were merged.
+
+## 1 - the timeout sweep flushed and never committed
+
+ADR-0102 ruling 2 shipped, merged, and closed no run. `run_timeout_sweep` fired at 00:35 and
+again at 01:35 and returned:
+
+    {"job": "run_timeout_sweep", "timed_out": 7, "run_refs": [...seven refs...]}
+
+All seven rows still open, `timedOutAt` still NULL, and `battery_sweep` re-skipping every one of
+them at :20 - which is the exact symptom the ruling was written to end.
+
+`sweep_timed_out_runs` only FLUSHES. Its only caller was a route, and a request handler owns its
+own commit. From the scheduler the flush was rolled back when the session closed.
+
+**And the test that shipped with it asserted the return value.** `out["timed_out"] == 1` is true
+of a job that writes nothing. The new tests assert the ROW, and one of them patches `SessionLocal`
+to exercise the owned-session path - the branch where the commit was missing and which a test that
+always passes a session never reaches. Negative control run: that test alone fails without the
+commit.
+
+Also: the refs are now read BEFORE the commit. After it the instances are expired and reading
+`runRef` issues lazy IO outside the greenlet - a MissingGreenlet, not a value.
+
+## 2 - the restart script rotated before it stopped
+
+`scripts/restart-api.ps1`, first run:
+
+    Move-Item : The process cannot access the file because it is being used by another process.
+
+The child holds both log files open. Rotation has to come AFTER the stop, and that is still safe:
+the only thing that TRUNCATES is `Start-Process`, and it is downstream of the rename either way.
+
+Now retried five times, and if it still cannot move the file it **throws and starts nothing**. An
+API that is down can be started by hand; a log that has been truncated is gone. The run failed
+before reaching `Stop-Process`, so nothing was killed and both logs survived intact - verified by
+md5 against the pre-restart hashes.
+
+## Worth keeping
+
+**A job's return value is a claim about what it found, not about what it did.** Both defects this
+session had the same shape as the twelve phantoms in the PAF audit and as ADR-0096's three: the
+report was right and the effect was absent. The check that caught both was the same one - go and
+look at the thing the work was supposed to change.
