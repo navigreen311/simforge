@@ -75,21 +75,27 @@ async def bridged(
 # --- the manifest ---------------------------------------------------------------------------
 
 
-async def test_the_manifest_lists_three_modules(bridged: AsyncClient) -> None:
+async def test_the_manifest_lists_four_modules(bridged: AsyncClient) -> None:
     res = await bridged.get("/office/_modules", headers=AUTH)
     assert res.status_code == 200
     body = res.json()
 
     assert body["forge"] == "simforge"
     shapes = {m["module_id"]: m for m in body["modules"]}
-    assert sorted(shapes) == ["gate_result", "run_start", "submit_curriculum"]
+    assert sorted(shapes) == [
+        "gate_9_5_verdict",
+        "gate_result",
+        "run_start",
+        "submit_curriculum",
+    ]
 
-    # The read.
+    # The two reads.
     assert shapes["gate_result"]["is_mutating"] is False
+    assert shapes["gate_9_5_verdict"]["is_mutating"] is False
     # The two writers, declared as writers.
     assert shapes["submit_curriculum"]["is_mutating"] is True
     assert shapes["run_start"]["is_mutating"] is True
-    # All three retry onto the same state without a key.
+    # All four retry onto the same state without a key.
     assert {m["idempotency_support"] for m in body["modules"]} == {"natural"}
 
 

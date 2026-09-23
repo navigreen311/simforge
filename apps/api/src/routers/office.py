@@ -103,8 +103,11 @@ from src.db import get_session
 from src.routers.operation import start_operation_run, submit_curriculum
 from src.schemas.operation_payloads import (
     ForgeOperationCurriculum,
+    Gate95VerdictRequest,
+    Gate95VerdictResponse,
     OperationRunStartRequest,
 )
+from src.services.operation.partition_verdict import venture_verdict
 from src.services.operation.run_registry import gate_result_for
 
 logger = logging.getLogger(__name__)
@@ -257,6 +260,24 @@ async def _run_start(session: AsyncSession, payload: dict[str, Any]) -> dict[str
     return started.model_dump(mode="json")
 
 
+async def _gate_9_5_verdict(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+    """Gate 9.5: whether this venture's sealed partition passed. Never why.
+
+    The shape is `docs/contracts/gate-9-5-verdict.md` (ADR-0108 R5, ADR-0111).
+    Always 200 for a well-formed body: an unknown venture answers exactly
+    like a venture with no partition, so the call cannot probe which
+    ventures exist. A 4xx here is a malformed body only.
+
+    The service reads the partition row and the verdict rows. It never
+    holds a scenario, so nothing on this path can return one (ADR-0050).
+    """
+    body = _validated(Gate95VerdictRequest, payload, "gate_9_5_verdict")
+    answer = await venture_verdict(session, body.venture_id)
+    # Validated on the way out: a fifth key, or a verdict outside the
+    # contract, is a 500 here rather than a surprise at The Office.
+    return Gate95VerdictResponse.model_validate(answer).model_dump(mode="json")
+
+
 #: module_id -> spec. A dict rather than a chain of ifs because The Office's registry is
 #: also a table: a module SimForge does not implement should 404 with the module named,
 #: not fall through to something that half works.
@@ -270,6 +291,13 @@ MODULES: dict[str, ModuleSpec] = {
         is_mutating=False,
         # The same run_ref returns the same verdict, so a retry lands on the same answer
         # without a key. `natural`, not `key`.
+        idempotency_support="natural",
+    ),
+    "gate_9_5_verdict": ModuleSpec(
+        _gate_9_5_verdict,
+        # A read of the partition and verdict rows. Grading writes them (ADR-0110).
+        is_mutating=False,
+        # A retry reads the current answer and changes nothing. `natural`.
         idempotency_support="natural",
     ),
     "submit_curriculum": ModuleSpec(
