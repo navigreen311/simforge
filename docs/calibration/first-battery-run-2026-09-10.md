@@ -4687,3 +4687,68 @@ Two, because a test that catches nothing is the failure mode under discussion.
 Every naive report here has now misled at least once: a score counting the wrong channel (0102), a
 version that existed unpublished (0101), a verdict read off the wrong half (0099), a sweep
 reporting seven closures it never made. **The instrument that caught all four was the same one.**
+
+# Entry 62 - a default is not evidence
+
+**22 September 2026.** ADR-0106.
+
+## The ruling
+
+A test that would pass on its own fallback tests nothing. Assert a declared value that differs from
+every default; then sweep for the same shape.
+
+## The shape
+
+    assert identity["settings"]["temperature"] == 0.0     # DEFAULT_TEMPERATURE = 0.0
+
+True of the value, silent about the mechanism. If the declared setting never travelled,
+`generation_settings` fills it from the default and the test passes on the fallback it was written
+to rule out.
+
+## The worse one the sweep found first
+
+`test_operation_battery_run.py:710` asserted `{"temperature": 0.0, "max_tokens": 2048}` - BOTH
+values equal to BOTH defaults, on the fixture path whose whole point is that
+`read_village_agent_model` parsed a real config.yaml. And the fixture declared those same two
+numbers. Had the reader raised, `declared = {}`, the runtime falls back, and every assertion
+downstream reads identically.
+
+## Built
+
+`EXAM_SETTINGS = {"temperature": 0.37, "max_tokens": 1536}` - and NOT the live Village's 0.7/4000
+either, because a fixture matching production would pass without the declaration being read too.
+
+The guard is the test: `assert EXAM_SETTINGS["temperature"] != DEFAULT_TEMPERATURE`. Without it a
+later edit drifts the fixture back and nothing notices.
+**`test_exam_attempts_and_production_settings.py:90` already did exactly this.** The pattern
+existed in this repository and had been applied in one place.
+
+And the sweep is now a test: `test_no_test_asserts_a_generation_setting_at_its_own_default` walks
+every test file and fails on `temperature == 0.0` or `max_tokens == 2048`. A grep finds today's
+instances; this fails the day another is written.
+
+## Four instances, and four that are not
+
+Fixed: the two named above, plus `test_ollama_provider.py:49` and `test_anthropic_provider.py:43` -
+both pass `temperature=0.0` and assert the provider forwarded `0.0`, which is the signature's own
+default, so a DROPPED argument reads the same. Now 0.42.
+
+**Not the shape, and that matters as much:** `min_per_cell == 3`, `locale == "en"`,
+`window_minutes == 180`. Each equals a default and each is correct - nothing declared a competing
+value, and those tests assert the default on purpose. The scanner is scoped to the two generation
+settings for exactly this reason: a scan for every literal equal to every default would flag all
+three and be switched off within a week.
+
+## Negative controls
+
+One assertion reverted to 0.0 -> the scanner fails and names file and line. The guards fail if
+either fixture drifts back.
+
+1,224 pass, 2 skip.
+
+## Worth keeping
+
+**An assertion is evidence only if it could have failed.** Four defects this week, one shape: a
+report that could not be wrong, a sweep that reported what it had not done, a flag with nothing
+tying it to the fact, and a value indistinguishable from its own fallback. One question catches all
+four - what would this look like if the mechanism were absent?

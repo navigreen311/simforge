@@ -33,13 +33,15 @@ async def test_anthropic_request_and_parse(monkeypatch: pytest.MonkeyPatch) -> N
     resp = await p.complete(
         system="You are a judge.",
         messages=[{"role": "agent", "content": "hi"}],
-        temperature=0.0,
+        # ADR-0106: not 0.0 - that is the provider signature default, so a forwarded value
+        # and a dropped one would look identical here.
+        temperature=0.42,
         max_tokens=512,
     )
     assert resp.content == "Judged: 0.82"
     assert resp.tokens_input == 120 and resp.tokens_output == 15
     assert resp.provider == "anthropic"
     assert seen["model"] == "claude-3-5-sonnet-20241022"
-    assert seen["temperature"] == 0.0 and seen["top_p"] == 1.0
+    assert seen["temperature"] == 0.42 and seen["top_p"] == 1.0
     assert seen["system"] == "You are a judge."
     assert seen["messages"][0]["role"] == "assistant"  # agent → assistant
