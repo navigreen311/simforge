@@ -24,6 +24,11 @@ from src.models.golden_nomination import GoldenNomination
 from src.models.golden_run import GoldenRun
 from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.handoff_test import HandoffTest
+from src.models.held_out_partition import (
+    HeldOutPartition,
+    HeldOutPartitionScenario,
+    HeldOutPartitionVerdict,
+)
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.ontology import OntologyEntity, OntologyRelation
 from src.models.operation_cert import OperationCertification
@@ -91,6 +96,9 @@ __all__ = [
     "OperationCertification",
     "OperationRun",
     "OperationScenarioSubmission",
+    "HeldOutPartition",
+    "HeldOutPartitionScenario",
+    "HeldOutPartitionVerdict",
     "Waiver",
     "Appeal",
     "DressRehearsal",

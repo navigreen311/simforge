@@ -1173,3 +1173,64 @@ model OperationCertification {
   @@index([moduleId])
   @@index([departmentId])
 }
+
+// ─── Gate 9.5 held-out adversarial partition (ADR-0108) ────────────────────────
+// Venture-scoped, stored, sealed. SimForge authors it; The Office never reads it.
+// All three are append-only. No router selects from HeldOutPartitionScenario.
+
+model HeldOutPartition {
+  id            String    @id @default(cuid())
+  ventureId     String
+  forgeId       String
+  /// authoring | sealed | retired. One sealed partition per venture at a time.
+  status        String    @default("authoring")
+  /// Who triggered and sealed it (ADR-0108 R1). Never The Office.
+  authoredBy    String
+  /// sha256 over the scenario digests, set at seal.
+  contentDigest String?
+  createdAt     DateTime  @default(now())
+  sealedAt      DateTime?
+
+  scenarios HeldOutPartitionScenario[]
+  verdicts  HeldOutPartitionVerdict[]
+
+  @@index([ventureId])
+  @@index([forgeId])
+  @@index([status])
+}
+
+model HeldOutPartitionScenario {
+  id            String           @id @default(cuid())
+  partitionId   String
+  partition     HeldOutPartition @relation(fields: [partitionId], references: [id])
+  moduleId      String
+  /// never_do_violation | silent_failure
+  scenarioClass String
+  /// The scenario. Content. Never returned by any route.
+  body          Json
+  /// sha256 of the canonical body; disjointness from the battery is checked on it.
+  digest        String
+  createdAt     DateTime         @default(now())
+
+  @@index([partitionId])
+  @@index([moduleId])
+  @@index([digest])
+}
+
+model HeldOutPartitionVerdict {
+  id                     String           @id @default(cuid())
+  partitionId            String
+  partition              HeldOutPartition @relation(fields: [partitionId], references: [id])
+  ventureId              String
+  agentId                String
+  /// PASS | FAIL | NOT_RUN | IN_PROGRESS | TIMEOUT. Whether, never why.
+  verdict                String
+  /// The partition's contentDigest at grading time.
+  partitionDigest        String
+  instructionContentHash String?
+  decidedAt              DateTime         @default(now())
+
+  @@index([partitionId])
+  @@index([ventureId])
+  @@index([agentId])
+}
