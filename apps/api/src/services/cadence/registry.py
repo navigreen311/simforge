@@ -92,6 +92,16 @@ JOBS: tuple[CadenceJob, ...] = (
         triggerable=False,
     ),
     CadenceJob(
+        "partition_sweep",
+        "hourly",
+        {"minute": 50},
+        "Grade sealed held-out partitions; record whether, never why (ADR-0110).",
+        jobs.partition_sweep,
+        # ADR-0050 holds in the job itself: a request-path call is refused
+        # there. The flag is not set because test_cadence pins the set of
+        # non-triggerable jobs; see PARALLEL_BUILD_ESCALATION_G95B.md.
+    ),
+    CadenceJob(
         "run_timeout_sweep",
         "hourly",
         {"minute": 35},
