@@ -99,6 +99,7 @@ async def _seed(
         authoredBy="ivan",
         contentDigest=DIGEST if status != "authoring" else None,
         sealedAt=utcnow() if status != "authoring" else None,
+        sealedBy="Grace Hopper" if status != "authoring" else None,
     )
     session.add(partition)
     await session.flush()

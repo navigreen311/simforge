@@ -1190,9 +1190,16 @@ model HeldOutPartition {
   contentDigest String?
   createdAt     DateTime  @default(now())
   sealedAt      DateTime?
+  /// A named human, never the author (ADR-0113). Null while authoring.
+  /// Two CHECKs Prisma cannot express enforce it - see the migration:
+  /// held_out_partition_sealer_is_not_author, held_out_partition_seal_names_sealer.
+  /// One sealed partition per venture is a partial unique index, also
+  /// migration-only: HeldOutPartition_one_sealed_per_venture.
+  sealedBy      String?
 
   scenarios HeldOutPartitionScenario[]
   verdicts  HeldOutPartitionVerdict[]
+  seal      HeldOutPartitionSeal?
 
   @@index([ventureId])
   @@index([forgeId])
@@ -1233,4 +1240,21 @@ model HeldOutPartitionVerdict {
   @@index([partitionId])
   @@index([ventureId])
   @@index([agentId])
+}
+
+/// The seal's own audit record (ADR-0113). Append-only, one per seal,
+/// written in the same commit as the seal.
+model HeldOutPartitionSeal {
+  id                  String           @id @default(cuid())
+  partitionId         String           @unique
+  partition           HeldOutPartition @relation(fields: [partitionId], references: [id])
+  ventureId           String
+  authoredBy          String
+  sealedBy            String
+  contentDigest       String
+  /// The partitions this seal retired.
+  retiredPartitionIds Json             @default("[]")
+  sealedAt            DateTime         @default(now())
+
+  @@index([ventureId])
 }

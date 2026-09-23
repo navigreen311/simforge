@@ -74,9 +74,13 @@ async def _author(db: AsyncSession, venture: str = VENTURE, by: str = "ivan") ->
         return await hp.author_partition(s, venture, FORGE, by)
 
 
-async def _seal(db: AsyncSession, pid: str) -> str:
+#: ADR-0113. Not the author, who is "ivan" throughout.
+SEALER = "Grace Hopper"
+
+
+async def _seal(db: AsyncSession, pid: str, by: str = SEALER) -> str:
     async with fresh_session(db) as s:
-        return await hp.seal_partition(s, pid)
+        return await hp.seal_partition(s, pid, by)
 
 
 async def _partitions(db: AsyncSession) -> list[HeldOutPartition]:
@@ -260,9 +264,10 @@ async def test_sealing_an_unknown_partition_is_refused(db_session: AsyncSession)
 # --- the operator CLI ----------------------------------------------------------
 
 
-async def test_the_cli_authors_and_seals_and_prints_no_content(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, capsys
+async def test_the_cli_authors_then_a_second_person_seals_and_no_content_prints(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Two invocations, two people (ADR-0113)."""
     import json
 
     from scripts import author_partition as cli
@@ -270,19 +275,34 @@ async def test_the_cli_authors_and_seals_and_prints_no_content(
 
     await _seed(db_session)
     monkeypatch.setattr(cli, "SessionLocal", _maker(db_session))
-    out = await cli._run(
+    authored = await cli._run(
         cli.argparse.Namespace(
-            venture=VENTURE, forge=FORGE, by="ivan", seal=True, seal_id=None
+            venture=VENTURE, forge=FORGE, by="ivan", seal_id=None, sealed_by=None
         )
     )
-    printed = json.dumps(out)
+    sealed = await cli._run(
+        cli.argparse.Namespace(
+            venture=None, forge=None, by=None,
+            seal_id=authored["partition_id"], sealed_by=SEALER,
+        )
+    )
+    printed = json.dumps([authored, sealed])
 
     [row] = await _partitions(db_session)
-    assert out == {
+    assert authored["status"] == "authoring"
+    assert sealed == {
         "partition_id": row.id,
         "scenarios": len(await _scenarios(db_session, row.id)),
         "content_digest": row.contentDigest,
         "status": "sealed",
     }
-    assert row.status == "sealed"
+    assert (row.status, row.authoredBy, row.sealedBy) == ("sealed", "ivan", SEALER)
     assert "backdate" not in printed and "probe" not in printed
+
+
+async def test_the_cli_cannot_seal_without_naming_the_sealer(capsys) -> None:
+    from scripts import author_partition as cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["--seal-id", "p-1"])
+    assert "--sealed-by" in capsys.readouterr().err

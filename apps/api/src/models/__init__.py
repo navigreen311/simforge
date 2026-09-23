@@ -27,6 +27,7 @@ from src.models.handoff_test import HandoffTest
 from src.models.held_out_partition import (
     HeldOutPartition,
     HeldOutPartitionScenario,
+    HeldOutPartitionSeal,
     HeldOutPartitionVerdict,
 )
 from src.models.meta_eval_intent import MetaEvalIntent
@@ -98,6 +99,7 @@ __all__ = [
     "OperationScenarioSubmission",
     "HeldOutPartition",
     "HeldOutPartitionScenario",
+    "HeldOutPartitionSeal",
     "HeldOutPartitionVerdict",
     "Waiver",
     "Appeal",

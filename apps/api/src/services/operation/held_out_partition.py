@@ -51,6 +51,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, replace
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.base import _new_id, _now
@@ -58,6 +59,7 @@ from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.held_out_partition import (
     HeldOutPartition,
     HeldOutPartitionScenario,
+    HeldOutPartitionSeal,
 )
 from src.services.operation.held_out import (
     HeldOutScenario,
@@ -71,6 +73,17 @@ FRAMINGS: tuple[str, ...] = ("reworded", "indirect", "pressure")
 
 #: Who may never be `authoredBy` (ADR-0108 R1). Compared normalised.
 _OFFICE_NAMES = frozenset({"office", "theoffice", "the-office", "the_office"})
+
+#: Not a named human (ADR-0113). A process, a role or a placeholder names
+#: nobody who can be asked why. Compared normalised, whole value only.
+_NOT_A_PERSON = frozenset(
+    {
+        "system", "simforge", "scheduler", "cadence", "worker", "sweep", "job",
+        "cli", "script", "bot", "automation", "service", "process", "admin",
+        "root", "operator", "ops", "dev", "dev-bypass", "anonymous", "unknown",
+        "none", "null", "n/a", "test",
+    }
+)
 
 _NEVER = re.compile(r"^\s*never\s+", re.IGNORECASE)
 
@@ -277,6 +290,30 @@ def _require(value: str, name: str) -> str:
     return value.strip()
 
 
+def same_person(a: str, b: str) -> bool:
+    """Trimmed and case-folded - the comparison the CHECK makes in SQL."""
+    return a.strip().lower() == b.strip().lower()
+
+
+def named_human(value: str, role: str) -> str:
+    """A named human, or a refusal (ADR-0113 ruling 1).
+
+    Refused: blank; The Office; a process, role or placeholder. What
+    remains is taken as a person's name. ASSUMPTION: SimForge has no
+    registry of people, so this is a deny-list, not proof of personhood.
+    """
+    value = _require(value, role)
+    key = re.sub(r"\s+", "", value.lower())
+    if key in _OFFICE_NAMES:
+        raise PartitionRefused(f"The Office is never a partition's {role} (ADR-0108 R1).")
+    if key in _NOT_A_PERSON or not re.search(r"[a-z]", key):
+        raise PartitionRefused(
+            f"{role} {value!r} names no person. A partition's author and "
+            "sealer are named humans (ADR-0113)."
+        )
+    return value
+
+
 async def author_partition(
     session: AsyncSession, venture_id: str, forge_id: str, authored_by: str
 ) -> str:
@@ -288,11 +325,7 @@ async def author_partition(
     """
     venture_id = _require(venture_id, "venture_id")
     forge_id = _require(forge_id, "forge_id")
-    authored_by = _require(authored_by, "authored_by")
-    if re.sub(r"[\s]", "", authored_by.lower()) in _OFFICE_NAMES:
-        raise PartitionRefused(
-            "The Office never authors the partition (ADR-0108 R1)."
-        )
+    authored_by = named_human(authored_by, "authored_by")
 
     never_do = await current_never_do(session, forge_id)
     if not never_do:
@@ -330,12 +363,18 @@ async def author_partition(
     return partition_id
 
 
-async def seal_partition(session: AsyncSession, partition_id: str) -> str:
+async def seal_partition(
+    session: AsyncSession, partition_id: str, sealed_by: str
+) -> str:
     """Seal an `authoring` partition. Returns its content digest.
 
-    Retires every other sealed partition of the same venture, in the
-    same commit, so at most one is sealed at a time.
+    ADR-0113. `sealed_by` is a named human and never the author. The seal,
+    the retirement of the venture's earlier sealed partition and the seal's
+    own audit record are one commit. The database holds one sealed
+    partition per venture; a seal that loses a race is refused and leaves
+    nothing behind, including no audit record.
     """
+    sealed_by = named_human(sealed_by, "sealed_by")
     partition = await session.get(HeldOutPartition, partition_id)
     if partition is None:
         raise PartitionRefused(f"no partition {partition_id!r}.")
@@ -343,6 +382,11 @@ async def seal_partition(session: AsyncSession, partition_id: str) -> str:
         raise PartitionRefused(
             f"partition {partition_id!r} is {partition.status}; only an "
             "authoring partition can be sealed."
+        )
+    if same_person(sealed_by, partition.authoredBy):
+        raise PartitionRefused(
+            f"{sealed_by!r} authored partition {partition_id!r} and may not "
+            "seal it. The sealer is never the author (ADR-0113)."
         )
     digests = (
         (
@@ -361,21 +405,75 @@ async def seal_partition(session: AsyncSession, partition_id: str) -> str:
             "partition would pass every agent."
         )
 
-    await session.execute(
-        update(HeldOutPartition)
-        .where(
-            HeldOutPartition.ventureId == partition.ventureId,
-            HeldOutPartition.status == "sealed",
-            HeldOutPartition.id != partition_id,
-        )
-        .values(status="retired")
-    )
+    # Read before the commit: a rollback expires the row, and an async
+    # session cannot lazy-load it back to name the venture in the refusal.
+    venture_id = partition.ventureId
+    retired = await _retire_sealed(session, venture_id, keep=partition_id)
     digest = content_digest(digests)
     partition.contentDigest = digest
     partition.status = "sealed"
     partition.sealedAt = _now()
-    await session.commit()
+    partition.sealedBy = sealed_by
+    session.add(
+        HeldOutPartitionSeal(
+            partitionId=partition_id,
+            ventureId=venture_id,
+            authoredBy=partition.authoredBy,
+            sealedBy=sealed_by,
+            contentDigest=digest,
+            retiredPartitionIds=retired,
+            sealedAt=partition.sealedAt,
+        )
+    )
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        if _lost_the_race(exc):
+            raise PartitionRefused(
+                f"partition {partition_id!r} was not sealed: another seal for "
+                f"venture {venture_id!r} committed first (ADR-0113)."
+            ) from exc
+        raise PartitionRefused(
+            f"partition {partition_id!r} was not sealed: the database refused "
+            f"it ({type(exc.orig).__name__})."
+        ) from exc
     return digest
+
+
+def _lost_the_race(exc: IntegrityError) -> bool:
+    """The one-sealed-per-venture index, and not some other constraint.
+
+    Postgres names the index; SQLite names the column it covers.
+    """
+    text = str(exc.orig)
+    return "one_sealed_per_venture" in text or "HeldOutPartition.ventureId" in text
+
+
+async def _retire_sealed(
+    session: AsyncSession, venture_id: str, *, keep: str
+) -> list[str]:
+    """Retire the venture's sealed partitions other than `keep`. Their ids."""
+    ids = list(
+        (
+            await session.execute(
+                select(HeldOutPartition.id).where(
+                    HeldOutPartition.ventureId == venture_id,
+                    HeldOutPartition.status == "sealed",
+                    HeldOutPartition.id != keep,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if ids:
+        await session.execute(
+            update(HeldOutPartition)
+            .where(HeldOutPartition.id.in_(ids))
+            .values(status="retired")
+        )
+    return ids
 
 
 async def scenario_count(session: AsyncSession, partition_id: str) -> int:
@@ -401,6 +499,8 @@ __all__ = [
     "check_disjoint",
     "content_digest",
     "current_never_do",
+    "named_human",
+    "same_person",
     "scenario_body",
     "scenario_count",
     "scenario_digest",
