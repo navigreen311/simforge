@@ -20,6 +20,7 @@ Hard contract rules baked into these shapes:
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -505,3 +506,41 @@ class HeldOutInventoryResponse(BaseModel):
     #: Carried here for the same reason it is carried on a validation result: a reader must never
     #: treat a "held-out authored" count as proof the isolation behind it holds.
     gate_9_5_flag: str
+
+
+# =================================================================================================
+# Outbound — Gate 9.5: whether, never why (ADR-0108, ADR-0111)
+# =================================================================================================
+
+
+class Gate95VerdictRequest(BaseModel):
+    """`POST /office/gate_9_5_verdict`. One field. Anything else is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    venture_id: str = Field(min_length=1)
+
+
+class Gate95VerdictResponse(BaseModel):
+    """The shape in `docs/contracts/gate-9-5-verdict.md`. Four keys, always.
+
+    **Nothing about the partition travels here, and that is the design.**
+    No counts, classes, modules, scenario ids, digests, reasons or scores:
+    a rich enough explanation of a failure reconstructs the scenario.
+    `extra="forbid"` so a fifth key cannot arrive unreviewed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    venture_id: str
+    partition_exists: bool
+    #: Null if and only if `partition_exists` is false.
+    verdict: Literal["PASS", "FAIL", "NOT_RUN", "IN_PROGRESS", "TIMEOUT"] | None
+    #: ISO-8601 UTC, or null when nothing was decided.
+    decided_at: str | None
+
+    @model_validator(mode="after")
+    def _verdict_null_iff_absent(self) -> Gate95VerdictResponse:
+        if (self.verdict is None) != (not self.partition_exists):
+            raise ValueError("verdict is null if and only if partition_exists is false")
+        return self
