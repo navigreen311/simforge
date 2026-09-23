@@ -45,6 +45,7 @@ from src.routers import (
     office,
     ontology,
     operation,
+    operation_rubric,
     ops,
     packs,
     parity,
@@ -160,6 +161,10 @@ def create_app() -> FastAPI:
     app.include_router(ontology.router, prefix="/api/ontology", tags=["ontology"])
     app.include_router(handoff.router, prefix="/api/handoff", tags=["handoff"])
     app.include_router(operation.router, prefix="/api/operation", tags=["operation-cert"])
+    # ADR-0107 ruling 2 - the rubric a verdict is read against, published.
+    app.include_router(
+        operation_rubric.router, prefix="/api/operation", tags=["operation-cert"]
+    )
 
     # The Office bridge — mounted ONLY when a tenant credential is configured.
     #

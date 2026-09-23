@@ -214,12 +214,24 @@ async def submit_curriculum(
                 authoredBy=ref.authored_by or "office",
                 contentHash=ref.content_hash,
                 neverDo=never_do,  # so an n/a can be told from a coverage hole (FIX 2)
+                # ADR-0107 ruling 1. The sections the keys are written against, so the exam can
+                # put them in front of the agent. `None` when the submitter sent none, which is a
+                # different fact from an empty dict and is kept as one.
+                sections=dict(ref.sections) if ref.sections is not None else None,
             )
         )
         await session.commit()
-    elif never_do and not existing.neverDo:
-        # Backfill the never-do list if this submission declares one and the set didn't carry it.
-        existing.neverDo = never_do
+    elif (never_do and not existing.neverDo) or (
+        ref.sections is not None and existing.sections is None
+    ):
+        # Backfill the never-do list if this submission declares one and the set didn't carry it -
+        # and the sections on the same rule (ADR-0107). A row written before this field existed
+        # carries NULL, and the next curriculum that sends prose fills it rather than being
+        # ignored because the hash already matched.
+        if never_do and not existing.neverDo:
+            existing.neverDo = never_do
+        if ref.sections is not None and existing.sections is None:
+            existing.sections = dict(ref.sections)
         await session.commit()
     else:
         # The instruction set was already correct, and the SCENARIOS still need committing: the
@@ -565,6 +577,8 @@ async def gate_result(
             scoreMeasure=score_measure,
             # ADR-0102. Both channels, each labelled, on the row that is read on its own.
             channelScores=outcome.channel_scores,
+            # ADR-0107 ruling 1. What the agent was shown against what its keys needed.
+            instructionSections=outcome.instruction_sections,
             operationRubricVersion=op_rubric_version,
             agentId=outcome.agent_id,
             moduleId=outcome.module_id,

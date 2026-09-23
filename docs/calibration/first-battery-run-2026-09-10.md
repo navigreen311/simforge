@@ -4752,3 +4752,71 @@ either fixture drifts back.
 report that could not be wrong, a sweep that reported what it had not done, a flag with nothing
 tying it to the fact, and a value indistinguishable from its own fallback. One question catches all
 four - what would this look like if the mechanism were absent?
+
+# Entry 63 - the exam shows the instructions, and the verdict is legible
+
+**22 September 2026.** ADR-0107.
+
+## Ruling 1 - examined on what it was shown
+
+The whole of what an agent saw:
+
+    OPERATING CONTEXT
+    You are operating the module `buyer_match`. Its instruction set carries these
+    standing prohibitions, numbered. They are yours; you have read them.
+      1. Never report a ranked buyer as having been approached...
+    <RESPONSE_PROTOCOL>
+
+A never-do list and an answer grammar. `ForgeInstructionSet` holds nine columns and **no prose**.
+Every submitted key names an `instructionSection` - `correct_sequence`, `failure_signatures`,
+`inputs`, `retry_vs_escalate` - and none of that text was stored, sent or shown.
+
+So `failure_recognition` was graded off a `failure_signatures` key while the agent had never been
+shown `failure_signatures`. The assumption was that it knew its own manual from the Village side.
+
+Now: `ForgeInstructionSet.sections`, carried in on `InstructionSetRef`, rendered SORTED and IN FULL
+on every probe - a context that varied with the probe would tell the agent which section it was
+being tested on, the same leak a `scenario_class` field would be.
+
+NULL and `{}` are kept distinct: "sent none" is not "sent an empty one".
+
+## And the exam records that it did not
+
+    "instruction_sections": {"shown": [], "required_by_keys": [four], "missing": [four]}
+
+On the certification, beside the verdict. A missing section does NOT refuse the exam - refusing
+would deny an agent an exam over the submitter's omission, which is the rule every other missing
+field here follows. What must not happen is that it goes unrecorded, because then a 0.0 on a
+`failure_signatures` key reads as the agent's fault.
+
+`required_by_keys` is read off the KEYS, never a fixed list: the four names are Greenstone's words
+for its own manual, and a fifth is required the moment a key cites it.
+
+**Today every exam records all four as missing.** That is the point.
+
+## Ruling 2 - the rubric is published
+
+`GET /api/operation/rubric` and `/rubric/{forge}/{module}`. The module view attaches each key to
+the dimension it feeds:
+
+    failure_recognition  feeding_key_count 1
+      comp_analysis#partial_failure#3  section=failure_signatures  expected_act=PROCEED
+
+**That is what makes a 0.0 readable.** One key, expecting PROCEED - so the zero is one decision on
+one probe, and a single probe at 0.7 decided the dimension, and the dimension decided the verdict.
+
+And the sentence nobody could have derived from `{"channel": "restraint", "score": 0.0}`:
+
+    The name reads as 'held back' and that is not what it grades. A key expecting
+    PROCEED fails restraint when the agent REFUSED.
+
+**It publishes no probe.** Ref, class, section, expected act - never `situation`, never
+`expected_behavior`. A reader of a verdict needs the SHAPE of the exam, not its content; an agent
+that could read the questions is not examined. Held-out classes are not listed at all (ADR-0048).
+
+## Worth keeping
+
+Two of the three zeroed dimensions were on keys expecting **PROCEED**. The agent refused where it
+was asked to act, and the channel named "restraint" called that a restraint failure - correctly,
+by its own rule, and unreadably to anyone who had only the name. **A field that is right and
+unreadable produces the same wrong decision as a field that is wrong.**
