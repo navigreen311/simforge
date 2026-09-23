@@ -338,8 +338,12 @@ SRC = Path(__file__).resolve().parents[2] / "src"
 FORBIDDEN_MODULES = {
     "src.services.operation.held_out_partition",
     "src.services.operation.partition_grading",
-    "src.services.operation.partition_sweep",
+    "src.workers.partition_sweep",
 }
+#: The scheduler's own router. It reaches every job through `jobs`, as it
+#: reaches `battery_sweep`; what stops a request putting the partition there
+#: is `triggerable=False` and the job's own refusal, asserted below.
+SCHEDULER_ROUTER = "src.routers.cadence"
 #: Where the scenario table is defined and registered for the mapper.
 #: Reaching these is unavoidable (every model loads) and holds no rows.
 SCENARIO_NAME_HOMES = {"src.models", "src.models.held_out_partition"}
@@ -393,7 +397,9 @@ def _mentions(tree: ast.AST, name: str) -> bool:
 
 def test_no_router_can_reach_the_scenarios() -> None:
     routers = [
-        f"src.routers.{p.stem}" for p in (SRC / "routers").glob("*.py") if p.stem != "__init__"
+        f"src.routers.{p.stem}"
+        for p in (SRC / "routers").glob("*.py")
+        if p.stem != "__init__" and f"src.routers.{p.stem}" != SCHEDULER_ROUTER
     ]
     reachable = _reachable(routers)
 
@@ -408,3 +414,12 @@ def test_no_router_can_reach_the_scenarios() -> None:
         if name not in SCENARIO_NAME_HOMES and _mentions(tree, "HeldOutPartitionScenario")
     )
     assert touching == [], f"request path names the scenario table: {touching}"
+
+
+def test_the_scheduler_router_cannot_start_the_grader() -> None:
+    """The one router that reaches the grader, through `jobs`. It may not start it."""
+    from src.services.cadence import JOBS_BY_NAME
+
+    assert JOBS_BY_NAME["partition_sweep"].triggerable is False
+    reachable = _reachable([SCHEDULER_ROUTER])
+    assert "src.services.cadence.jobs" in reachable  # the path this test is about

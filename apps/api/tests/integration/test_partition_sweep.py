@@ -30,6 +30,7 @@ from src.models.operation_scenario import OperationScenarioSubmission
 from src.models.scorecard import Scorecard
 from src.models.training import TrainingProposal
 from src.services.agent_runtime.llm_client import LLMResponse
+from src.services.cadence import jobs
 from src.services.operation import partition_grading
 from src.services.operation.held_out import author_for_module
 from src.utils.time import utcnow
@@ -389,14 +390,30 @@ async def test_a_job_that_reports_work_and_writes_nothing_fails_here(
 async def test_the_trigger_route_cannot_put_the_partition(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ADR-0050. The route hands the job a session; the job refuses it."""
+    """ADR-0050. The route refuses: scheduler-only, 403 and not 404."""
     await _seed(db_session)
     provider = ScriptedProvider(_compliant)
     _serve(monkeypatch, provider)
 
     resp = await client.post("/api/scheduler/run/partition_sweep")
 
-    assert resp.json().get("skipped") == partition_sweep.SKIP_REQUEST_PATH
+    assert resp.status_code == 403
+    assert provider.prompts == []
+    assert await _verdicts(db_session) == []
+
+
+async def test_the_job_refuses_a_request_path_session_too(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second wall. Were the flag ever dropped, the route would hand the
+    job a session; the job refuses it before reading anything."""
+    await _seed(db_session)
+    provider = ScriptedProvider(_compliant)
+    _serve(monkeypatch, provider)
+
+    result = await jobs.partition_sweep(session=db_session)
+
+    assert result.get("skipped") == partition_sweep.SKIP_REQUEST_PATH
     assert provider.prompts == []
     assert await _verdicts(db_session) == []
 

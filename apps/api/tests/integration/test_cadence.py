@@ -155,10 +155,14 @@ async def test_refusal_is_403_not_404_so_the_job_stays_visible(client: AsyncClie
 
 
 async def test_every_other_job_is_still_triggerable() -> None:
-    """The flag must not quietly spread. Today exactly one job carries it."""
+    """The flag must not quietly spread. Today exactly two jobs carry it:
+    the two that put held-out probes (ADR-0050, ADR-0110)."""
     from src.services.cadence import JOBS
 
-    assert {j.name for j in JOBS if not j.triggerable} == {"battery_sweep"}
+    assert {j.name for j in JOBS if not j.triggerable} == {
+        "battery_sweep",
+        "partition_sweep",
+    }
 
 
 async def test_battery_sweep_hourly_fits_inside_the_run_window() -> None:
