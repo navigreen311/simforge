@@ -40,13 +40,15 @@ async def test_request_shape_and_parse(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = await p.complete(
         system="You are David Kim, an AE.",
         messages=[{"role": "scenario", "content": "hi"}],
-        temperature=0.0,
+        # ADR-0106: not 0.0 - that is the provider signature default, so a forwarded value
+        # and a dropped one would look identical here.
+        temperature=0.42,
         seed=101,
     )
     assert resp.content == "David Kim: on it."
     assert resp.tokens_input == 40 and resp.tokens_output == 18 and resp.tokens == 58
     assert seen["url"].endswith("/api/chat")
-    assert seen["body"]["options"]["temperature"] == 0.0
+    assert seen["body"]["options"]["temperature"] == 0.42
     assert seen["body"]["options"]["top_p"] == 1.0
     assert seen["body"]["options"]["seed"] == 101
     assert seen["body"]["messages"][0]["role"] == "system"

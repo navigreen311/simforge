@@ -27,7 +27,11 @@ from src.models.operation_scenario import OperationScenarioSubmission
 from src.schemas.operation_payloads import GateResultRequest
 from src.services.agent_runtime.examiner import EXAMINER_UNREACHABLE
 from src.services.agent_runtime.llm_client import StubProvider
-from src.services.agent_runtime.runtime import AgentRuntime
+from src.services.agent_runtime.runtime import (
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_TEMPERATURE,
+    AgentRuntime,
+)
 from src.services.operation.battery import (
     SKIP_AGENT_IDENTITY_BLANK,
     SKIP_AGENT_NOT_IN_VILLAGE,
@@ -70,8 +74,23 @@ DECLARED_HASH = "sha256:declared"
 VILLAGE_FIXTURE = Path(__file__).parent.parent / "fixtures" / "village" / "VillageData"
 
 
-def _runtime(provider) -> AgentRuntime:  # noqa: ANN001
-    return AgentRuntime(village_reader=VillageReader(VILLAGE_FIXTURE), provider=provider)
+#: ADR-0106. THE FIXTURE DECLARES SETTINGS THAT MATCH NO DEFAULT.
+#:
+#: These were `0.0` and `2048` - which are `DEFAULT_TEMPERATURE` and `DEFAULT_MAX_TOKENS` exactly.
+#: An identity assertion against them passed whether the declaration had been read or the runtime
+#: had fallen back, so it could not tell the mechanism from its own absence.
+#:
+#: 0.37 and 1536 are also not the live Village's 0.7/4000, so a test cannot pass by accidentally
+#: matching production either.
+EXAM_SETTINGS: dict = {"temperature": 0.37, "max_tokens": 1536}
+
+
+def _runtime(provider, generation: dict | None = None) -> AgentRuntime:  # noqa: ANN001
+    return AgentRuntime(
+        village_reader=VillageReader(VILLAGE_FIXTURE),
+        provider=provider,
+        generation=dict(generation or EXAM_SETTINGS),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -91,8 +110,10 @@ def _examiner_pinned(tmp_path, monkeypatch) -> None:  # noqa: ANN001
         "  models:\n"
         "    default_llm:\n"
         "      model_id: scripted\n"
-        "      temperature: 0.0\n"
-        "      max_tokens: 2048\n",
+        # ADR-0106: declared values that differ from every default, so a test cannot pass on the
+        # runtime fallback while claiming the declaration was read.
+        f"      temperature: {EXAM_SETTINGS['temperature']}\n"
+        f"      max_tokens: {EXAM_SETTINGS['max_tokens']}\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(settings, "exam_model_tag", "scripted")
@@ -707,7 +728,13 @@ async def test_a_merged_clean_run_reaches_certified(
     assert identity_read["quantization"] == "Q4_K_M"
     assert identity_read["file_digest"].startswith("sha256:")
     # No seed: an exam is sat at three seeds and an identity naming one is wrong about two.
-    assert identity_read["settings"] == {"temperature": 0.0, "max_tokens": 2048}
+    # ADR-0106. NOT `{"temperature": 0.0, "max_tokens": 2048}`, which is what this asserted and
+    # is `DEFAULT_TEMPERATURE` and `DEFAULT_MAX_TOKENS` exactly - so it passed whether the values
+    # travelled or the runtime fell back. These can only have come from the runtime's generation
+    # block, which is the thing under test.
+    assert identity_read["settings"] == EXAM_SETTINGS
+    assert EXAM_SETTINGS["temperature"] != DEFAULT_TEMPERATURE
+    assert EXAM_SETTINGS["max_tokens"] != DEFAULT_MAX_TOKENS
     assert identity_read["fingerprint"] == identity.fingerprint
 
 

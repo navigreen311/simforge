@@ -25,6 +25,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.agent_runtime.model_identity import ModelIdentity, identity_is_complete
+from src.services.agent_runtime.runtime import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from src.services.operation.gate_verdict import GateVerdict
 from src.services.operation.run_registry import UnitOutcome, close_run, gate_result_for, open_run
 from src.services.operation.state_machine import OperationState
@@ -66,7 +67,12 @@ LOCAL_IDENTITY: dict = {
     "quantization": "Q4_K_M",
     # No seed: ADR-0062 sits the same exam three times at three seeds, so an identity naming one
     # of them is wrong about the other two. The per-attempt seeds are in `examAttempts`.
-    "settings": {"temperature": 0.0, "max_tokens": 2048},
+    #
+    # ADR-0106 - AND THESE MATCH NO DEFAULT. They were `0.0` and `2048`, which are
+    # `DEFAULT_TEMPERATURE` and `DEFAULT_MAX_TOKENS` exactly, so the assertion below passed
+    # whether the posted settings travelled or something substituted the fallback. They are also
+    # not the live Village's 0.7/4000, so a pass cannot come from accidentally matching production.
+    "settings": {"temperature": 0.37, "max_tokens": 1536},
 }
 
 
@@ -378,6 +384,9 @@ async def test_a_passing_battery_reports_the_model_identity(client: AsyncClient)
     `agent_model` was already there and it is a LABEL. `ollama/llama3.1:8b` is the same string
     whether the tag was re-pulled at Q4_K_M or Q8_0, and whether the exam ran at temperature 0.0
     or 0.7. These are the fields that can tell those apart.
+
+    **And the values asserted match no default** (ADR-0106), so this can tell a setting that
+    travelled from one the runtime would have produced anyway.
     """
     await client.post("/api/operation/run/start", json=START)
     assert await _post(client, _outcome()) == 200
@@ -390,7 +399,13 @@ async def test_a_passing_battery_reports_the_model_identity(client: AsyncClient)
     assert identity["file_digest"].startswith("sha256:")
     assert identity["file_size_bytes"] == 4920753328
     assert identity["quantization"] == "Q4_K_M"
-    assert identity["settings"]["temperature"] == 0.0
+    assert identity["settings"]["temperature"] == 0.37
+    assert identity["settings"]["max_tokens"] == 1536
+    # ADR-0106. THE GUARD IS THE TEST. Without it the two lines above are a value that the
+    # runtime would have produced on its own, and a test that would pass on its own fallback
+    # tests nothing.
+    assert LOCAL_IDENTITY["settings"]["temperature"] != DEFAULT_TEMPERATURE
+    assert LOCAL_IDENTITY["settings"]["max_tokens"] != DEFAULT_MAX_TOKENS
     # The hash over all of it - what a re-certification check compares, rather than arguing field
     # by field about which of six values moved.
     assert identity["fingerprint"] == ModelIdentity.from_record(LOCAL_IDENTITY).fingerprint
