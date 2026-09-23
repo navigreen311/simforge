@@ -84,6 +84,7 @@ def _partition(
         authoredBy="ivan",
         contentDigest=digest,
         sealedAt=sealed_at if status != "authoring" else None,
+        sealedBy="Grace Hopper" if status != "authoring" else None,
     )
     # Set now, not at flush, so a verdict can name it in the same batch.
     row.id = pid or _new_id()

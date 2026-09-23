@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -42,8 +42,31 @@ PARTITION_STATUSES = ("authoring", "sealed", "retired")
 PARTITION_VERDICTS = ("PASS", "FAIL", "NOT_RUN", "IN_PROGRESS", "TIMEOUT")
 
 
+#: ADR-0113. Normalised the same way in SQL and in Python, so the database
+#: and the service cannot disagree about whether two names are one person.
+SEALER_IS_NOT_AUTHOR_SQL = (
+    '"sealedBy" IS NULL OR lower(trim("sealedBy")) <> lower(trim("authoredBy"))'
+)
+#: A partition that left `authoring` names who sealed it. Retired ones too:
+#: a retired partition was sealed once, and the record says by whom.
+A_SEAL_NAMES_ITS_SEALER_SQL = "status = 'authoring' OR \"sealedBy\" IS NOT NULL"
+
+
 class HeldOutPartition(Base):
     __tablename__ = "HeldOutPartition"
+    __table_args__ = (
+        # ADR-0113 ruling 2. One sealed partition per venture, by the database.
+        # Two seals racing could both seal; the second commit now fails here.
+        Index(
+            "HeldOutPartition_one_sealed_per_venture",
+            "ventureId",
+            unique=True,
+            sqlite_where=text("status = 'sealed'"),
+            postgresql_where=text("status = 'sealed'"),
+        ),
+        CheckConstraint(SEALER_IS_NOT_AUTHOR_SQL, name="held_out_partition_sealer_is_not_author"),
+        CheckConstraint(A_SEAL_NAMES_ITS_SEALER_SQL, name="held_out_partition_seal_names_sealer"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
     ventureId: Mapped[str] = mapped_column(String, index=True)
@@ -55,6 +78,8 @@ class HeldOutPartition(Base):
     contentDigest: Mapped[str | None] = mapped_column(String, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sealedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: ADR-0113 ruling 1. A named human, never the author. Null while authoring.
+    sealedBy: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class HeldOutPartitionScenario(Base):
@@ -90,3 +115,32 @@ class HeldOutPartitionVerdict(Base):
     partitionDigest: Mapped[str] = mapped_column(String)
     instructionContentHash: Mapped[str | None] = mapped_column(String, nullable=True)
     decidedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class HeldOutPartitionSeal(Base):
+    """The seal's own audit record (ADR-0113). Append-only, one per seal.
+
+    Written in the same commit as the seal, so a seal without its record
+    cannot exist and a refused seal leaves none.
+    """
+
+    __tablename__ = "HeldOutPartitionSeal"
+    __table_args__ = (
+        CheckConstraint(
+            'lower(trim("sealedBy")) <> lower(trim("authoredBy"))',
+            name="held_out_partition_seal_two_people",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
+    partitionId: Mapped[str] = mapped_column(
+        String, ForeignKey("HeldOutPartition.id"), unique=True
+    )
+    ventureId: Mapped[str] = mapped_column(String, index=True)
+    authoredBy: Mapped[str] = mapped_column(String)
+    sealedBy: Mapped[str] = mapped_column(String)
+    contentDigest: Mapped[str] = mapped_column(String)
+    #: The partitions this seal retired. Usually one or none.
+    retiredPartitionIds: Mapped[list] = mapped_column(JSON, default=list)
+    sealedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
