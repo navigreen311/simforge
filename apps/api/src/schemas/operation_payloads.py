@@ -41,6 +41,16 @@ class InstructionSetRef(BaseModel):
     forge_api_version: str  # semver
     content_hash: str  # the cert BINDS to this; a run mismatch VOIDS
     authored_by: str | None = None
+    #: The instruction set's own sections, as prose (ADR-0107 ruling 1). `{name: text}`.
+    #:
+    #: The keys are written against these - `correct_sequence`, `failure_signatures`, `inputs`,
+    #: `retry_vs_escalate` - and an agent examined on instructions it was never shown is being
+    #: asked to have read something nobody sent.
+    #:
+    #: OPTIONAL, and its absence is recorded rather than refused. A curriculum that omits it still
+    #: sets an exam; the certification then says which sections were in front of the agent and
+    #: which its own keys required, and a reader can see the difference.
+    sections: dict[str, str] | None = None
 
 
 class CertificationUnitRequest(BaseModel):
@@ -288,6 +298,11 @@ class AgentRunOutcome(BaseModel):
     #: A named list for the reason `operation_rubric_results` is one, and a channel that scored
     #: nothing is absent rather than null.
     channel_scores: list[dict] | None = None
+    #: WHAT THE AGENT WAS SHOWN, against what its keys were written against (ADR-0107 ruling 1).
+    #:
+    #: `{"shown": [...], "required_by_keys": [...], "missing": [...]}`. `missing` non-empty is the
+    #: exam recording that it examined an agent on instructions it did not carry.
+    instruction_sections: dict | None = None
     #: provider/model that ANSWERED the battery, e.g. `ollama/llama3.1:8b`.
     #:
     #: Optional on the wire and NOT optional in a certification: `gate_result` refuses to

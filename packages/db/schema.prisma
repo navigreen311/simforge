@@ -963,6 +963,7 @@ model ForgeInstructionSet {
   // The module's never-do list. Empty = no never-do rules (never_do_adherence is genuinely n/a);
   // non-empty = the never_do_violation dimension must be tested (an untested one is a coverage hole).
   neverDo            Json     @default("[]")
+  sections           Json?
   createdAt          DateTime @default(now())
 
   // The writer's own key, enforced (ADR-0091). A module may hold several instruction sets - a
@@ -1139,6 +1140,7 @@ model OperationCertification {
   // the verdict was decided on - restraint. A channel that scored nothing is absent.
   channelScores         Json?
   writtenBy             Json?
+  instructionSections   Json?
   rubricDimensionSpread Float? // collapse check - a VARIANCE under v1, a RANGE under v2
   /// Which rule produced rubricDimensionSpread (ADR-0070). The measure is versioned, not
   /// migrated: pre-v2 rows keep their variance and are labelled population_variance_v1.

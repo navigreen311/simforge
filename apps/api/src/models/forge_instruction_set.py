@@ -34,4 +34,15 @@ class ForgeInstructionSet(Base):
     # never_do_violation dimension MUST be tested; an untested one is a coverage hole, not an n/a.
     neverDo: Mapped[list] = mapped_column(JSON, default=list)
 
+    #: THE SECTIONS THE KEYS ARE WRITTEN AGAINST (ADR-0107 ruling 1). `{section_name: prose}`.
+    #:
+    #: Every submitted scenario names an `instructionSection` - `correct_sequence`,
+    #: `failure_signatures`, `inputs`, `retry_vs_escalate` - and until now SimForge stored NONE of
+    #: their prose. It held this row's `neverDo` and nothing else, so an agent was graded on four
+    #: sections it was never shown, on the assumption it knew them from the Village side.
+    #:
+    #: NULL means the submitter sent none. An EMPTY DICT means it sent the field and it was empty -
+    #: and the two are different facts, which is why this is nullable rather than defaulted.
+    sections: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

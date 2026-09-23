@@ -140,6 +140,13 @@ class OperationCertification(Base):
     writtenBy: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, default=process_identity
     )
+    #: Which instruction sections were IN FRONT OF THE AGENT, and which its keys were written
+    #: against (ADR-0107 ruling 1): `{"shown", "required_by_keys", "missing"}`.
+    #:
+    #: A non-empty `missing` is the exam saying, on the row, that it graded an agent against
+    #: sections it never showed it. That is a fact about the exam and it belongs beside the verdict
+    #: rather than in a log nobody reads.
+    instructionSections: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     rubricDimensionSpread: Mapped[float | None] = mapped_column(Float, nullable=True)  # collapse
     #: WHICH RULE produced `rubricDimensionSpread` (ADR-0070). The measure is versioned, not
     #: migrated: rows written before v2 keep the population variance they were computed with and
