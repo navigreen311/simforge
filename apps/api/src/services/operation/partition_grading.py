@@ -196,7 +196,8 @@ async def current_instruction_set(
                 ForgeInstructionSet.forgeId == forge_id,
                 ForgeInstructionSet.moduleId == module_id,
             )
-            .order_by(ForgeInstructionSet.createdAt.desc())
+            # The same order ADR-0109's author reads "current" by.
+            .order_by(ForgeInstructionSet.createdAt.desc(), ForgeInstructionSet.id.desc())
             .limit(1)
         )
     ).scalar_one_or_none()

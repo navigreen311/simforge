@@ -41,7 +41,8 @@ It collapses the two ids one agent has had into one.
 
 An agent is put the partition's scenarios for the modules it operates.
 Each module's probes go under its forge's **current** instruction set:
-the newest `ForgeInstructionSet` for (forge, module). Its never-do list
+the newest `ForgeInstructionSet` for (forge, module), ties by id - the
+same order ADR-0109 authors from. Its never-do list
 numbers the rules an agent cites; its sections are shown (ADR-0107).
 
 ## What the agent sees
