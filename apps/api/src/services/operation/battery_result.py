@@ -49,6 +49,27 @@ from src.services.operation.views import protocol_versions_of
 #: is real and no battery has reported, which is exactly the state the whole system sat in.
 NO_BATTERY_RESULT = "no_battery_result_for_this_run"
 
+#: ADR-0112. The three sub-fields of `instructionSections`, published distinct.
+#: `missing` is the one a reader needs: it says whether a 0.0 on a key is the
+#: agent's fault or the submitter's omission. Never collapsed to a boolean.
+SECTION_FIELDS = ("shown", "required_by_keys", "missing")
+
+
+def section_names(record: dict | None) -> dict | None:
+    """What the exam showed, what the keys needed, what was missing. Names only.
+
+    The row holds names already (`instruction_section_record`); this projects
+    exactly the three fields, so a key added to the row later does not reach
+    The Office unreviewed. Prose lives on `ForgeInstructionSet.sections` and is
+    never read here.
+
+    `None` when the row recorded nothing - a pre-ADR-0107 exam. That is not
+    `missing: []`, and publishing it as one would claim a check that never ran.
+    """
+    if record is None:
+        return None
+    return {field: [str(name) for name in record.get(field) or []] for field in SECTION_FIELDS}
+
 
 async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None:
     """What a battery observed for `run_ref`. `None` when SimForge has no record of the ref.
@@ -119,6 +140,8 @@ async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None
                 getattr(c, "examAttempts", None)
             ),
             "failure_modes_observed": c.failureModesObserved,
+            # ADR-0112. Recorded since ADR-0107, serialized by nothing until now.
+            "instruction_sections": section_names(c.instructionSections),
             "created_at": c.createdAt.isoformat() if c.createdAt else None,
         }
         for c in rows
