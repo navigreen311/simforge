@@ -220,3 +220,18 @@ async def daily_fingerprint(session: AsyncSession | None = None) -> dict:
         "fingerprint": result.fingerprint[:12],
         "drift_detected": result.drift_detected,
     }
+
+
+async def partition_sweep(session: AsyncSession | None = None) -> dict:
+    """Grade sealed held-out partitions and record whether (ADR-0110). Scheduler only.
+
+    A session handed in is the request path - the trigger route passes one,
+    APScheduler passes none. ADR-0050: no request puts a held-out probe, so
+    that call is refused here before anything is read or built.
+    """
+    from src.workers.partition_sweep import JOB_NAME, SKIP_REQUEST_PATH, run_partition_pass
+
+    if session is not None:
+        return {"job": JOB_NAME, "skipped": SKIP_REQUEST_PATH}
+    async with SessionLocal() as s, SessionLocal() as lock_session:
+        return await run_partition_pass(s, lock_session)
