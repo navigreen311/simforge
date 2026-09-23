@@ -97,9 +97,9 @@ JOBS: tuple[CadenceJob, ...] = (
         {"minute": 50},
         "Grade sealed held-out partitions; record whether, never why (ADR-0110).",
         jobs.partition_sweep,
-        # ADR-0050 holds in the job itself: a request-path call is refused
-        # there. The flag is not set because test_cadence pins the set of
-        # non-triggerable jobs; see PARALLEL_BUILD_ESCALATION_G95B.md.
+        # ADR-0050: no request puts a held-out probe. The route refuses (403);
+        # the job refuses a request-path session too, as a second wall.
+        triggerable=False,
     ),
     CadenceJob(
         "run_timeout_sweep",

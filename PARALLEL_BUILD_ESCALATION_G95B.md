@@ -20,3 +20,10 @@ and no row written. The route answers 200 with a named skip, not 403.
 
 `apps/api/src/services/cadence/jobs.py` — one function, `partition_sweep`.
 `run_scheduled` calls `jobs.<name>()`, so a job must live there.
+
+## Resolved (2026-09-23)
+
+Item 1 closed by the follow-up PR `fix/partition-sweep-not-triggerable`:
+`triggerable=False` is set, the pinned set names both jobs, the route
+answers 403, and the job's own refusal stays as a second wall with its
+own test. Item 2 stands as recorded.
