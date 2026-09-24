@@ -12,14 +12,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.agent import Agent
 from src.models.ccb import CCB
-from src.models.cert import CertLifecycleEvent, DeptCert
+from src.models.cert import AgentCert, CertLifecycleEvent, CertSnapshot, DeptCert
 from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
+from src.models.pack import Pack, Scenario
 from src.models.run import Run
 from src.utils.time import utcnow
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
+
+
+def _snapshot(snap_id: str, cert_type: str, subject: str) -> CertSnapshot:
+    """A real parent row: the FKs below point at CertSnapshot.id (Postgres enforces it)."""
+    return CertSnapshot(
+        id=snap_id,
+        snapshotId=f"certsnap:{snap_id}",
+        certType=cert_type,
+        subject=subject,
+        tier="T2",
+        issuedAt=utcnow(),
+        expiresAt=utcnow(),
+        pinnedVersions={},
+        evidenceBundleRef="evidence://test",
+        signingKeyId="k",
+        signature="s",
+        contentHash="h",
+    )
 
 
 async def test_coverage_heatmap_role_by_tier(client: AsyncClient) -> None:
@@ -36,6 +55,8 @@ async def test_dept_context_matrix(client: AsyncClient, db_session: AsyncSession
     dept = (
         await db_session.execute(select(Department).where(Department.villageKey == "Engineering"))
     ).scalar_one()
+    db_session.add(_snapshot("cs-dept-1", "dept_forge_context", dept.id))
+    await db_session.flush()
     db_session.add(
         DeptCert(
             departmentId=dept.id,
@@ -85,6 +106,24 @@ async def test_cognitive_trends(client: AsyncClient, db_session: AsyncSession) -
 
 
 async def test_cert_timeline(client: AsyncClient, db_session: AsyncSession) -> None:
+    agent = (
+        await db_session.execute(select(Agent).where(Agent.villageAgentId == "taylor_zhang"))
+    ).scalar_one()
+    db_session.add(_snapshot("cs-agent-1", "agent_forge_cap", agent.id))
+    await db_session.flush()
+    db_session.add(
+        AgentCert(
+            id="ac-1",
+            agentId=agent.id,
+            forgeCap="capital-forge",
+            tier="T2",
+            status="active",
+            issuedAt=utcnow(),
+            expiresAt=utcnow(),
+            certSnapshotId="cs-agent-1",
+        )
+    )
+    await db_session.flush()
     db_session.add(
         CertLifecycleEvent(
             agentCertId="ac-1",
@@ -139,13 +178,44 @@ async def test_ccb_diff(client: AsyncClient, db_session: AsyncSession) -> None:
         ame={},
         villageSchemaFingerprint="fp",
     )
+    agent = (
+        await db_session.execute(select(Agent).where(Agent.villageAgentId == "taylor_zhang"))
+    ).scalar_one()
+    db_session.add(
+        Pack(
+            id="pk-x",
+            packId="pack.ccb.v1",
+            name="ccb",
+            version="v1",
+            ownerVenture="greenstone",
+            ownerHuman="ivan",
+            rubricProfile="default",
+            yamlPath="p.yml",
+            yamlHash="h",
+        )
+    )
+    await db_session.flush()
+    db_session.add(
+        Scenario(
+            id="scn-x",
+            scenarioId="scn.ccb.0001",
+            packId="pk-x",
+            title="t",
+            tier="foundational",
+            testedAgentVillageId="taylor_zhang",
+            yamlPath="p.yml",
+            yamlHash="h",
+            sloSeconds=60,
+            isGolden=False,
+        )
+    )
     db_session.add_all([pre, post])
     await db_session.flush()
     run = Run(
         runId="run-ccb-1",
         scenarioId="scn-x",
         packId="pk-x",
-        agentId="ag-x",
+        agentId=agent.id,
         executionMode="sandbox",
         narrativeMode="off",
         status="completed",

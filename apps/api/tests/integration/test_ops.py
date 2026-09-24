@@ -31,7 +31,7 @@ async def _seed_gap(session: AsyncSession, severity: str, age_hours: float) -> N
     n = _GAP_SEQ[0]
     gap = SoftwareGap(
         ticketId=f"SF-GAP-{n}-{severity}-{int(age_hours * 10)}",
-        runId="run-fake",
+        runId=None,  # no Run row; the FK is nullable and nothing here reads it
         forge="cre-forge",
         module="call_center",
         severity=severity,

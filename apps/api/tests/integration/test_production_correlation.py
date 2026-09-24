@@ -7,8 +7,30 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.agent import Agent
-from src.models.cert import AgentCert
+from src.models.cert import AgentCert, CertSnapshot
 from src.utils.time import utcnow
+
+
+async def _snapshot(session: AsyncSession, subject: str, cap: str) -> str:
+    """The CertSnapshot an AgentCert references. Postgres refuses a dangling id."""
+    now = utcnow()
+    snap = CertSnapshot(
+        snapshotId=f"certsnap:{subject}-{cap}",
+        certType="agent_forge_cap",
+        subject=subject,
+        forgeCap=cap,
+        tier="foundational",
+        issuedAt=now,
+        expiresAt=now,
+        pinnedVersions={},
+        evidenceBundleRef="e",
+        signingKeyId="k",
+        signature="s",
+        contentHash="c",
+    )
+    session.add(snap)
+    await session.flush()
+    return snap.id
 
 
 async def _certify(session: AsyncSession, village_id: str, cap: str) -> None:
@@ -23,7 +45,7 @@ async def _certify(session: AsyncSession, village_id: str, cap: str) -> None:
             status="active",
             issuedAt=utcnow(),
             expiresAt=utcnow(),
-            certSnapshotId=f"cs-{village_id}-{cap}",
+            certSnapshotId=await _snapshot(session, village_id, cap),
         )
     )
     await session.commit()

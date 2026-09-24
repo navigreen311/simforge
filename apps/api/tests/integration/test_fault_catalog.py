@@ -110,7 +110,8 @@ async def test_api_serves_plain_and_technical(
     db_session.add(
         SoftwareGap(
             ticketId="SF-GAP-9001",
-            runId="run-x",
+            # Nullable FK to Run.id; this test reads the summary, not the run.
+            runId=None,
             forge="medlink-pro",
             module="compliance",
             severity="P1",

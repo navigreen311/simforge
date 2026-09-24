@@ -2,12 +2,32 @@
 
 from __future__ import annotations
 
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.pack import Scenario
+from src.models.pack import Pack, Scenario
 
 _N = [0]
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _pack(db_session: AsyncSession) -> None:
+    """The Pack every scenario below names. Scenario.packId is an FK to Pack.id."""
+    db_session.add(
+        Pack(
+            id="pk-x",
+            packId="pack.coverage.v1",
+            name="coverage",
+            version="v1",
+            ownerVenture="greenstone",
+            ownerHuman="ivan",
+            rubricProfile="default",
+            yamlPath="p.yml",
+            yamlHash="h",
+        )
+    )
+    await db_session.flush()
 
 
 def _seed(session: AsyncSession, *, role: str, tier: str, n: int) -> None:

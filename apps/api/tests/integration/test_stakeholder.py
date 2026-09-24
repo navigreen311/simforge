@@ -12,7 +12,7 @@ def _p0_gap(session: AsyncSession) -> None:
     session.add(
         SoftwareGap(
             ticketId="SF-GAP-P0",
-            runId="run-x",
+            runId=None,  # no Run row; the FK is nullable and nothing here reads it
             forge="capital-forge",
             module="ledger",
             severity="P0",

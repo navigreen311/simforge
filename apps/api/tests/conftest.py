@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -37,6 +38,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # Postgres enforces foreign keys; SQLite does not unless asked, per connection.
+    # Without this the suite passed a build whose every outcome write Postgres refused.
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enforce_foreign_keys(dbapi_conn, _record) -> None:  # noqa: ANN001
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

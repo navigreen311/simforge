@@ -121,12 +121,28 @@ async def test_certs_filters(client: AsyncClient, db_session: AsyncSession) -> N
     # Seed one active cert directly for david_kim.
     from datetime import timedelta
 
-    from src.models.cert import AgentCert
+    from src.models.cert import AgentCert, CertSnapshot
     from src.utils.time import utcnow
 
     agent = (
         await db_session.execute(select(Agent).where(Agent.villageAgentId == "david_kim"))
     ).scalar_one()
+    snap = CertSnapshot(
+        snapshotId="certsnap:david_kim-outbound",
+        certType="agent_forge_cap",
+        subject="david_kim",
+        forgeCap="cre-forge.call_center.outbound",
+        tier="foundational",
+        issuedAt=utcnow(),
+        expiresAt=utcnow() + timedelta(days=90),
+        pinnedVersions={},
+        evidenceBundleRef="e",
+        signingKeyId="k",
+        signature="s",
+        contentHash="c",
+    )
+    db_session.add(snap)
+    await db_session.flush()
     db_session.add(
         AgentCert(
             agentId=agent.id,
@@ -135,7 +151,7 @@ async def test_certs_filters(client: AsyncClient, db_session: AsyncSession) -> N
             status="active",
             issuedAt=utcnow(),
             expiresAt=utcnow() + timedelta(days=90),
-            certSnapshotId="snap-x",
+            certSnapshotId=snap.id,
         )
     )
     await db_session.commit()

@@ -82,7 +82,11 @@ async def test_fresh_venture_blocks_on_pack(client: AsyncClient, db_session: Asy
 
 async def test_full_path_ready(client: AsyncClient, db_session: AsyncSession) -> None:
     _venture(db_session, slug="fullco")
+    # Flushed in FK order: nothing relates these rows, so the unit of work
+    # would otherwise insert the Pack before the Venture it names.
+    await db_session.flush()
     pid = _pack(db_session, venture="fullco", signed=True)
+    await db_session.flush()
     sids = [_scn(db_session, pack_dbid=pid) for _ in range(3)]
     for sid in sids:
         db_session.add(

@@ -52,7 +52,8 @@ def _scn(session: AsyncSession, *, pack_dbid: str, cap: str) -> None:
 
 async def test_donor_to_recipient_transfer(client: AsyncClient, db_session: AsyncSession) -> None:
     a = _pack(db_session, pack_id="pack.a")
-    b = _pack(db_session, pack_id="pack.b", venture="careGrid")
+    # A seeded venture slug (the FK is to Venture.slug, and slugs are lowercase).
+    b = _pack(db_session, pack_id="pack.b", venture="caregrid")
     for _ in range(4):
         _scn(db_session, pack_dbid=a, cap="capital-forge")
     _scn(db_session, pack_dbid=b, cap="capital-forge")  # thin (1 < 3)

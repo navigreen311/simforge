@@ -416,6 +416,10 @@ class _Ledger:
             decidedAt=at,
         )
         self.session.add(row)
+        # Flushed before its outcomes: they reference it, and no relationship
+        # tells the unit of work to insert it first. Postgres refused the other
+        # order. Still one commit, so neither can exist without the other.
+        await self.session.flush()
         # ADR-0114. The why, in the same commit as the whether: a verdict
         # without its outcomes, or outcomes without their verdict, cannot exist.
         for o in outcomes:
