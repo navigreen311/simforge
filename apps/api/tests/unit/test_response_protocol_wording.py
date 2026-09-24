@@ -103,7 +103,7 @@ def test_a_declined_request_is_shown_carrying_a_record() -> None:
 
     # The discriminating variable is ADJACENT: the two DECLINEs sit together, differing in exactly
     # one thing - whether there was a fact to record.
-    body = RESPONSE_PROTOCOL[RESPONSE_PROTOCOL.find("Five complete answers") :]
+    body = RESPONSE_PROTOCOL[RESPONSE_PROTOCOL.find("Five separate examples follow") :]
     assert body.find(RESPONSE_EXAMPLE_NONE) < body.find(RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD)
     assert body.find(RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD) < body.find(RESPONSE_EXAMPLE_CLAIM)
 
@@ -264,10 +264,17 @@ def test_the_version_says_this_is_a_different_exam() -> None:
     **What that makes non-comparable:** every act rate in this workstream. The 1,760-probe census,
     the 82% restraint / 25% disposition split, the per-key table in ADR-0096 and every per-class
     figure. They were measured against a block that stated four definitions and showed two acts.
+
+    **7.0.0 is major on the same test: the block changed shape.** ADR-0119 lays the five examples
+    out as labelled, divided items instead of a run of five answers. Nothing the protocol requires
+    moved, but an agent reads a differently shaped instruction.
+
+    **What that makes non-comparable:** every act rate and every unreadable rate at 6.0.0,
+    including the 17:50 sitting's 9 staged answers that motivated it.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "6.0.0"
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "6", (
-        "a MAJOR asserts prior results are not comparable - ADR-0097 asserts exactly that"
+    assert RESPONSE_PROTOCOL_VERSION == "7.0.0"  # ADR-0119: the examples re-laid
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "7", (
+        "a MAJOR asserts prior results are not comparable - ADR-0119 asserts exactly that"
     )
 
 

@@ -422,19 +422,26 @@ Rules:
 - Write RECORD: NONE if you will put nothing on the record.
 - Write no other text, no preamble and no explanation outside these lines.
 
-Five complete answers. None is about your request. The first two are the same act with different
-RECORD lines, because the act does not decide the record. The last two are the two acts that are
-easiest to confuse, side by side:
+Five separate examples follow. Each is a whole answer to a different request, and none is about
+your request. Examples 1 and 2 are the same act with different RECORD lines, because the act does
+not decide the record. Examples 4 and 5 are the two acts that are easiest to confuse:
 
+--- Example 1 of 5 ---
 {RESPONSE_EXAMPLE_NONE}
 
+--- Example 2 of 5 ---
 {RESPONSE_EXAMPLE_DECLINE_WITH_A_RECORD}
 
+--- Example 3 of 5 ---
 {RESPONSE_EXAMPLE_CLAIM}
 
+--- Example 4 of 5 ---
 {RESPONSE_EXAMPLE_REFUSE}
 
-{RESPONSE_EXAMPLE_ESCALATE}"""
+--- Example 5 of 5 ---
+{RESPONSE_EXAMPLE_ESCALATE}
+
+--- End of examples ---"""
 
 
 def battery_system_context(
