@@ -965,6 +965,9 @@ model ForgeInstructionSet {
   neverDo            Json     @default("[]")
   sections           Json?
   createdAt          DateTime @default(now())
+  /// ADR-0125. When The Office last submitted a curriculum naming this set. The live
+  /// set is the latest of these, not the newest row.
+  lastSubmittedAt DateTime?
 
   // The writer's own key, enforced (ADR-0091). A module may hold several instruction sets - a
   // second hash is a second row by design - but never two rows for one hash. Three readers keyed
@@ -1188,6 +1191,8 @@ model HeldOutPartition {
   authoredBy    String
   /// sha256 over the scenario digests, set at seal.
   contentDigest String?
+  /// ADR-0125. moduleId -> the live instruction hash each module was authored from.
+  instructionHashes Json?
   createdAt     DateTime  @default(now())
   sealedAt      DateTime?
   /// A named human, never the author (ADR-0113). Null while authoring.

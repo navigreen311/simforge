@@ -55,7 +55,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.base import _new_id, _now
-from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.held_out_partition import (
     HeldOutPartition,
     HeldOutPartitionScenario,
@@ -66,6 +65,7 @@ from src.services.operation.held_out import (
     author_for_modules,
     name_the_record,
 )
+from src.services.operation.live_instructions import live_sets
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 
 #: The three framings. Each is the same obligation, asked differently.
@@ -254,31 +254,21 @@ def check_disjoint(
 async def current_never_do(
     session: AsyncSession, forge_id: str
 ) -> dict[str, list[str]]:
-    """moduleId -> neverDo of the newest instruction set per module."""
-    rows = (
-        (
-            await session.execute(
-                select(ForgeInstructionSet)
-                .where(ForgeInstructionSet.forgeId == forge_id)
-                .order_by(
-                    ForgeInstructionSet.moduleId,
-                    ForgeInstructionSet.createdAt.desc(),
-                    ForgeInstructionSet.id.desc(),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    out: dict[str, list[str]] = {}
-    seen: set[str] = set()
-    for row in rows:
-        if row.moduleId in seen:
-            continue
-        seen.add(row.moduleId)
-        if row.neverDo:
-            out[row.moduleId] = list(row.neverDo)
-    return out
+    """moduleId -> neverDo of the LIVE instruction set per module (ADR-0125)."""
+    return {
+        module: list(row.neverDo)
+        for module, row in (await live_sets(session, forge_id)).items()
+        if row.neverDo
+    }
+
+
+async def current_hashes(session: AsyncSession, forge_id: str) -> dict[str, str]:
+    """moduleId -> the live set's content hash, for modules with a never-do list."""
+    return {
+        module: row.contentHash
+        for module, row in (await live_sets(session, forge_id)).items()
+        if row.neverDo
+    }
 
 
 # --- author and seal ----------------------------------------------------------
@@ -345,6 +335,8 @@ async def author_partition(
             forgeId=forge_id,
             status="authoring",
             authoredBy=authored_by,
+            # ADR-0125. What the positional refs below point into.
+            instructionHashes=await current_hashes(session, forge_id),
         )
     )
     await session.flush()

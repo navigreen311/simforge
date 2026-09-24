@@ -101,6 +101,8 @@ async def _seed(
         contentDigest=DIGEST if status != "authoring" else None,
         sealedAt=utcnow() if status != "authoring" else None,
         sealedBy="Grace Hopper" if status != "authoring" else None,
+        # ADR-0125: authored from the instruction set seeded above, which is live.
+        instructionHashes={MODULE: ISET_HASH},
     )
     session.add(partition)
     await session.flush()

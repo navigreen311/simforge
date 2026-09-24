@@ -50,3 +50,9 @@ class ForgeInstructionSet(Base):
     sections: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    #: ADR-0125. When The Office last submitted a curriculum naming this set. The live set
+    #: is the latest of these - not the newest row, which a withdrawal to an earlier hash
+    #: never creates. Stamped on every submission, new row or existing.
+    lastSubmittedAt: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=_now
+    )
