@@ -26,6 +26,7 @@ from src.models.governance import Constitution, ConstitutionalAmendment
 from src.models.handoff_test import HandoffTest
 from src.models.held_out_partition import (
     HeldOutPartition,
+    HeldOutPartitionOutcome,
     HeldOutPartitionScenario,
     HeldOutPartitionSeal,
     HeldOutPartitionVerdict,
@@ -98,6 +99,7 @@ __all__ = [
     "OperationRun",
     "OperationScenarioSubmission",
     "HeldOutPartition",
+    "HeldOutPartitionOutcome",
     "HeldOutPartitionScenario",
     "HeldOutPartitionSeal",
     "HeldOutPartitionVerdict",

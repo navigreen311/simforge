@@ -378,7 +378,7 @@ async def test_a_job_that_reports_work_and_writes_nothing_fails_here(
     await _seed(db_session)
     _serve(monkeypatch, ScriptedProvider(_compliant))
 
-    async def _append_nothing(self, agent_id, verdict, after, instruction_hash=None):  # noqa: ANN001, ANN202
+    async def _append_nothing(self, agent_id, verdict, after, instruction_hash=None, outcomes=()):  # noqa: ANN001, ANN202, E501
         return utcnow()
 
     monkeypatch.setattr(partition_grading._Ledger, "append", _append_nothing)

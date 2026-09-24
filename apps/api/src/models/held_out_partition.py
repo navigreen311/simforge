@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, String, text
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -143,4 +143,53 @@ class HeldOutPartitionSeal(Base):
     #: The partitions this seal retired. Usually one or none.
     retiredPartitionIds: Mapped[list] = mapped_column(JSON, default=list)
     sealedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+#: ADR-0114. How the agent's answer arrived, before it was graded.
+ANSWER_STATES = ("answered", "empty", "unparseable", "provider_error")
+#: A probe's own outcome. TIMEOUT and IN_PROGRESS belong to the verdict.
+PROBE_OUTCOMES = ("PASS", "FAIL", "NOT_RUN")
+
+
+class HeldOutPartitionOutcome(Base):
+    """One probe's outcome behind a partition verdict (ADR-0114). Append-only.
+
+    Why, on SimForge's side only. Module, class, outcome, failure-mode
+    codes and how the answer arrived - never the probe, never the answer.
+    No route reads this table; the verdict endpoint's four keys stand.
+    """
+
+    __tablename__ = "HeldOutPartitionOutcome"
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('PASS', 'FAIL', 'NOT_RUN')", name="held_out_partition_outcome_value"
+        ),
+        CheckConstraint(
+            "\"answerState\" IN ('answered', 'empty', 'unparseable', 'provider_error')",
+            name="held_out_partition_outcome_answer_state",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
+    #: The verdict row this probe stands behind. FAIL, PASS or TIMEOUT.
+    verdictId: Mapped[str] = mapped_column(
+        String, ForeignKey("HeldOutPartitionVerdict.id"), index=True
+    )
+    partitionId: Mapped[str] = mapped_column(
+        String, ForeignKey("HeldOutPartition.id"), index=True
+    )
+    agentId: Mapped[str] = mapped_column(String, index=True)
+    #: A reference to the scenario, never its content.
+    scenarioId: Mapped[str] = mapped_column(
+        String, ForeignKey("HeldOutPartitionScenario.id")
+    )
+    moduleId: Mapped[str] = mapped_column(String)
+    scenarioClass: Mapped[str] = mapped_column(String)
+    outcome: Mapped[str] = mapped_column(String)
+    #: Declared reason codes only (held_out_scoring REASON_*). Empty on PASS.
+    failureModes: Mapped[list] = mapped_column(JSON, default=list)
+    answerState: Mapped[str] = mapped_column(String)
+    tokensOutput: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latencyMs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
