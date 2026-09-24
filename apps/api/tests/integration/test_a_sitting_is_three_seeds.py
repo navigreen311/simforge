@@ -181,3 +181,20 @@ async def test_the_resit_is_no_route() -> None:
         if "resit_partition" in p.read_text(encoding="utf-8")
     ]
     assert hits == []
+
+
+async def test_a_village_that_cannot_be_read_is_a_named_refusal(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.services.village.reader import VillageReaderError
+
+    pid = await _seed(db_session)
+
+    def _no_village():  # noqa: ANN202
+        raise VillageReaderError("VILLAGE_DATA_PATH does not exist")
+
+    monkeypatch.setattr(cli, "build_runtime", _no_village)
+    async with fresh_session(db_session) as s, fresh_session(db_session) as lock:
+        with pytest.raises(cli.ResitRefused, match="Village cannot be read"):
+            await cli.resit(s, lock, pid, 1)
+    assert await _rows(db_session) == []

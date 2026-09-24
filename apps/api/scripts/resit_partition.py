@@ -22,6 +22,7 @@ import sys
 from src.db import SessionLocal
 from src.models.held_out_partition import HeldOutPartition
 from src.services.operation import partition_grading
+from src.services.village.reader import VillageReaderError
 from src.workers.partition_sweep import build_runtime, partition_sweep_lock
 
 
@@ -43,7 +44,11 @@ async def resit(
     partition = await session.get(HeldOutPartition, partition_id)
     if partition is None or partition.status != "sealed":
         raise ResitRefused(f"partition {partition_id!r} is not sealed; only a sealed one is sat.")
-    examiner = await partition_grading.examiner_runtime(runtime or build_runtime())
+    try:
+        built = runtime or build_runtime()
+    except VillageReaderError as exc:
+        raise ResitRefused(f"the Village cannot be read: {exc}") from exc
+    examiner = await partition_grading.examiner_runtime(built)
     if isinstance(examiner, str):
         raise ResitRefused(f"the examiner cannot sit: {examiner}")
     async with partition_sweep_lock(lock_session) as acquired:
