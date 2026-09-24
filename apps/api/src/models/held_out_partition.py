@@ -64,6 +64,9 @@ class HeldOutPartition(Base):
             sqlite_where=text("status = 'sealed'"),
             postgresql_where=text("status = 'sealed'"),
         ),
+        CheckConstraint(
+            "status IN ('authoring', 'sealed', 'retired')", name="held_out_partition_status"
+        ),
         CheckConstraint(SEALER_IS_NOT_AUTHOR_SQL, name="held_out_partition_sealer_is_not_author"),
         CheckConstraint(A_SEAL_NAMES_ITS_SEALER_SQL, name="held_out_partition_seal_names_sealer"),
     )
@@ -84,11 +87,15 @@ class HeldOutPartition(Base):
 
 class HeldOutPartitionScenario(Base):
     __tablename__ = "HeldOutPartitionScenario"
+    __table_args__ = (
+        CheckConstraint(
+            "\"scenarioClass\" IN ('never_do_violation', 'silent_failure')",
+            name="held_out_partition_scenario_class",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
-    partitionId: Mapped[str] = mapped_column(
-        String, ForeignKey("HeldOutPartition.id"), index=True
-    )
+    partitionId: Mapped[str] = mapped_column(String, ForeignKey("HeldOutPartition.id"), index=True)
     moduleId: Mapped[str] = mapped_column(String, index=True)
     #: One of HELD_OUT_CLASSES: never_do_violation or silent_failure.
     scenarioClass: Mapped[str] = mapped_column(String)
@@ -101,11 +108,15 @@ class HeldOutPartitionScenario(Base):
 
 class HeldOutPartitionVerdict(Base):
     __tablename__ = "HeldOutPartitionVerdict"
+    __table_args__ = (
+        CheckConstraint(
+            "verdict IN ('PASS', 'FAIL', 'NOT_RUN', 'IN_PROGRESS', 'TIMEOUT')",
+            name="held_out_partition_verdict_value",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
-    partitionId: Mapped[str] = mapped_column(
-        String, ForeignKey("HeldOutPartition.id"), index=True
-    )
+    partitionId: Mapped[str] = mapped_column(String, ForeignKey("HeldOutPartition.id"), index=True)
     ventureId: Mapped[str] = mapped_column(String, index=True)
     agentId: Mapped[str] = mapped_column(String, index=True)
     #: One of PARTITION_VERDICTS. Whether, never why: no reason column exists.
@@ -133,9 +144,7 @@ class HeldOutPartitionSeal(Base):
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
-    partitionId: Mapped[str] = mapped_column(
-        String, ForeignKey("HeldOutPartition.id"), unique=True
-    )
+    partitionId: Mapped[str] = mapped_column(String, ForeignKey("HeldOutPartition.id"), unique=True)
     ventureId: Mapped[str] = mapped_column(String, index=True)
     authoredBy: Mapped[str] = mapped_column(String)
     sealedBy: Mapped[str] = mapped_column(String)
@@ -175,14 +184,10 @@ class HeldOutPartitionOutcome(Base):
     verdictId: Mapped[str] = mapped_column(
         String, ForeignKey("HeldOutPartitionVerdict.id"), index=True
     )
-    partitionId: Mapped[str] = mapped_column(
-        String, ForeignKey("HeldOutPartition.id"), index=True
-    )
+    partitionId: Mapped[str] = mapped_column(String, ForeignKey("HeldOutPartition.id"), index=True)
     agentId: Mapped[str] = mapped_column(String, index=True)
     #: A reference to the scenario, never its content.
-    scenarioId: Mapped[str] = mapped_column(
-        String, ForeignKey("HeldOutPartitionScenario.id")
-    )
+    scenarioId: Mapped[str] = mapped_column(String, ForeignKey("HeldOutPartitionScenario.id"))
     moduleId: Mapped[str] = mapped_column(String)
     scenarioClass: Mapped[str] = mapped_column(String)
     outcome: Mapped[str] = mapped_column(String)
@@ -192,4 +197,3 @@ class HeldOutPartitionOutcome(Base):
     tokensOutput: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latencyMs: Mapped[int | None] = mapped_column(Integer, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-

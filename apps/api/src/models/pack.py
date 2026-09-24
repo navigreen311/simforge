@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base, IdTimestampMixin, _new_id, _now
@@ -13,6 +13,10 @@ from src.models.types import StrArray
 
 class Pack(IdTimestampMixin, Base):
     __tablename__ = "Pack"
+    __table_args__ = (
+        # ADR-0115: Postgres holds this; the test database now does too.
+        UniqueConstraint("packId", "version"),
+    )
 
     packId: Mapped[str] = mapped_column(String, unique=True)
     name: Mapped[str] = mapped_column(String)

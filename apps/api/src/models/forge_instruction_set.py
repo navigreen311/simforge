@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String
+from sqlalchemy import JSON, DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -20,6 +20,10 @@ from src.models.base import Base, _new_id, _now
 
 class ForgeInstructionSet(Base):
     __tablename__ = "ForgeInstructionSet"
+    __table_args__ = (
+        # ADR-0115. The natural key submissions upsert on, held by Postgres.
+        UniqueConstraint("forgeId", "moduleId", "contentHash"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
     forgeId: Mapped[str] = mapped_column(String, index=True)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -17,6 +17,10 @@ from src.models.base import Base, _new_id, _now
 
 class OntologyEntity(Base):
     __tablename__ = "OntologyEntity"
+    __table_args__ = (
+        # ADR-0115: Postgres holds this; the test database now does too.
+        UniqueConstraint("venture", "name"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
     venture: Mapped[str] = mapped_column(String, index=True)

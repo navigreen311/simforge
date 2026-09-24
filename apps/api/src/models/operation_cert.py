@@ -41,6 +41,11 @@ class OperationCertification(Base):
             '"rubricDimensionSpread" IS NULL OR "rubricSpreadMeasure" IS NOT NULL',
             name="operation_cert_spread_has_a_measure",
         ),
+        # ADR-0115: mirrored from the migration (ADR-0093).
+        CheckConstraint(
+            '"score" IS NULL OR "scoreMeasure" IS NOT NULL',
+            name="OperationCertification_score_is_labelled",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -137,9 +142,7 @@ class OperationCertification(Base):
     #:
     #: Nullable, for the rows written before this existed. A backfilled guess would be the one
     #: thing worse than the silence it replaces.
-    writtenBy: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, default=process_identity
-    )
+    writtenBy: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=process_identity)
     #: Which instruction sections were IN FRONT OF THE AGENT, and which its keys were written
     #: against (ADR-0107 ruling 1): `{"shown", "required_by_keys", "missing"}`.
     #:
