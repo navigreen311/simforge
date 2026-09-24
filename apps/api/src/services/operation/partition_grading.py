@@ -73,6 +73,7 @@ from src.services.operation.battery import (
     ACT_PROCEED,
     ACT_REFUSE,
     BOOTSTRAP_FORGE_IDS,
+    RESPONSE_PROTOCOL_VERSION,
     battery_system_context,
     observe_answer,
     parse_answer,
@@ -486,6 +487,8 @@ class _Ledger:
             verdict=verdict,
             partitionDigest=self.digest,
             instructionContentHash=instruction_hash,
+            # ADR-0120. Every row says which protocol the sitting was put under.
+            protocolVersion=RESPONSE_PROTOCOL_VERSION,
             decidedAt=at,
         )
         self.session.add(row)
