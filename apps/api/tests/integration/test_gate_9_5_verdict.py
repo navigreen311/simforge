@@ -30,6 +30,7 @@ from src.models.held_out_partition import (
     HeldOutPartitionVerdict,
 )
 from src.services.operation.partition_verdict import venture_verdict
+from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
 from tests.integration.scheduler_path import fresh_session
 
 TOKEN = "office-tenant-token-for-tests"
@@ -98,6 +99,7 @@ def _verdict(
     *,
     at: datetime = T0,
     digest: str | None = None,
+    protocol: str | None = RESPONSE_PROTOCOL_VERSION,
 ) -> HeldOutPartitionVerdict:
     return HeldOutPartitionVerdict(
         partitionId=p.id,
@@ -105,6 +107,7 @@ def _verdict(
         agentId=agent,
         verdict=verdict,
         partitionDigest=digest if digest is not None else p.contentDigest,
+        protocolVersion=protocol,
         decidedAt=at,
     )
 
@@ -440,3 +443,25 @@ def test_the_scheduler_router_cannot_start_the_grader() -> None:
     assert JOBS_BY_NAME["partition_sweep"].triggerable is False
     reachable = _reachable([SCHEDULER_ROUTER])
     assert "src.services.cadence.jobs" in reachable  # the path this test is about
+
+
+async def test_only_sittings_under_the_current_protocol_count(
+    bridged: AsyncClient, db_session: AsyncSession
+) -> None:
+    """ADR-0122. A superseded sitting is history, not evidence - so a protocol
+    correction can be cleared. Victor's case: unreadable under 6.0.0, clean now."""
+    p = _partition("v-protocol")
+    await _add(db_session, p)
+    await _add(
+        db_session,
+        _verdict(p, "victor", "NOT_RUN", at=T0, protocol="6.0.0"),
+        _verdict(p, "victor", "PASS", at=T0 + timedelta(hours=1)),
+        _verdict(p, "legacy", "FAIL", at=T0, protocol=None),
+    )
+    assert (await _ask(bridged, "v-protocol"))["verdict"] == "PASS"
+
+    q = _partition("v-only-old")
+    await _add(db_session, q)
+    await _add(db_session, _verdict(q, "a", "PASS", at=T0, protocol="6.0.0"))
+    body = await _ask(bridged, "v-only-old")
+    assert (body["partition_exists"], body["verdict"]) == (True, "NOT_RUN")

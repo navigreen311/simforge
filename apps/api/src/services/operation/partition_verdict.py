@@ -39,6 +39,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
+from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
 
 #: Weakest first. Any non-PASS blocks; the order only picks which one is named.
 WEAKNESS_ORDER: tuple[str, ...] = ("FAIL", "TIMEOUT", "IN_PROGRESS", "NOT_RUN", "PASS")
@@ -91,6 +92,9 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
             )
             .where(HeldOutPartitionVerdict.partitionId == partition_id)
             .where(HeldOutPartitionVerdict.partitionDigest == digest)
+            # ADR-0122: only sittings under the current protocol are evidence. One under a
+            # superseded version - or written before the version was recorded - is history.
+            .where(HeldOutPartitionVerdict.protocolVersion == RESPONSE_PROTOCOL_VERSION)
             # Newest first; ULID ids break a decidedAt tie in insert order.
             .order_by(
                 HeldOutPartitionVerdict.decidedAt.desc(),
