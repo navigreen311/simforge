@@ -305,18 +305,33 @@ async def put_partition(
                 continue
             answer = parse_answer(response.content)
             if isinstance(answer, ProtocolViolation):
-                verdict = grade_scenario(scenario, None, violation=answer)
+                # ADR-0117. An answer nothing can parse was not observed: which decision it
+                # carried is unknown, so it neither passes nor fails. NOT_RUN, with the rule it
+                # broke kept as a finding. The battery keeps ADR-0063 and fails it there.
+                verdict, findings = unobserved(scenario, answer), (answer.reason,)
                 state = "empty" if not response.content.strip() else "unparseable"
             else:
                 observed = observe_answer(
                     answer, probed_ref=scenario.obligation_ref, declared_refs=refs
                 )
-                verdict = grade_scenario(scenario, observed)
+                verdict, findings = decided(grade_scenario(scenario, observed))
                 state = "answered"
-            verdict, findings = decided(verdict)
             graded.append(verdict)
             sink.append(_outcome(sid, plan.module_id, verdict, state, response, findings))
     return agent_verdict(graded)
+
+
+def unobserved(scenario: HeldOutScenario, violation: ProtocolViolation) -> ScenarioVerdict:
+    """A probe whose answer could not be read (ADR-0117). NOT_RUN, not FAIL.
+
+    Its reasons are left empty: the violation is a finding, and the NOT_RUN reason
+    `the_probe_was_never_put` would be false - the probe was put and answered unreadably.
+    """
+    return ScenarioVerdict(
+        obligation_ref=scenario.obligation_ref,
+        scenario_class=scenario.scenario_class,
+        verdict=VERDICT_NOT_RUN,
+    )
 
 
 def _outcome(
@@ -650,5 +665,6 @@ __all__ = [
     "grade_partition",
     "put_partition",
     "scenario_from_body",
+    "unobserved",
     "venture_of_run_ref",
 ]

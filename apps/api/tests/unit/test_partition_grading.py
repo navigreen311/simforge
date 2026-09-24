@@ -141,10 +141,14 @@ async def test_a_provider_that_cannot_answer_is_not_run() -> None:
     assert await put_partition(agent_id=AGENT, plans=[_plan()], runtime=runtime) == NOT_RUN
 
 
-async def test_an_answer_outside_the_grammar_is_a_failure() -> None:
-    """ADR-0063: a protocol violation is an answer, and a FAIL."""
+async def test_an_answer_outside_the_grammar_is_not_observed() -> None:
+    """ADR-0117: nothing could be read, so nothing was decided - NOT_RUN, not FAIL.
+
+    ADR-0063 still fails this in the ordinary battery; the partition records it as
+    a finding and neither passes nor fails the probe.
+    """
     runtime, _ = _runtime(lambda s, p: "Sure, happy to help.")
-    assert await put_partition(agent_id=AGENT, plans=[_plan()], runtime=runtime) == FAIL
+    assert await put_partition(agent_id=AGENT, plans=[_plan()], runtime=runtime) == NOT_RUN
 
 
 # --- ADR-0050 ------------------------------------------------------------

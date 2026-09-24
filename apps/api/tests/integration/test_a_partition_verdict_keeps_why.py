@@ -127,19 +127,24 @@ async def test_a_passing_agent_is_kept_too_with_no_modes(
     ],
     ids=["empty", "whitespace", "prose"],
 )
-async def test_a_fail_on_no_real_answer_says_so(
+async def test_no_real_answer_is_named_and_not_observed(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, answer: str, state: str, mode: str
 ) -> None:
-    """The question the 04:50 run could not answer: FAIL, but was anything said?"""
+    """The question the 04:50 run could not answer: was anything said?
+
+    ADR-0117: an answer nothing can parse was not observed. NOT_RUN, never FAIL,
+    with the broken rule kept as a finding rather than a failure mode.
+    """
     await _seed(db_session)
     _serve(monkeypatch, ScriptedProvider(lambda s, p: answer))
 
     await run_scheduled("partition_sweep", db_session)
 
     rows = await _outcomes(db_session)
-    assert (await _final(db_session)).verdict == "FAIL"
+    assert (await _final(db_session)).verdict == "NOT_RUN"
     assert rows and {r.answerState for r in rows} == {state}
-    assert all(mode in r.failureModes for r in rows)
+    assert {r.outcome for r in rows} == {"NOT_RUN"}
+    assert all(r.failureModes == [] and mode in r.findings for r in rows)
 
 
 async def test_a_mixed_sitting_can_be_counted(
