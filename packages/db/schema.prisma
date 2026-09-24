@@ -1282,6 +1282,10 @@ model HeldOutPartitionOutcome {
   latencyMs     Int?
   /// ADR-0116. Discipline findings on a decision that passed. Never fails it.
   findings      Json     @default("[]")
+  /// ADR-0118. An unreadable answer's line sequence as codes. Null when readable. Never text.
+  answerShape   Json?
+  /// ADR-0118. The act words that appeared: PROCEED/REFUSE/DECLINE/ESCALATE/UNKNOWN.
+  actWords      Json?
   createdAt     DateTime @default(now())
 
   @@index([verdictId])

@@ -65,6 +65,13 @@ from src.services.agent_runtime.examiner import check_examiner
 from src.services.agent_runtime.llm_client import LLMResponse
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
+    _ACT_RE,
+    _CAVEAT_RE,
+    _RECORD_RE,
+    ACT_DECLINE,
+    ACT_ESCALATE,
+    ACT_PROCEED,
+    ACT_REFUSE,
     BOOTSTRAP_FORGE_IDS,
     battery_system_context,
     observe_answer,
@@ -244,6 +251,9 @@ class ProbeOutcome:
     latency_ms: int | None = None
     #: Discipline findings on a decision that passed (ADR-0116), e.g. an uncited escalation.
     findings: tuple[str, ...] = ()
+    #: ADR-0118. An unreadable answer's shape, as codes. None on a readable answer.
+    answer_shape: tuple[str, ...] | None = None
+    act_words: tuple[str, ...] | None = None
 
 
 def agent_verdict(verdicts: Sequence[ScenarioVerdict]) -> str:
@@ -310,14 +320,16 @@ async def put_partition(
                 # broke kept as a finding. The battery keeps ADR-0063 and fails it there.
                 verdict, findings = unobserved(scenario, answer), (answer.reason,)
                 state = "empty" if not response.content.strip() else "unparseable"
+                shape = answer_shape(response.content)
             else:
                 observed = observe_answer(
                     answer, probed_ref=scenario.obligation_ref, declared_refs=refs
                 )
                 verdict, findings = decided(grade_scenario(scenario, observed))
                 state = "answered"
+                shape = None
             graded.append(verdict)
-            sink.append(_outcome(sid, plan.module_id, verdict, state, response, findings))
+            sink.append(_outcome(sid, plan.module_id, verdict, state, response, findings, shape))
     return agent_verdict(graded)
 
 
@@ -341,6 +353,7 @@ def _outcome(
     answer_state: str,
     response: LLMResponse | None = None,
     findings: tuple[str, ...] = (),
+    shape: tuple[tuple[str, ...], tuple[str, ...]] | None = None,
 ) -> ProbeOutcome:
     return ProbeOutcome(
         scenario_id=scenario_id,
@@ -352,7 +365,46 @@ def _outcome(
         tokens_output=response.tokens_output if response is not None else None,
         latency_ms=response.latency_ms if response is not None else None,
         findings=findings,
+        answer_shape=shape[0] if shape is not None else None,
+        act_words=shape[1] if shape is not None else None,
     )
+
+
+#: ADR-0118. The only values a shape may hold. A line is one of the protocol's three kinds
+#: or OTHER; an act word is one of the protocol's four or UNKNOWN. Nothing the agent wrote
+#: survives - only which of these each line was.
+SHAPE_CODES: frozenset[str] = frozenset({"ACT", "RECORD", "CAVEAT", "OTHER"})
+ACT_WORDS: frozenset[str] = frozenset({ACT_PROCEED, ACT_REFUSE, ACT_DECLINE, ACT_ESCALATE})
+UNKNOWN_ACT = "UNKNOWN"
+#: A runaway answer is summarised, not stored whole: the first lines carry the shape.
+MAX_SHAPE = 40
+
+
+def answer_shape(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """An unreadable answer's shape, as codes only (ADR-0118). Never text.
+
+    Classified with the battery's own line patterns, so a line is ACT here exactly when the
+    parser calls it one. Blank lines carry no shape and are skipped. The act words are the
+    sorted set that appeared: two different words means staged answers, one word twice means
+    repetition, ACT then OTHER means commentary.
+    """
+    codes: list[str] = []
+    words: set[str] = set()
+    for line in (text or "").splitlines():
+        if not line.strip():
+            continue
+        act = _ACT_RE.match(line)
+        if act:
+            codes.append("ACT")
+            head = act.group("body").split()[0].upper() if act.group("body").split() else ""
+            words.add(head if head in ACT_WORDS else UNKNOWN_ACT)
+        elif _RECORD_RE.match(line):
+            codes.append("RECORD")
+        elif _CAVEAT_RE.match(line):
+            codes.append("CAVEAT")
+        else:
+            codes.append("OTHER")
+    return tuple(codes[:MAX_SHAPE]), tuple(sorted(words))
 
 
 def instructions_digest(sets: Sequence[ForgeInstructionSet]) -> str | None:
@@ -460,6 +512,8 @@ class _Ledger:
                     tokensOutput=o.tokens_output,
                     latencyMs=o.latency_ms,
                     findings=list(o.findings),
+                    answerShape=list(o.answer_shape) if o.answer_shape is not None else None,
+                    actWords=list(o.act_words) if o.act_words is not None else None,
                 )
             )
         await self.session.commit()
@@ -613,9 +667,7 @@ async def grade_partition(
                 await ledger.append(agent.agent_id, NOT_RUN, last_at)
             continue
         plans, sets = planned
-        plans = [
-            replace(p, scenario_ids=tuple(ids_by_module.get(p.module_id, ()))) for p in plans
-        ]
+        plans = [replace(p, scenario_ids=tuple(ids_by_module.get(p.module_id, ()))) for p in plans]
 
         instruction_hash = instructions_digest(sets)
         last_at = await ledger.append(agent.agent_id, IN_PROGRESS, last_at, instruction_hash)
@@ -659,6 +711,7 @@ __all__ = [
     "ProbeOutcome",
     "PartitionOutcome",
     "agent_verdict",
+    "answer_shape",
     "agents_for_partition",
     "current_instruction_set",
     "examiner_runtime",
