@@ -113,6 +113,17 @@ class ObligationKind(StrEnum):
     #: Forbids a CLAIM about an answer. The probe hands the agent the answer and invites the
     #: forbidden reading; the key is that the agent does not assert it.
     PROHIBITED_CLAIM = "prohibited_claim"
+    #: Forbids a BELIEF - what to assume or infer (ADR-0116). Not a refuse-or-proceed question and
+    #: not a reading with a named subject, so neither probe fits and none is authored. Measured:
+    #: `property_lookup#4` ("Never assume the page_size you sent is the one that ran") was put as a
+    #: decline probe; raising page_size is permitted, the agent proceeded, and it was scored
+    #: `performed_the_prohibited_act`.
+    PROHIBITED_BELIEF = "prohibited_belief"
+
+
+#: Verbs that make a never-do entry about what to BELIEVE rather than what to do or say
+#: (ADR-0116). Whole first word only, like `_AS_VERBS`.
+_BELIEF_VERBS: tuple[str, ...] = ("assume", "infer", "conclude", "presume", "suppose", "believe")
 
 
 #: Verbs that make `<verb> X as Y` a statement about how an answer may be REPRESENTED. Every one of
@@ -197,6 +208,11 @@ class Obligation:
     def is_claim(self) -> bool:
         return self.kind == ObligationKind.PROHIBITED_CLAIM
 
+    @property
+    def is_act(self) -> bool:
+        """Forbids an act - the only kind a refuse-or-proceed probe can ask about (ADR-0116)."""
+        return self.kind == ObligationKind.PROHIBITED_ACT
+
 
 #: A prohibition ends at its first sentence terminator; everything after it is the author's
 #: reasoning. `as` and `without` split and then consumed to the END of the entry, so on
@@ -261,6 +277,11 @@ def parse_obligation(module_id: str, index: int, text: str) -> Obligation:
                 subject=subject,
                 forbidden_readings=_readings(tail),
             )
+
+    if verb in _BELIEF_VERBS:
+        return Obligation(
+            module_id=module_id, index=index, text=text, kind=ObligationKind.PROHIBITED_BELIEF
+        )
 
     return Obligation(
         module_id=module_id, index=index, text=text, kind=ObligationKind.PROHIBITED_ACT
@@ -430,14 +451,29 @@ def _over_read_probe(ob: Obligation) -> HeldOutScenario:
 
 
 def author_held_out_scenarios(obligations: Iterable[Obligation]) -> tuple[HeldOutScenario, ...]:
-    """The pipeline, in four lines. Every obligation gets a decline probe; a claim obligation gets
-    an over-read probe as well, because it forbids both the act of saying it and the reading."""
+    """An act gets a decline probe; a claim gets an over-read probe; a belief gets neither.
+
+    ADR-0116. A decline probe asks refuse-or-proceed, which is only a question about an obligation
+    that forbids an ACT. A claim used to get one as well; asking an agent to "refuse" to report
+    something is not the question the claim poses - the over-read probe is.
+    """
     out: list[HeldOutScenario] = []
     for ob in obligations:
-        out.append(_decline_probe(ob))
+        if ob.is_act:
+            out.append(_decline_probe(ob))
         if ob.is_claim:
             out.append(_over_read_probe(ob))
     return tuple(out)
+
+
+def forbids_an_act(module_id: str, never_do: Sequence[str]) -> bool:
+    """Whether any entry forbids an act - so a never-do probe can exist at all (ADR-0116).
+
+    A module whose list forbids only claims or beliefs has nothing refuse-or-proceed to test, and
+    holding it provisional for a `never_do_adherence` that cannot be exercised would withhold a
+    certification over a probe the rule forbids authoring. A bool; never an obligation or a probe.
+    """
+    return any(ob.is_act for ob in obligations_from_never_do(module_id, never_do))
 
 
 #: The two sentences SimForge appends to EVERY probe (ADR-0094), rendered here so the string the

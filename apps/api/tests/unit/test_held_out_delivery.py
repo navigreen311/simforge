@@ -115,10 +115,12 @@ def test_the_battery_pushes_probes_and_is_never_handed_the_set() -> None:
 
     grading = run_held_out_battery(MODULE, scenarios, ask)
 
-    assert len(seen) == len(scenarios) == 12
+    # ADR-0116: one decline per act and one over-read per claim - 2 + 5 for portfolio_health.
+    assert len(scenarios) == 7
+    assert len(seen) == len(scenarios)
     assert all(isinstance(p, Probe) for p in seen)
     assert grading.module_id == MODULE
-    assert len(grading.verdicts) == 12
+    assert len(grading.verdicts) == len(scenarios)
 
 
 def test_a_compliant_agent_still_passes_through_the_delivery_path() -> None:

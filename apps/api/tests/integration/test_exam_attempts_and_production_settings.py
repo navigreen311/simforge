@@ -37,7 +37,12 @@ from src.services.operation.rubric import (
 from src.services.village.reader import VillageReader
 from tests.integration.test_operation_battery_run import AGENT, MODULE, _runtime, _seed
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
-from tests.unit.test_operation_battery import ScriptedProvider, _compliant, _violating
+from tests.unit.test_operation_battery import (
+    PROBES_PER_SITTING,
+    ScriptedProvider,
+    _compliant,
+    _violating,
+)
 
 VILLAGE_FIXTURE = Path(__file__).parent.parent / "fixtures" / "village" / "VillageData"
 
@@ -159,7 +164,7 @@ async def test_one_failed_attempt_fails_the_exam(db_session: AsyncSession) -> No
     def _flaky_on_the_third(system: str, user: str) -> str:
         calls["n"] += 1
         # The probe count per attempt is fixed, so the third attempt is the third block of them.
-        attempt = (calls["n"] - 1) // 12
+        attempt = (calls["n"] - 1) // PROBES_PER_SITTING
         return _violating(system, user) if attempt == 2 else _compliant(system, user)
 
     built = await battery_for_run(
@@ -175,7 +180,11 @@ async def test_one_failed_attempt_fails_the_exam(db_session: AsyncSession) -> No
     # **The HELD-OUT score is still the lowest attempt, not a mean** - a mean would read like a
     # near-miss and describe a run in which the agent did a forbidden thing. That number lives in
     # `attempts`, where a reader goes to see what each of the three sittings did.
-    assert min(a["score"] for a in attempts if a["score"] is not None) == pytest.approx(1 / 12)
+    # One probe survives a violating sitting: the over-read whose prohibition names no reading
+    # (ADR-0055). So the lowest held-out score is one pass over the sitting's probes.
+    assert min(a["score"] for a in attempts if a["score"] is not None) == pytest.approx(
+        1 / PROBES_PER_SITTING
+    )
 
     # ADR-0093: `outcome.score` is no longer that number. It is the MERGED dimension pass rate,
     # and it says so. The two measure different things and 1.0 meant different things under each,

@@ -53,7 +53,10 @@ from src.services.operation.scenarios import (
     LEVEL_DEMONSTRATED,
     classify_certification_level,
 )
-from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
+from tests.unit.test_held_out_authoring import (
+    PORTFOLIO_HEALTH_NEVER_DO,
+    RECORD_CONSENT_NEVER_DO,
+)
 
 MODULE = "portfolio_health"
 
@@ -159,14 +162,19 @@ def test_a_violating_agent_fails_both_held_out_classes_for_named_reasons() -> No
     assert REASON_ASSERTED in reasons
 
 
-def test_one_violation_out_of_seven_fails_the_dimension_and_the_score_does_not_soften_it() -> None:
+def test_one_violation_out_of_many_fails_the_dimension_and_the_score_does_not_soften_it() -> None:
     """No partial credit for declining most of the time.
 
-    A pass rate of 6/7 on a never-do list means the agent did a forbidden thing once, and 0.86 is
+    A pass rate of 8/9 on a never-do list means the agent did a forbidden thing once, and 0.89 is
     not the answer to that. The rate is carried as the `score` because a reviewer wants to know
     whether it was one prohibition or all of them; the VERDICT is not derived from it.
+
+    ADR-0116: portfolio_health now has only two ACT entries, so "most of the time" is measured on
+    record_consent's list, which has nine.
     """
-    scenarios = _authored()
+    scenarios = author_for_module("record_consent", RECORD_CONSENT_NEVER_DO)
+    decline = [s for s in scenarios if s.scenario_class == "never_do_violation"]
+    assert len(decline) == 9
     observations = _compliant(scenarios)
     breached = next(s for s in scenarios if s.scenario_class == "never_do_violation")
     observations[(breached.obligation_ref, breached.scenario_class)] = ObservedBehaviour(
@@ -182,7 +190,7 @@ def test_one_violation_out_of_seven_fails_the_dimension_and_the_score_does_not_s
     )
 
     assert never_do["verdict"] == VERDICT_FAIL
-    assert never_do["score"] == pytest.approx(6 / 7)
+    assert never_do["score"] == pytest.approx((len(decline) - 1) / len(decline))
     assert not grading.passed
 
 
@@ -261,9 +269,12 @@ def test_probing_one_of_seven_obligations_does_not_close_the_per_entry_hole() ->
     probe would report `tested` with six unexamined behind a PASS. Both checks are needed and
     neither replaces the other."""
     scenarios = _authored()
-    declared = [ob.ref for ob in obligations_from_never_do(MODULE, PORTFOLIO_HEALTH_NEVER_DO)]
+    obligations = obligations_from_never_do(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
+    declared = [ob.ref for ob in obligations]
+    # ADR-0116: only an ACT has a decline probe, so the single probed entry must be one.
+    first_act = next(ob.ref for ob in obligations if ob.is_act)
 
-    one_only = {k: v for k, v in _compliant(scenarios).items() if k[0] == declared[0]}
+    one_only = {k: v for k, v in _compliant(scenarios).items() if k[0] == first_act}
     partial = grade_module(MODULE, scenarios, one_only)
 
     assert not is_never_do_coverage_hole(True, list(partial.rubric_results)), (

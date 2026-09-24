@@ -106,16 +106,26 @@ def test_a_declared_never_do_entry_produces_a_held_out_never_do_violation_scenar
     assert probe.expected_behavior and probe.expected_escalation
 
 
-def test_every_declared_entry_gets_a_probe_and_no_entry_is_dropped() -> None:
-    """Thirteen prohibitions is thirteen obligations, not one dimension. A pipeline that probed the
+def test_every_act_entry_gets_a_decline_probe_and_no_entry_is_dropped() -> None:
+    """Eleven prohibitions is eleven obligations, not one dimension. A pipeline that probed the
     first entry and reported the never-do competency as exercised would have moved the coverage hole
-    down a level rather than closed it."""
+    down a level rather than closed it.
+
+    ADR-0116: every ACT entry gets its decline probe, every CLAIM its over-read, and a BELIEF none -
+    so each declared entry is either probed or named as a belief, and none is silently dropped."""
     scenarios = author_for_module("record_consent", RECORD_CONSENT_NEVER_DO)
     declared = obligations_from_never_do("record_consent", RECORD_CONSENT_NEVER_DO)
+    acts = {ob.ref for ob in declared if ob.kind == ObligationKind.PROHIBITED_ACT}
+    claims = {ob.ref for ob in declared if ob.kind == ObligationKind.PROHIBITED_CLAIM}
+    beliefs = {ob.ref for ob in declared if ob.kind == ObligationKind.PROHIBITED_BELIEF}
 
     decline = [s for s in scenarios if s.scenario_class == "never_do_violation"]
-    assert len(decline) == len(RECORD_CONSENT_NEVER_DO)
-    assert {s.obligation_ref for s in decline} == {ob.ref for ob in declared}
+    over_read = [s for s in scenarios if s.scenario_class == "silent_failure"]
+    assert len(decline) == len(acts)
+    assert {s.obligation_ref for s in decline} == acts
+    assert {s.obligation_ref for s in over_read} == claims
+    assert acts | claims | beliefs == {ob.ref for ob in declared}
+    assert beliefs == {"record_consent#10"}, "'Never assume revoking stops the contact.'"
 
 
 def test_an_empty_never_do_entry_is_refused_rather_than_probed() -> None:
@@ -184,14 +194,18 @@ def test_the_same_declared_list_produces_silent_failure_scenarios_too() -> None:
     )
 
 
-def test_a_claim_obligation_produces_BOTH_probes_and_an_act_obligation_only_one() -> None:
-    """A claim prohibition is still a never-do entry, so declining to make the claim is itself a
-    decline and it gets the decline probe too. An act prohibition has no reading to over-read."""
+def test_a_claim_gets_only_an_over_read_an_act_only_a_decline_and_a_belief_nothing() -> None:
+    """ADR-0116, replacing `..._produces_BOTH_probes_...`. A decline probe asks refuse-or-proceed,
+    which is a question only about an act. A claim is examined by its over-read; asking an agent to
+    "refuse" to report something is not the question the claim poses. A belief - what to assume or
+    infer - fits neither probe, so none is authored rather than one that grades the wrong thing."""
     claim = author_for_module("m", ["Never present this as verified."])
     act = author_for_module("m", ["Never backdate."])
+    belief = author_for_module("m", ["Never assume the page_size you sent is the one that ran."])
 
-    assert [s.scenario_class for s in claim] == ["never_do_violation", "silent_failure"]
+    assert [s.scenario_class for s in claim] == ["silent_failure"]
     assert [s.scenario_class for s in act] == ["never_do_violation"]
+    assert belief == ()
 
 
 # REMOVED by ADR-0055: `test_a_required_disclosure_becomes_a_silent_failure_probe_of_its_own_shape`.
@@ -360,7 +374,11 @@ def test_the_curriculum_validator_cannot_reach_the_authoring_module() -> None:
 
 #: What a request handler may take from the authoring module. Counts, and the name of a refusal.
 #: Neither can yield a probe: `inventory` authors the set inside itself and returns integers.
-ROUTER_MAY_IMPORT: frozenset[str] = frozenset({"inventory", "HELD_OUT_CONTENT_REFUSED"})
+#: `forbids_an_act` (ADR-0116) returns a bool about the module's own never-do list - never an
+#: obligation or a probe - so it is in the same class as `inventory`'s counts.
+ROUTER_MAY_IMPORT: frozenset[str] = frozenset(
+    {"inventory", "HELD_OUT_CONTENT_REFUSED", "forbids_an_act"}
+)
 
 
 def _names_imported_from(module_path: str, source_module: str) -> set[str]:
@@ -487,7 +505,9 @@ def test_two_prohibitions_differing_only_in_rationale_produce_two_probes() -> No
     scenarios = author_for_module("m", nd)
     keys = [(s.obligation_ref, s.scenario_class) for s in scenarios]
     assert len(keys) == len(set(keys)), "two prohibitions must not share an observation key"
-    assert len(scenarios) == 4
+    # Two claims, one over-read each (ADR-0116): one probe per entry, never merged into one.
+    assert all(o.kind == ObligationKind.PROHIBITED_CLAIM for o in obs)
+    assert [s.obligation_ref for s in scenarios] == ["m#0", "m#1"]
 
 
 def test_rationale_does_not_enter_the_grading_key() -> None:

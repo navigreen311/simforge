@@ -61,6 +61,15 @@ from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
 MODULE = "portfolio_health"
 AGENT = "agent-under-test"
 
+#: ADR-0116: an act gets a decline probe, a claim an over-read probe, a belief neither. Every
+#: count below is derived from the kinds rather than pasted, so the next ruling re-derives it.
+_OBLIGATIONS = obligations_from_never_do(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
+ACT_RULES = tuple(i for i, ob in enumerate(_OBLIGATIONS, start=1) if ob.is_act)
+PROBES_PER_SITTING = sum(1 for ob in _OBLIGATIONS if ob.is_act) + sum(
+    1 for ob in _OBLIGATIONS if ob.is_claim
+)
+PROBED_OBLIGATIONS = sum(1 for ob in _OBLIGATIONS if ob.is_act or ob.is_claim)
+
 SRC = Path(__file__).resolve().parents[2] / "src"
 
 
@@ -399,16 +408,17 @@ async def test_a_compliant_agent_passes_the_whole_battery() -> None:
         runtime=runtime,
     )
 
-    assert report.probes_put == 12
+    assert report.probes_put == PROBES_PER_SITTING
     assert report.unreadable_answers == 0
     assert report.passed is True
     assert report.grading.passed is True
     assert all(v.verdict == VERDICT_PASS for v in report.grading.verdicts)
     assert report.failure_modes == ()
     assert {r.verdict for r in report.scenario_class_results} == {VERDICT_PASS}
-    # Every declared obligation was actually exercised - a battery that skipped them would also
-    # report "no failures".
-    assert len(report.grading.exercised_refs) == len(PORTFOLIO_HEALTH_NEVER_DO)
+    # Every probeable obligation was actually exercised - a battery that skipped them would also
+    # report "no failures". This list declares no belief, so that is every declared entry.
+    assert PROBED_OBLIGATIONS == len(PORTFOLIO_HEALTH_NEVER_DO)
+    assert len(report.grading.exercised_refs) == PROBED_OBLIGATIONS
 
 
 async def test_an_agent_that_violates_a_never_do_fails_the_whole_battery() -> None:
@@ -423,7 +433,7 @@ async def test_an_agent_that_violates_a_never_do_fails_the_whole_battery() -> No
         runtime=runtime,
     )
 
-    assert report.probes_put == 12
+    assert report.probes_put == PROBES_PER_SITTING
     assert report.passed is False
     # ADR-0055: the one concealment probe whose prohibition names no forbidden reading has nothing
     # left to fail on since the disclosure check was removed. Asserted, not hidden - see
@@ -437,13 +447,16 @@ async def test_an_agent_that_violates_a_never_do_fails_the_whole_battery() -> No
 
 async def test_a_refusal_that_names_the_wrong_prohibition_does_not_pass() -> None:
     """Citing IS the observable (P-05b: *"a refusal that does not name what it is refusing cannot
-    be told from a timeout"*). An agent citing rule 1 for every probe refuses exactly one of
-    them."""
+    be told from a timeout"*). An agent citing one act's rule for every probe refuses exactly one
+    of them. ADR-0116: rule 1 is a claim and has no decline probe, so the rule cited is the first
+    act's - the property is unchanged, only which number carries it."""
+    assert len(ACT_RULES) >= 2, "one right citation needs another decline to be wrong on"
+    rule = ACT_RULES[0]
 
-    def cites_rule_one(system: str, prompt: str) -> str:
-        return "ACT: REFUSE 1\nRECORD: NONE"
+    def cites_one_rule(system: str, prompt: str) -> str:
+        return f"ACT: REFUSE {rule}\nRECORD: NONE"
 
-    runtime, _ = _runtime(cites_rule_one)
+    runtime, _ = _runtime(cites_one_rule)
     report = await run_module_battery(
         module_id=MODULE,
         agent_id=AGENT,
@@ -452,6 +465,7 @@ async def test_a_refusal_that_names_the_wrong_prohibition_does_not_pass() -> Non
     )
 
     declines = [v for v in report.grading.verdicts if v.scenario_class == "never_do_violation"]
+    assert len(declines) == len(ACT_RULES)
     assert sum(1 for v in declines if v.verdict == VERDICT_PASS) == 1
     assert report.passed is False
 
@@ -484,8 +498,8 @@ async def test_an_answer_that_breaks_the_protocol_fails_rather_than_going_blank(
         runtime=runtime,
     )
 
-    assert report.probes_put == 12
-    assert report.unreadable_answers == 12
+    assert report.probes_put == PROBES_PER_SITTING
+    assert report.unreadable_answers == PROBES_PER_SITTING
     assert all(v.verdict == VERDICT_FAIL for v in report.grading.verdicts)
     assert all(v.reasons == (REASON_PROTOCOL_NO_ACT,) for v in report.grading.verdicts)
     # Explicitly a failure now, where it used to be a blank the state machine held at
@@ -516,7 +530,7 @@ async def test_a_provider_that_raises_is_not_run_rather_than_a_crash_or_a_failur
         runtime=runtime,
     )
 
-    assert report.probes_put == 12
+    assert report.probes_put == PROBES_PER_SITTING
     # An outage is not a protocol violation, so it is not reported as one.
     assert report.unreadable_answers == 0
     assert report.failure_modes == ()
@@ -544,10 +558,10 @@ async def test_one_unreadable_answer_does_not_contaminate_the_others() -> None:
 
     verdicts = [v.verdict for v in report.grading.verdicts]
     assert verdicts.count(VERDICT_FAIL) == 1
-    assert verdicts.count(VERDICT_PASS) == 11
-    # One malformed answer out of twelve is one FAIL, not twelve - the partial result still reads
-    # as partial. What changed with ADR-0063 is that the one is a FAIL rather than a blank, so the
-    # exam does not pass on eleven good answers and one the grader could not read.
+    assert verdicts.count(VERDICT_PASS) == PROBES_PER_SITTING - 1
+    # One malformed answer is one FAIL, not all of them - the partial result still reads as
+    # partial. What changed with ADR-0063 is that the one is a FAIL rather than a blank, so the
+    # exam does not pass on the good answers and one the grader could not read.
     assert report.passed is False
     assert FAILURE_MODE_UNREADABLE in report.failure_modes
 

@@ -45,6 +45,7 @@ from src.services.operation.gating import (
 )
 from src.services.operation.held_out import (
     HELD_OUT_CONTENT_REFUSED,
+    forbids_an_act,
     inventory,
 )
 from src.services.operation.never_do import (
@@ -293,10 +294,12 @@ async def gate_result(
     # they are not, and the case where they differ is exactly `void` above: a run executed against
     # a set the submitter did not declare. Asking `ref.content_hash` there would describe the
     # coverage of a set this run never saw.
-    module_has_never_do = bool(
+    # ADR-0116: the never-do dimension is owed only where an entry forbids an ACT.
+    module_has_never_do = forbids_an_act(
+        ref.module_id or "",
         await module_never_do_list(
             session, ref.forge_id, ref.module_id, body.run_content_hash
-        )
+        ),
     )
 
     if void:
