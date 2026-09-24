@@ -125,6 +125,9 @@ class HeldOutPartitionVerdict(Base):
     #: re-sealed partition does not describe the current one.
     partitionDigest: Mapped[str] = mapped_column(String)
     instructionContentHash: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: ADR-0120. The RESPONSE_PROTOCOL_VERSION the sitting was put under. Null only on rows
+    #: written before the column existed - a version nobody recorded is not guessed.
+    protocolVersion: Mapped[str | None] = mapped_column(String, nullable=True)
     decidedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

@@ -1235,6 +1235,8 @@ model HeldOutPartitionVerdict {
   /// The partition's contentDigest at grading time.
   partitionDigest        String
   instructionContentHash String?
+  /// ADR-0120. The protocol version the sitting was put under. Null on older rows.
+  protocolVersion        String?
   decidedAt              DateTime         @default(now())
 
   @@index([partitionId])
