@@ -1295,6 +1295,12 @@ model HeldOutPartitionOutcome {
   actWords      Json?
   /// ADR-0121. The seed this probe was put at.
   seed          Int?
+  /// ADR-0124. On a readable answer, codes only: the act chosen, whether a cited rule is
+  /// the probed one, the cited number, and NONE/CLAIM. CHECKs are in the migration.
+  chosenAct     String?
+  citation      String?
+  citedRule     Int?
+  recordKind    String?
   createdAt     DateTime @default(now())
 
   @@index([verdictId])

@@ -74,6 +74,7 @@ from src.services.operation.battery import (
     ACT_REFUSE,
     BOOTSTRAP_FORGE_IDS,
     RESPONSE_PROTOCOL_VERSION,
+    AgentAnswer,
     battery_system_context,
     observe_answer,
     parse_answer,
@@ -249,6 +250,39 @@ class ModulePlan:
 
 
 @dataclass(frozen=True, slots=True)
+class AnswerChoice:
+    """What a readable answer chose, as codes only (ADR-0124). Never text.
+
+    `citation` compares the cited number against the probed obligation's own number in
+    the list the agent was shown: `probed` (the right rule), `other` (a different declared
+    rule), `none` (no number - every act but REFUSE), `out_of_range` (a number the list
+    does not have). The record's subject and claim, and every caveat, are never kept.
+    """
+
+    act: str
+    citation: str
+    cited_rule: int | None
+    record_kind: str
+
+
+def answer_choice(answer: AgentAnswer, *, probed_ref: str, refs: Sequence[str]) -> AnswerChoice:
+    """Read the choice off a parsed answer. Codes only (ADR-0124)."""
+    cited = answer.cited_rule
+    if cited is None:
+        citation = "none"
+    elif 1 <= cited <= len(refs):
+        citation = "probed" if refs[cited - 1] == probed_ref else "other"
+    else:
+        citation = "out_of_range"
+    return AnswerChoice(
+        act=answer.act,
+        citation=citation,
+        cited_rule=cited,
+        record_kind="NONE" if answer.record is None else "CLAIM",
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ProbeOutcome:
     """One probe's outcome, kept with the verdict (ADR-0114). No content.
 
@@ -270,6 +304,8 @@ class ProbeOutcome:
     #: ADR-0118. An unreadable answer's shape, as codes. None on a readable answer.
     answer_shape: tuple[str, ...] | None = None
     act_words: tuple[str, ...] | None = None
+    #: ADR-0124. A readable answer's choice, as codes. None on an unreadable one.
+    choice: AnswerChoice | None = None
 
 
 def agent_verdict(verdicts: Sequence[ScenarioVerdict]) -> str:
@@ -337,6 +373,7 @@ async def put_partition(
                 verdict, findings = unobserved(scenario, answer), (answer.reason,)
                 state = "empty" if not response.content.strip() else "unparseable"
                 shape = answer_shape(response.content)
+                choice = None
             else:
                 observed = observe_answer(
                     answer, probed_ref=scenario.obligation_ref, declared_refs=refs
@@ -344,8 +381,11 @@ async def put_partition(
                 verdict, findings = decided(grade_scenario(scenario, observed))
                 state = "answered"
                 shape = None
+                choice = answer_choice(answer, probed_ref=scenario.obligation_ref, refs=refs)
             graded.append(verdict)
-            sink.append(_outcome(sid, plan.module_id, verdict, state, response, findings, shape))
+            sink.append(
+                _outcome(sid, plan.module_id, verdict, state, response, findings, shape, choice)
+            )
     return agent_verdict(graded)
 
 
@@ -370,6 +410,7 @@ def _outcome(
     response: LLMResponse | None = None,
     findings: tuple[str, ...] = (),
     shape: tuple[tuple[str, ...], tuple[str, ...]] | None = None,
+    choice: AnswerChoice | None = None,
 ) -> ProbeOutcome:
     return ProbeOutcome(
         scenario_id=scenario_id,
@@ -383,6 +424,7 @@ def _outcome(
         findings=findings,
         answer_shape=shape[0] if shape is not None else None,
         act_words=shape[1] if shape is not None else None,
+        choice=choice,
     )
 
 
@@ -578,6 +620,10 @@ class _Ledger:
                     answerShape=list(o.answer_shape) if o.answer_shape is not None else None,
                     actWords=list(o.act_words) if o.act_words is not None else None,
                     seed=seed,
+                    chosenAct=o.choice.act if o.choice else None,
+                    citation=o.choice.citation if o.choice else None,
+                    citedRule=o.choice.cited_rule if o.choice else None,
+                    recordKind=o.choice.record_kind if o.choice else None,
                 )
             )
         await self.session.commit()
@@ -833,7 +879,9 @@ __all__ = [
     "PartitionAgent",
     "ProbeOutcome",
     "PartitionOutcome",
+    "AnswerChoice",
     "agent_verdict",
+    "answer_choice",
     "latest_sitting",
     "sitting_verdict",
     "answer_shape",

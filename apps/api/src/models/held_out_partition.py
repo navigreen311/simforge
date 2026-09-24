@@ -186,6 +186,19 @@ class HeldOutPartitionOutcome(Base):
             "\"answerState\" IN ('answered', 'empty', 'unparseable', 'provider_error')",
             name="held_out_partition_outcome_answer_state",
         ),
+        CheckConstraint(
+            '"chosenAct" IS NULL OR '
+            "\"chosenAct\" IN ('PROCEED', 'REFUSE', 'DECLINE', 'ESCALATE')",
+            name="held_out_partition_outcome_chosen_act",
+        ),
+        CheckConstraint(
+            "citation IS NULL OR citation IN ('probed', 'other', 'none', 'out_of_range')",
+            name="held_out_partition_outcome_citation",
+        ),
+        CheckConstraint(
+            "\"recordKind\" IS NULL OR \"recordKind\" IN ('NONE', 'CLAIM')",
+            name="held_out_partition_outcome_record_kind",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -216,4 +229,12 @@ class HeldOutPartitionOutcome(Base):
     actWords: Mapped[list | None] = mapped_column(JSON, nullable=True)
     #: ADR-0121. The seed this probe was put at.
     seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ADR-0124. On a readable answer: the act it chose (PROCEED/REFUSE/DECLINE/ESCALATE),
+    #: whether a cited rule is the probed one (probed/other/none/out_of_range), the cited
+    #: number, and whether it recorded anything (NONE/CLAIM). Null on an unreadable answer,
+    #: which has its shape instead. Never text.
+    chosenAct: Mapped[str | None] = mapped_column(String, nullable=True)
+    citation: Mapped[str | None] = mapped_column(String, nullable=True)
+    citedRule: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recordKind: Mapped[str | None] = mapped_column(String, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
