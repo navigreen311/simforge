@@ -33,8 +33,10 @@ from httpx import AsyncClient
 from src.auth.dev import ALL_ROLES
 from src.services.operation.held_out import (
     HELD_OUT_CONTENT_REFUSED,
+    ObligationKind,
     author_for_module,
     inventory,
+    obligations_from_never_do,
 )
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
 
@@ -194,9 +196,15 @@ async def test_the_inventory_reports_counts_that_match_what_was_authored(
     body = res.json()
     expected = inventory(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
 
+    # ADR-0116: a decline probe per ACT, an over-read per CLAIM. Derived from the kinds, so the
+    # count cannot drift from the rule; portfolio_health is 2 acts and 5 claims.
+    obs = obligations_from_never_do(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
+    acts = sum(ob.kind == ObligationKind.PROHIBITED_ACT for ob in obs)
+    claims = sum(ob.kind == ObligationKind.PROHIBITED_CLAIM for ob in obs)
+    assert (acts, claims) == (2, 5)
     assert body["obligations_declared"] == 7
-    assert body["by_class"] == {"never_do_violation": 7, "silent_failure": 5}
-    assert body["scenarios_authored"] == expected.scenarios_authored == 12
+    assert body["by_class"] == {"never_do_violation": acts, "silent_failure": claims}
+    assert body["scenarios_authored"] == expected.scenarios_authored == acts + claims
     assert body["digest"] == expected.digest
     assert body["digest"].startswith("sha256:")
     assert "held_out_authoring_is_a_process_control" in body["gate_9_5_flag"]

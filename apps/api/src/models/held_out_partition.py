@@ -196,4 +196,7 @@ class HeldOutPartitionOutcome(Base):
     answerState: Mapped[str] = mapped_column(String)
     tokensOutput: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latencyMs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ADR-0116. Discipline findings on a decision that passed - an uncited escalation.
+    #: Declared codes only, kept apart from `failureModes` so a finding never fails a decision.
+    findings: Mapped[list] = mapped_column(JSON, default=list)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

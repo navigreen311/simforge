@@ -1280,6 +1280,8 @@ model HeldOutPartitionOutcome {
   answerState   String
   tokensOutput  Int?
   latencyMs     Int?
+  /// ADR-0116. Discipline findings on a decision that passed. Never fails it.
+  findings      Json     @default("[]")
   createdAt     DateTime @default(now())
 
   @@index([verdictId])

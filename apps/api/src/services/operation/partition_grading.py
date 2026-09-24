@@ -75,6 +75,7 @@ from src.services.operation.held_out_scoring import (
     HELD_OUT_PASS_THRESHOLD,
     ProtocolViolation,
     ScenarioVerdict,
+    decided,
     deliver,
     grade_scenario,
 )
@@ -241,6 +242,8 @@ class ProbeOutcome:
     answer_state: str
     tokens_output: int | None = None
     latency_ms: int | None = None
+    #: Discipline findings on a decision that passed (ADR-0116), e.g. an uncited escalation.
+    findings: tuple[str, ...] = ()
 
 
 def agent_verdict(verdicts: Sequence[ScenarioVerdict]) -> str:
@@ -310,8 +313,9 @@ async def put_partition(
                 )
                 verdict = grade_scenario(scenario, observed)
                 state = "answered"
+            verdict, findings = decided(verdict)
             graded.append(verdict)
-            sink.append(_outcome(sid, plan.module_id, verdict, state, response))
+            sink.append(_outcome(sid, plan.module_id, verdict, state, response, findings))
     return agent_verdict(graded)
 
 
@@ -321,6 +325,7 @@ def _outcome(
     verdict: ScenarioVerdict,
     answer_state: str,
     response: LLMResponse | None = None,
+    findings: tuple[str, ...] = (),
 ) -> ProbeOutcome:
     return ProbeOutcome(
         scenario_id=scenario_id,
@@ -331,6 +336,7 @@ def _outcome(
         answer_state=answer_state,
         tokens_output=response.tokens_output if response is not None else None,
         latency_ms=response.latency_ms if response is not None else None,
+        findings=findings,
     )
 
 
@@ -438,6 +444,7 @@ class _Ledger:
                     answerState=o.answer_state,
                     tokensOutput=o.tokens_output,
                     latencyMs=o.latency_ms,
+                    findings=list(o.findings),
                 )
             )
         await self.session.commit()

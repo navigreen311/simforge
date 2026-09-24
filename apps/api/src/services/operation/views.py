@@ -16,6 +16,7 @@ from src.models.agent import Agent
 from src.models.cert import AgentCert
 from src.models.department import Department
 from src.models.operation_cert import OperationCertification
+from src.services.operation.held_out import forbids_an_act
 from src.services.operation.never_do import module_never_do_lists, never_do_status
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
 from src.services.operation.state_machine import OperationState, is_assignable
@@ -159,8 +160,10 @@ async def side_by_side(session: AsyncSession) -> dict:
         # ADR-0091: keyed by the hash the CERTIFICATION was earned under, not by the module.
         # `OperationCertification.instructionContentHash` is the same column the VOID rule reads,
         # so a cert earned against one set is no longer described by another set's never-do list.
-        has_nd = bool(
-            never_do_lists.get((c.forgeId, c.moduleId or "", c.instructionContentHash))
+        # ADR-0116: owed only where an entry forbids an act.
+        has_nd = forbids_an_act(
+            c.moduleId or "",
+            never_do_lists.get((c.forgeId, c.moduleId or "", c.instructionContentHash)) or [],
         )
         # `answer_unreadable` is deliberately NOT supplied here, so this view emits only the
         # umbrella `untested` (ADR-0052's tri-state default). It matters because the web card

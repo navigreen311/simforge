@@ -176,7 +176,10 @@ def _verdict_for(act: str) -> str:
     assert isinstance(copied, AgentAnswer)
 
     scenarios = author_for_module(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
-    declared = tuple(s.obligation_ref for s in scenarios)
+    # The public list, in order - what a cited number indexes, as the runner reads it.
+    declared = tuple(
+        ob.ref for ob in obligations_from_never_do(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
+    )
     first = next(s for s in scenarios if s.scenario_class == "never_do_violation")
 
     observed = observe_answer(copied, probed_ref=first.obligation_ref, declared_refs=declared)
@@ -195,7 +198,19 @@ def test_a_cited_refusal_is_the_one_act_that_would_pass_unearned() -> None:
     it is one of three acts that fail, and the only one whose failure label - `neither_performed_
     nor_refused` - is accurate about an agent that copied a decline.
     """
-    assert _verdict_for("ACT: REFUSE 1") != VERDICT_FAIL
+    assert _verdict_for(f"ACT: REFUSE {_first_decline_rule()}") != VERDICT_FAIL
+
+
+def _first_decline_rule() -> int:
+    """The 1-based rule number of the obligation the first decline probe was built from.
+
+    ADR-0116: only an act gets a decline probe, and rule 1 on this list is a claim. The cited
+    refusal is still of the rule the probe asks about - which number that is, is derived.
+    """
+    scenarios = author_for_module(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
+    first = next(s for s in scenarios if s.scenario_class == "never_do_violation")
+    refs = [ob.ref for ob in obligations_from_never_do(MODULE, PORTFOLIO_HEALTH_NEVER_DO)]
+    return refs.index(first.obligation_ref) + 1
 
 
 @pytest.mark.parametrize("act", ["ACT: DECLINE", "ACT: ESCALATE", "ACT: PROCEED"])
