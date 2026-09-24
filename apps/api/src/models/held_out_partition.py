@@ -199,4 +199,10 @@ class HeldOutPartitionOutcome(Base):
     #: ADR-0116. Discipline findings on a decision that passed - an uncited escalation.
     #: Declared codes only, kept apart from `failureModes` so a finding never fails a decision.
     findings: Mapped[list] = mapped_column(JSON, default=list)
+    #: ADR-0118. An unreadable answer's line sequence as codes - ACT, RECORD, CAVEAT,
+    #: OTHER - in order. Null on a readable answer. Never text.
+    answerShape: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0118. The set of act words that appeared, from the protocol's four, or UNKNOWN.
+    #: Null on a readable answer. Never text.
+    actWords: Mapped[list | None] = mapped_column(JSON, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
