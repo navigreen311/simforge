@@ -102,7 +102,6 @@ async def sweep_sealed_partitions(
     *,
     runtime: AgentRuntime,
     limit: int = PARTITION_SWEEP_LIMIT,
-    seed: int = 0,
 ) -> SweepOutcome:
     """Check the examiner once, then grade each sealed partition in turn.
 
@@ -126,7 +125,6 @@ async def sweep_sealed_partitions(
                 session,
                 pid,
                 runtime=examiner,
-                seed=seed,
                 limit=remaining,
                 budget_seconds=partition_grading.PARTITION_AGENT_BUDGET_SECONDS,
             )

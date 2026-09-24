@@ -128,6 +128,12 @@ class HeldOutPartitionVerdict(Base):
     #: ADR-0120. The RESPONSE_PROTOCOL_VERSION the sitting was put under. Null only on rows
     #: written before the column existed - a version nobody recorded is not guessed.
     protocolVersion: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: ADR-0121. The seed this row's probes were put at. Null only on rows written before the
+    #: column - the seed was 0 then, but a value nobody recorded is not backfilled.
+    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ADR-0121. Rows of one sitting share this: the scheduled three-seed sitting, or one
+    #: operator re-sit. Null on rows written before the column.
+    sittingId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     decidedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -208,4 +214,6 @@ class HeldOutPartitionOutcome(Base):
     #: ADR-0118. The set of act words that appeared, from the protocol's four, or UNKNOWN.
     #: Null on a readable answer. Never text.
     actWords: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0121. The seed this probe was put at.
+    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

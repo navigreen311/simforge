@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.held_out_partition import HeldOutPartitionOutcome, HeldOutPartitionVerdict
 from src.services.operation import held_out_scoring as hs
 from src.services.operation.held_out import author_held_out_scenarios, obligations_from_never_do
+from src.services.operation.partition_grading import weakest
 from src.services.operation.rubric import restraint_failed
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
@@ -53,7 +54,9 @@ async def _sitting(db: AsyncSession) -> tuple[str, list[HeldOutPartitionOutcome]
             .all()
         )
         rows = (await s.execute(select(HeldOutPartitionOutcome))).scalars().all()
-    return verdicts[-1].verdict, list(rows)
+    # ADR-0121: a sitting is several seeds; its result is the weakest final row.
+    finals = [v.verdict for v in verdicts if v.verdict != "IN_PROGRESS"]
+    return weakest(finals), list(rows)
 
 
 async def test_one_unreadable_answer_among_clean_ones_is_not_run_not_pass(

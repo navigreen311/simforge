@@ -1237,11 +1237,16 @@ model HeldOutPartitionVerdict {
   instructionContentHash String?
   /// ADR-0120. The protocol version the sitting was put under. Null on older rows.
   protocolVersion        String?
+  /// ADR-0121. The seed the probes were put at. Null on older rows.
+  seed                   Int?
+  /// ADR-0121. Rows of one sitting share this. Null on older rows.
+  sittingId              String?
   decidedAt              DateTime         @default(now())
 
   @@index([partitionId])
   @@index([ventureId])
   @@index([agentId])
+  @@index([sittingId])
 }
 
 /// The seal's own audit record (ADR-0113). Append-only, one per seal,
@@ -1288,6 +1293,8 @@ model HeldOutPartitionOutcome {
   answerShape   Json?
   /// ADR-0118. The act words that appeared: PROCEED/REFUSE/DECLINE/ESCALATE/UNKNOWN.
   actWords      Json?
+  /// ADR-0121. The seed this probe was put at.
+  seed          Int?
   createdAt     DateTime @default(now())
 
   @@index([verdictId])
