@@ -12,14 +12,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.models.agent import Agent
 from src.models.gap import SoftwareGap, VillageOSGap
+from src.models.pack import Pack, Scenario
+from src.models.run import Run
+from src.utils.time import utcnow
 
 
 def _seed_software_gap(session: AsyncSession, *, linear_id: str, status: str = "open") -> None:
     session.add(
         SoftwareGap(
             ticketId=f"SF-GAP-{linear_id}",
-            runId="run-x",
+            # Nullable, and nothing here reads it. "run-x" named no Run, which Postgres refuses.
+            runId=None,
             forge="capital-forge",
             module="ledger",
             severity="P1",
@@ -31,6 +36,56 @@ def _seed_software_gap(session: AsyncSession, *, linear_id: str, status: str = "
             lastSeenRunId="run-x",
         )
     )
+
+
+async def _a_run(session: AsyncSession) -> str:
+    """A real Run for a VillageOSGap to point at (Run.id is a foreign key)."""
+    agent = (
+        await session.execute(select(Agent).where(Agent.villageAgentId == "taylor_zhang"))
+    ).scalar_one()
+    session.add(
+        Pack(
+            id="pk-linear",
+            packId="pack.linear.v1",
+            name="linear",
+            version="v1",
+            ownerVenture="greenstone",
+            ownerHuman="ivan",
+            phiRequired=False,
+            executionModeDefault="sandbox",
+            narrativeModeDefault="protected",
+            locale="en",
+            rubricProfile="default",
+            yamlPath="p.yml",
+            yamlHash="h",
+        )
+    )
+    scenario = Scenario(
+        scenarioId="scn.linear.1",
+        packId="pk-linear",
+        title="Linear gap source",
+        tier="foundational",
+        testedAgentVillageId="taylor_zhang",
+        yamlPath="s.yml",
+        yamlHash="h",
+        sloSeconds=60,
+        isGolden=False,
+    )
+    session.add(scenario)
+    await session.flush()
+    run = Run(
+        runId="run-linear-1",
+        scenarioId=scenario.id,
+        packId="pk-linear",
+        agentId=agent.id,
+        executionMode="sandbox",
+        narrativeMode="protected",
+        status="failed",
+        startedAt=utcnow(),
+    )
+    session.add(run)
+    await session.flush()
+    return run.id
 
 
 def _issue_event(issue_id: str, state_type: str) -> dict:
@@ -65,10 +120,11 @@ async def test_canceled_issue_marks_wontfix(client: AsyncClient, db_session: Asy
 
 
 async def test_village_os_gap_synced(client: AsyncClient, db_session: AsyncSession) -> None:
+    run_id = await _a_run(db_session)
     db_session.add(
         VillageOSGap(
             ticketId="SF-VG-1",
-            runId="run-x",
+            runId=run_id,
             framework="soul",
             severity="P2",
             summary="identity drift",

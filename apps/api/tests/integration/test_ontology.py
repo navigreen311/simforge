@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.ontology import OntologyRelation
 from src.models.pack import Pack, Scenario
+from src.models.venture import Venture
 
 
 async def test_build_graph_and_relation_validation(client: AsyncClient) -> None:
@@ -37,6 +38,9 @@ async def test_duplicate_entity_rejected(client: AsyncClient) -> None:
 
 async def test_graph_grounding_and_integrity(client: AsyncClient, db_session: AsyncSession) -> None:
     # A pack + scenario whose title references "Underwriter" but not "Ghost".
+    # Its venture must exist first: Pack.ownerVenture is a foreign key to Venture.slug.
+    db_session.add(Venture(slug="lending2", name="Lending 2", scenarioCode="l2"))
+    await db_session.flush()
     db_session.add(
         Pack(
             id="pk-lend",

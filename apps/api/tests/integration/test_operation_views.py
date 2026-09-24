@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.agent import Agent
-from src.models.cert import AgentCert
+from src.models.cert import AgentCert, CertSnapshot
 from src.models.operation_cert import OperationCertification
 from src.services.operation.rubric import CURRENT_SPREAD_MEASURE
 from src.utils.time import utcnow
@@ -17,6 +17,23 @@ async def _seed(session: AsyncSession) -> str:
     agent = (
         await session.execute(select(Agent).where(Agent.villageAgentId == "taylor_zhang"))
     ).scalar_one()
+    # The snapshot the domain cert points at (AgentCert.certSnapshotId is a foreign key).
+    snap = CertSnapshot(
+        snapshotId="certsnap:op-view",
+        certType="agent_forge_cap",
+        subject="taylor_zhang",
+        forgeCap="capital-forge.statement_ingest",
+        tier="foundational",
+        issuedAt=utcnow(),
+        expiresAt=utcnow(),
+        pinnedVersions={},
+        evidenceBundleRef="ev",
+        signingKeyId="k",
+        signature="s",
+        contentHash="c",
+    )
+    session.add(snap)
+    await session.flush()
     # A domain cert (record 1, shown beside the operation cert — never merged).
     session.add(
         AgentCert(
@@ -26,7 +43,7 @@ async def _seed(session: AsyncSession) -> str:
             status="active",
             issuedAt=utcnow(),
             expiresAt=utcnow(),
-            certSnapshotId="cs-op-view",
+            certSnapshotId=snap.id,
         )
     )
     # An operation cert (record 2), Unit A, with its own denominator + named-list + version stamp.

@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.models.pack import Scenario
+from src.models.pack import Pack, Scenario
 
 _N = [0]
 
@@ -19,13 +19,30 @@ FULL = {
 }
 
 
-def _seed(session: AsyncSession) -> str:
+async def _pack(session: AsyncSession) -> str:
+    """The Pack a Scenario references. Postgres refuses a dangling packId."""
+    pack = Pack(
+        packId=f"pk.tr.{_N[0]:03d}",
+        name="truth review",
+        version="1.0.0",
+        ownerVenture="greenstone",
+        ownerHuman="ivan",
+        rubricProfile="default",
+        yamlPath="p.yml",
+        yamlHash="h",
+    )
+    session.add(pack)
+    await session.flush()
+    return pack.id
+
+
+async def _seed(session: AsyncSession) -> str:
     _N[0] += 1
     sid = f"scn.tr.{_N[0]:03d}"
     session.add(
         Scenario(
             scenarioId=sid,
-            packId="pk-x",
+            packId=await _pack(session),
             title="t",
             tier="foundational",
             testedAgentVillageId="taylor_zhang",
@@ -39,7 +56,7 @@ def _seed(session: AsyncSession) -> str:
 
 
 async def test_full_checklist_approves(client: AsyncClient, db_session: AsyncSession) -> None:
-    sid = _seed(db_session)
+    sid = await _seed(db_session)
     await db_session.commit()
     res = (
         await client.post(f"/api/truth-review/{sid}", json={"reviewer": "ivan", "checklist": FULL})
@@ -49,7 +66,7 @@ async def test_full_checklist_approves(client: AsyncClient, db_session: AsyncSes
 
 
 async def test_incomplete_checklist_rejects(client: AsyncClient, db_session: AsyncSession) -> None:
-    sid = _seed(db_session)
+    sid = await _seed(db_session)
     await db_session.commit()
     partial = {**FULL, "no_fabrication": False}
     res = (
@@ -61,8 +78,8 @@ async def test_incomplete_checklist_rejects(client: AsyncClient, db_session: Asy
 
 
 async def test_unreviewed_worklist(client: AsyncClient, db_session: AsyncSession) -> None:
-    sid_a = _seed(db_session)
-    sid_b = _seed(db_session)
+    sid_a = await _seed(db_session)
+    sid_b = await _seed(db_session)
     await db_session.commit()
     await client.post(f"/api/truth-review/{sid_a}", json={"reviewer": "ivan", "checklist": FULL})
     work = (await client.get("/api/truth-review/unreviewed")).json()

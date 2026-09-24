@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.pack import Scenario
+from src.models.pack import Pack, Scenario
 
 _COUNTER = [0]
 
@@ -15,6 +15,26 @@ async def _a_scenario_id(session: AsyncSession) -> str:
     """Seed a fresh non-golden scenario and return its scenarioId."""
     _COUNTER[0] += 1
     sid = f"scn.cand.{_COUNTER[0]:03d}"
+    # The scenario's Pack must exist: the test DB enforces foreign keys as Postgres does.
+    if await session.get(Pack, "pk-x") is None:
+        session.add(
+            Pack(
+                id="pk-x",
+                packId="pack.golden-candidates.v1",
+                name="golden-candidates",
+                version="v1",
+                ownerVenture="greenstone",
+                ownerHuman="ivan",
+                phiRequired=False,
+                executionModeDefault="sandbox",
+                narrativeModeDefault="protected",
+                locale="en",
+                rubricProfile="default",
+                yamlPath="p.yml",
+                yamlHash="h",
+            )
+        )
+        await session.flush()
     session.add(
         Scenario(
             scenarioId=sid,
