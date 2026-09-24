@@ -51,15 +51,18 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.models.base import _new_id
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.held_out_partition import (
     HeldOutPartition,
+    HeldOutPartitionOutcome,
     HeldOutPartitionScenario,
     HeldOutPartitionVerdict,
 )
 from src.models.operation_run import OperationRun
 from src.services.agent_runtime.agent_identity import check_agent_identity
 from src.services.agent_runtime.examiner import check_examiner
+from src.services.agent_runtime.llm_client import LLMResponse
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
     BOOTSTRAP_FORGE_IDS,
@@ -216,6 +219,28 @@ class ModulePlan:
     scenarios: tuple[HeldOutScenario, ...]
     never_do: tuple[str, ...]
     sections: Mapping[str, str] | None = None
+    #: The stored rows the scenarios came from, in the same order (ADR-0114).
+    #: A reference for the outcome record; never content.
+    scenario_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeOutcome:
+    """One probe's outcome, kept with the verdict (ADR-0114). No content.
+
+    `answer_state` says how the answer arrived, so a FAIL can be told apart
+    from a model that never answered: `answered`, `empty` (nothing came
+    back), `unparseable` (text outside the protocol), `provider_error`.
+    """
+
+    scenario_id: str | None
+    module_id: str
+    scenario_class: str
+    outcome: str
+    failure_modes: tuple[str, ...]
+    answer_state: str
+    tokens_output: int | None = None
+    latency_ms: int | None = None
 
 
 def agent_verdict(verdicts: Sequence[ScenarioVerdict]) -> str:
@@ -243,19 +268,25 @@ async def put_partition(
     plans: Sequence[ModulePlan],
     runtime: AgentRuntime,
     seed: int = 0,
+    outcomes: list[ProbeOutcome] | None = None,
 ) -> str:
     """Put every planned scenario to one agent, grade each, fold to one verdict.
 
     The agent sees `deliver(scenario).prompt` under the battery's operating
     context. A provider failure is NOT_RUN for that probe, never a FAIL; a
-    protocol violation is a FAIL naming the rule (ADR-0063) - and the rule's
-    name dies here with the rest of the reasons.
+    protocol violation is a FAIL naming the rule (ADR-0063).
+
+    ADR-0114: each probe's outcome is appended to `outcomes` as it is
+    graded - the caller's list, so the probes graded before a timeout are
+    still there to keep. Codes and counts only; the answer text is not.
     """
+    sink: list[ProbeOutcome] = outcomes if outcomes is not None else []
     graded: list[ScenarioVerdict] = []
     for plan in plans:
         refs = tuple(ob.ref for ob in obligations_from_never_do(plan.module_id, plan.never_do))
         context = battery_system_context(plan.module_id, plan.never_do, plan.sections)
-        for scenario in plan.scenarios:
+        for i, scenario in enumerate(plan.scenarios):
+            sid = plan.scenario_ids[i] if i < len(plan.scenario_ids) else None
             probe = deliver(scenario)
             try:
                 response = await runtime.turn(
@@ -265,17 +296,42 @@ async def put_partition(
                     extra_system=context,
                 )
             except Exception:  # noqa: BLE001 - never put is NOT_RUN, never FAIL
-                graded.append(grade_scenario(scenario, None))
+                verdict = grade_scenario(scenario, None)
+                graded.append(verdict)
+                sink.append(_outcome(sid, plan.module_id, verdict, "provider_error"))
                 continue
             answer = parse_answer(response.content)
             if isinstance(answer, ProtocolViolation):
-                graded.append(grade_scenario(scenario, None, violation=answer))
-                continue
-            observed = observe_answer(
-                answer, probed_ref=scenario.obligation_ref, declared_refs=refs
-            )
-            graded.append(grade_scenario(scenario, observed))
+                verdict = grade_scenario(scenario, None, violation=answer)
+                state = "empty" if not response.content.strip() else "unparseable"
+            else:
+                observed = observe_answer(
+                    answer, probed_ref=scenario.obligation_ref, declared_refs=refs
+                )
+                verdict = grade_scenario(scenario, observed)
+                state = "answered"
+            graded.append(verdict)
+            sink.append(_outcome(sid, plan.module_id, verdict, state, response))
     return agent_verdict(graded)
+
+
+def _outcome(
+    scenario_id: str | None,
+    module_id: str,
+    verdict: ScenarioVerdict,
+    answer_state: str,
+    response: LLMResponse | None = None,
+) -> ProbeOutcome:
+    return ProbeOutcome(
+        scenario_id=scenario_id,
+        module_id=module_id,
+        scenario_class=verdict.scenario_class,
+        outcome=verdict.verdict,
+        failure_modes=tuple(verdict.reasons) if not verdict.passed else (),
+        answer_state=answer_state,
+        tokens_output=response.tokens_output if response is not None else None,
+        latency_ms=response.latency_ms if response is not None else None,
+    )
 
 
 def instructions_digest(sets: Sequence[ForgeInstructionSet]) -> str | None:
@@ -344,21 +400,42 @@ class _Ledger:
         verdict: str,
         after: datetime | None,
         instruction_hash: str | None = None,
+        outcomes: Sequence[ProbeOutcome] = (),
     ) -> datetime:
         at = utcnow()
         if after is not None and at <= after:
             at = after + _ONE_MS
-        self.session.add(
-            HeldOutPartitionVerdict(
-                partitionId=self.partition_id,
-                ventureId=self.venture_id,
-                agentId=agent_id,
-                verdict=verdict,
-                partitionDigest=self.digest,
-                instructionContentHash=instruction_hash,
-                decidedAt=at,
-            )
+        row = HeldOutPartitionVerdict(
+            id=_new_id(),
+            partitionId=self.partition_id,
+            ventureId=self.venture_id,
+            agentId=agent_id,
+            verdict=verdict,
+            partitionDigest=self.digest,
+            instructionContentHash=instruction_hash,
+            decidedAt=at,
         )
+        self.session.add(row)
+        # ADR-0114. The why, in the same commit as the whether: a verdict
+        # without its outcomes, or outcomes without their verdict, cannot exist.
+        for o in outcomes:
+            if o.scenario_id is None:
+                continue
+            self.session.add(
+                HeldOutPartitionOutcome(
+                    verdictId=row.id,
+                    partitionId=self.partition_id,
+                    agentId=agent_id,
+                    scenarioId=o.scenario_id,
+                    moduleId=o.module_id,
+                    scenarioClass=o.scenario_class,
+                    outcome=o.outcome,
+                    failureModes=list(o.failure_modes),
+                    answerState=o.answer_state,
+                    tokensOutput=o.tokens_output,
+                    latencyMs=o.latency_ms,
+                )
+            )
         await self.session.commit()
         self.recorded += 1
         return at
@@ -482,8 +559,10 @@ async def grade_partition(
         .all()
     )
     by_module: dict[str, list[HeldOutScenario]] = {}
+    ids_by_module: dict[str, list[str]] = {}
     for row in scenario_rows:
         by_module.setdefault(row.moduleId, []).append(scenario_from_body(row.body))
+        ids_by_module.setdefault(row.moduleId, []).append(row.id)
 
     agents = await agents_for_partition(session, partition)
 
@@ -508,22 +587,34 @@ async def grade_partition(
                 await ledger.append(agent.agent_id, NOT_RUN, last_at)
             continue
         plans, sets = planned
+        plans = [
+            replace(p, scenario_ids=tuple(ids_by_module.get(p.module_id, ()))) for p in plans
+        ]
 
         instruction_hash = instructions_digest(sets)
         last_at = await ledger.append(agent.agent_id, IN_PROGRESS, last_at, instruction_hash)
         put += 1
+        outcomes: list[ProbeOutcome] = []
         try:
             verdict = await asyncio.wait_for(
-                put_partition(agent_id=agent.agent_id, plans=plans, runtime=runtime, seed=seed),
+                put_partition(
+                    agent_id=agent.agent_id,
+                    plans=plans,
+                    runtime=runtime,
+                    seed=seed,
+                    outcomes=outcomes,
+                ),
                 timeout=budget,
             )
         except TimeoutError:
+            # The probes graded before the budget ran out are kept (ADR-0114).
             verdict = TIMEOUT
         except Exception as exc:  # noqa: BLE001 - one agent must not end the pass
             await session.rollback()
             log.warning("partition_agent_not_graded", error=type(exc).__name__)
             verdict = NOT_RUN
-        await ledger.append(agent.agent_id, verdict, last_at, instruction_hash)
+            outcomes = []
+        await ledger.append(agent.agent_id, verdict, last_at, instruction_hash, outcomes)
         # The verdict is logged; never a reason, a module or a scenario.
         log.info("partition_agent_graded", partition=pid, agent=agent.agent_id, verdict=verdict)
 
@@ -539,6 +630,7 @@ __all__ = [
     "TIMEOUT",
     "ModulePlan",
     "PartitionAgent",
+    "ProbeOutcome",
     "PartitionOutcome",
     "agent_verdict",
     "agents_for_partition",

@@ -409,10 +409,15 @@ def test_no_router_can_reach_the_scenarios() -> None:
     assert "src.models.held_out_partition" in reachable
 
     assert not FORBIDDEN_MODULES & set(reachable), sorted(FORBIDDEN_MODULES & set(reachable))
+    # ADR-0114 adds the per-probe why. It is as closed to a request as the scenarios.
     touching = sorted(
         name
         for name, tree in reachable.items()
-        if name not in SCENARIO_NAME_HOMES and _mentions(tree, "HeldOutPartitionScenario")
+        if name not in SCENARIO_NAME_HOMES
+        and (
+            _mentions(tree, "HeldOutPartitionScenario")
+            or _mentions(tree, "HeldOutPartitionOutcome")
+        )
     )
     assert touching == [], f"request path names the scenario table: {touching}"
 

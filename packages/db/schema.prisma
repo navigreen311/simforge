@@ -1258,3 +1258,31 @@ model HeldOutPartitionSeal {
 
   @@index([ventureId])
 }
+
+/// One probe's outcome behind a partition verdict (ADR-0114). Append-only.
+/// Why, on SimForge's side only: module, class, outcome, failure-mode codes
+/// and how the answer arrived. Never the probe, never the answer. No route
+/// reads it; the verdict endpoint's four keys stand. CHECKs are in the
+/// migration: held_out_partition_outcome_value, _answer_state.
+model HeldOutPartitionOutcome {
+  id            String   @id @default(cuid())
+  verdictId     String
+  partitionId   String
+  agentId       String
+  scenarioId    String
+  moduleId      String
+  scenarioClass String
+  /// PASS | FAIL | NOT_RUN
+  outcome       String
+  /// Declared reason codes only. Empty on PASS.
+  failureModes  Json     @default("[]")
+  /// answered | empty | unparseable | provider_error
+  answerState   String
+  tokensOutput  Int?
+  latencyMs     Int?
+  createdAt     DateTime @default(now())
+
+  @@index([verdictId])
+  @@index([partitionId])
+  @@index([agentId])
+}
