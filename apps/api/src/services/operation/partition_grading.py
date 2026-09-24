@@ -88,6 +88,7 @@ from src.services.operation.held_out_scoring import (
     deliver,
     grade_scenario,
 )
+from src.services.operation.live_instructions import live_set, live_sets
 from src.services.operation.rubric import VERDICT_FAIL, VERDICT_NOT_RUN
 from src.services.village.model_config import VillageConfigError, read_village_agent_model
 from src.telemetry.logging import get_logger
@@ -217,18 +218,8 @@ async def current_instruction_set(
     Not a run's set: a partition is graded against the venture's scope now,
     not against the curriculum some earlier run was opened under.
     """
-    return (
-        await session.execute(
-            select(ForgeInstructionSet)
-            .where(
-                ForgeInstructionSet.forgeId == forge_id,
-                ForgeInstructionSet.moduleId == module_id,
-            )
-            # The same order ADR-0109's author reads "current" by.
-            .order_by(ForgeInstructionSet.createdAt.desc(), ForgeInstructionSet.id.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    # ADR-0125: the set The Office last submitted, read the same way the author reads it.
+    return await live_set(session, forge_id, module_id)
 
 
 # =========================================================================
@@ -666,6 +657,12 @@ class PartitionOutcome:
 
 
 SKIP_NOT_SEALED = "the_partition_is_not_sealed"
+#: ADR-0125. A live instruction set is not the one the partition was authored from. Its
+#: scenarios carry positional refs into the old never-do lists; grading them against the
+#: new ones would match a correct refusal against the wrong rule.
+SKIP_INSTRUCTIONS_MOVED = "the_instructions_moved_since_the_partition_was_authored"
+#: ADR-0125. Authored before partitions recorded their instruction hashes.
+SKIP_INSTRUCTIONS_UNRECORDED = "the_partition_does_not_record_its_instructions"
 SKIP_BOOTSTRAP = "this_forge_is_certified_by_a_human_bootstrap"
 
 
@@ -744,6 +741,16 @@ async def grade_partition(
 
     # Plain values out BEFORE any commit: a commit expires the ORM object.
     pid, forge, digest = partition.id, partition.forgeId, partition.contentDigest
+    authored_from = dict(partition.instructionHashes or {})
+    # ADR-0125. Refused before anything is put, and nothing is written.
+    if not authored_from:
+        log.warning("partition_instructions_unrecorded", partition=pid)
+        return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_INSTRUCTIONS_UNRECORDED)
+    live = await live_sets(session, forge)
+    moved = sorted(m for m, h in authored_from.items() if m not in live or live[m].contentHash != h)
+    if moved:
+        log.warning("partition_instructions_moved", partition=pid, modules=moved)
+        return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_INSTRUCTIONS_MOVED)
     ledger = _Ledger(session, pid, partition.ventureId, digest)
     scenario_rows = (
         (
@@ -774,11 +781,22 @@ async def grade_partition(
         last_row = sitting[-1] if sitting else None
         last = sitting_verdict(sitting)
         last_at = last_row.decidedAt if last_row is not None else None
+        # The agent's plan first: its live instruction sets decide whether its latest
+        # sitting is current (ADR-0125), and the plan is needed to sit it anyway.
+        planned = await _plans_for(session, runtime, forge, agent, by_module)
+        live_digest = instructions_digest(planned[1]) if planned is not None else None
         # ADR-0123. A sitting under a superseded protocol - or one written before the
         # version was recorded - settles nothing: the gate ignores it (ADR-0122), so the
         # grader re-sits the agent under the current version instead of leaving NOT_RUN.
+        # ADR-0125. Nor does one sat under instructions that are no longer live.
         current = bool(sitting) and all(
-            r.protocolVersion == RESPONSE_PROTOCOL_VERSION for r in sitting
+            r.protocolVersion == RESPONSE_PROTOCOL_VERSION
+            and (
+                r.instructionContentHash is None
+                or live_digest is None
+                or r.instructionContentHash == live_digest
+            )
+            for r in sitting
         )
         if not resit and sitting and not current:
             log.info(
@@ -787,6 +805,9 @@ async def grade_partition(
                 agent=agent.agent_id,
                 was=sorted({str(r.protocolVersion) for r in sitting}),
                 now=RESPONSE_PROTOCOL_VERSION,
+                instructions_moved=any(
+                    r.instructionContentHash not in (None, live_digest) for r in sitting
+                ),
             )
         elif not resit:
             if last in SETTLED:
@@ -803,7 +824,6 @@ async def grade_partition(
                 )
                 last = TIMEOUT
 
-        planned = await _plans_for(session, runtime, forge, agent, by_module)
         if planned is None:
             if last != NOT_RUN or resit or not current:
                 await ledger.append(agent.agent_id, NOT_RUN, last_at, sitting_id=_new_id())
@@ -873,6 +893,8 @@ __all__ = [
     "NOT_RUN",
     "PARTITION_AGENT_BUDGET_SECONDS",
     "SITTING_SEEDS",
+    "SKIP_INSTRUCTIONS_MOVED",
+    "SKIP_INSTRUCTIONS_UNRECORDED",
     "PASS",
     "TIMEOUT",
     "ModulePlan",

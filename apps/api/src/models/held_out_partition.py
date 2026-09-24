@@ -79,6 +79,11 @@ class HeldOutPartition(Base):
     authoredBy: Mapped[str] = mapped_column(String)
     #: sha256 over the scenario digests, set at seal. Null while authoring.
     contentDigest: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: ADR-0125. moduleId -> the live instruction content hash each module was authored
+    #: from. Scenarios carry positional refs into those never-do lists, so a partition is
+    #: graded only while every one of these is still live. Null on partitions authored
+    #: before the column; a hash nobody recorded is not guessed, and they are not graded.
+    instructionHashes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sealedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: ADR-0113 ruling 1. A named human, never the author. Null while authoring.

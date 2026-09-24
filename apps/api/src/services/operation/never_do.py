@@ -80,6 +80,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.forge_instruction_set import ForgeInstructionSet
+from src.services.operation.live_instructions import LIVE_ORDER
 from src.services.operation.rubric import VERDICT_NOT_APPLICABLE, VERDICT_NOT_RUN
 
 NEVER_DO_DIMENSION = "never_do_adherence"
@@ -344,7 +345,8 @@ async def instruction_set_hashes(
                     ForgeInstructionSet.forgeId == forge_id,
                     ForgeInstructionSet.moduleId == module_id,
                 )
-                .order_by(ForgeInstructionSet.createdAt.desc())
+                # ADR-0125: live first, the same order every reader of "current" uses.
+                .order_by(*LIVE_ORDER)
             )
         )
         .scalars()

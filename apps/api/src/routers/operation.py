@@ -205,6 +205,9 @@ async def submit_curriculum(
         )
     ).scalar_one_or_none()
     never_do = list(body.module_never_do.get(ref.module_id, []))
+    if existing is not None:
+        # ADR-0125. This submission says this set is live, whether or not the row is new.
+        existing.lastSubmittedAt = utcnow()
     if existing is None:
         session.add(
             ForgeInstructionSet(
