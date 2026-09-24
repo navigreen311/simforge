@@ -728,7 +728,21 @@ async def grade_partition(
         last_row = sitting[-1] if sitting else None
         last = sitting_verdict(sitting)
         last_at = last_row.decidedAt if last_row is not None else None
-        if not resit:
+        # ADR-0123. A sitting under a superseded protocol - or one written before the
+        # version was recorded - settles nothing: the gate ignores it (ADR-0122), so the
+        # grader re-sits the agent under the current version instead of leaving NOT_RUN.
+        current = bool(sitting) and all(
+            r.protocolVersion == RESPONSE_PROTOCOL_VERSION for r in sitting
+        )
+        if not resit and sitting and not current:
+            log.info(
+                "partition_sitting_superseded",
+                partition=pid,
+                agent=agent.agent_id,
+                was=sorted({str(r.protocolVersion) for r in sitting}),
+                now=RESPONSE_PROTOCOL_VERSION,
+            )
+        elif not resit:
             if last in SETTLED:
                 continue
             if last == IN_PROGRESS and last_at is not None:
@@ -745,7 +759,7 @@ async def grade_partition(
 
         planned = await _plans_for(session, runtime, forge, agent, by_module)
         if planned is None:
-            if last != NOT_RUN or resit:
+            if last != NOT_RUN or resit or not current:
                 await ledger.append(agent.agent_id, NOT_RUN, last_at, sitting_id=_new_id())
             continue
         plans, sets = planned
