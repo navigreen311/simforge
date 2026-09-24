@@ -51,7 +51,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text
+from sqlalchemy import JSON, CheckConstraint, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -59,6 +59,13 @@ from src.models.base import Base, _new_id, _now
 
 class OperationScenarioSubmission(Base):
     __tablename__ = "OperationScenarioSubmission"
+    __table_args__ = (
+        # ADR-0115: mirrored from the migration, so the test database refuses it too.
+        CheckConstraint(
+            '("recordSubject" IS NULL) = ("recordClaim" IS NULL)',
+            name="scenario_record_subject_and_claim_travel_together",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
 

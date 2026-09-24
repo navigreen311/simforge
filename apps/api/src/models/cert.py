@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base, IdTimestampMixin, _new_id, _now
@@ -36,6 +36,10 @@ class CertSnapshot(Base):
 
 class AgentCert(IdTimestampMixin, Base):
     __tablename__ = "AgentCert"
+    __table_args__ = (
+        # ADR-0115: Postgres holds this; the test database now does too.
+        UniqueConstraint("agentId", "forgeCap"),
+    )
 
     agentId: Mapped[str] = mapped_column(String, ForeignKey("Agent.id"))
     forgeCap: Mapped[str] = mapped_column(String)
@@ -52,6 +56,10 @@ class AgentCert(IdTimestampMixin, Base):
 
 class DeptCert(IdTimestampMixin, Base):
     __tablename__ = "DeptCert"
+    __table_args__ = (
+        # ADR-0115: Postgres holds this; the test database now does too.
+        UniqueConstraint("departmentId", "forgeContext"),
+    )
 
     departmentId: Mapped[str] = mapped_column(String, ForeignKey("Department.id"))
     forgeContext: Mapped[str] = mapped_column(String)
