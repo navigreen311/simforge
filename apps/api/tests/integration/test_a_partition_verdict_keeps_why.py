@@ -71,6 +71,23 @@ async def _final(db: AsyncSession) -> HeldOutPartitionVerdict:
         return rows[-1]
 
 
+async def _finals(db: AsyncSession) -> list[HeldOutPartitionVerdict]:
+    """Each seed's final row in the sitting (ADR-0121)."""
+    async with fresh_session(db) as s:
+        rows = (
+            (
+                await s.execute(
+                    select(HeldOutPartitionVerdict)
+                    .where(HeldOutPartitionVerdict.agentId == AGENT)
+                    .order_by(HeldOutPartitionVerdict.decidedAt)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return [r for r in rows if r.verdict != "IN_PROGRESS"]
+
+
 async def _scenario_count(db: AsyncSession) -> int:
     async with fresh_session(db) as s:
         return len((await s.execute(select(HeldOutPartitionScenario))).scalars().all())
@@ -89,9 +106,12 @@ async def test_a_failing_agent_leaves_one_row_per_probe_with_its_modes(
 
     final = await _final(db_session)
     rows = await _outcomes(db_session)
+    finals = await _finals(db_session)
     assert final.verdict == "FAIL"
-    assert len(rows) == await _scenario_count(db_session)
-    assert {r.verdictId for r in rows} == {final.id}, "behind the verdict, not the IN_PROGRESS"
+    # ADR-0121: one row per probe per seed, each behind its own seed's final verdict.
+    assert len(rows) == await _scenario_count(db_session) * len(finals)
+    assert {r.verdictId for r in rows} == {f.id for f in finals}, "not the IN_PROGRESS"
+    assert sorted({r.seed for r in rows}) == [0, 1, 2]
     assert {r.moduleId for r in rows} == {MODULE}
     assert {r.scenarioClass for r in rows} <= {"never_do_violation", "silent_failure"}
     assert {r.answerState for r in rows} == {"answered"}
@@ -203,10 +223,11 @@ async def test_a_timeout_keeps_the_probes_graded_before_it(
 
     await run_scheduled("partition_sweep", db_session)
 
-    final = await _final(db_session)
+    finals = await _finals(db_session)
     rows = await _outcomes(db_session)
-    assert final.verdict == "TIMEOUT"
-    assert len(rows) == 2 and {r.verdictId for r in rows} == {final.id}
+    # Seed 0 answered two probes before its budget ran out; seeds 1 and 2 stalled at once.
+    assert [f.verdict for f in finals] == ["TIMEOUT", "TIMEOUT", "TIMEOUT"]
+    assert len(rows) == 2 and {r.verdictId for r in rows} == {finals[0].id}
 
 
 async def test_every_answer_state_is_one_the_table_accepts() -> None:
@@ -285,9 +306,12 @@ async def test_the_operator_summary_counts_and_prints_no_content(
 
     agent = summary[AGENT]
     assert agent["verdict"] == "FAIL"
-    assert agent["probes"] == len(rows)
-    assert agent["answer_states"] == {"answered": len(rows)}
-    assert sum(agent["by_module_class_outcome"].values()) == len(rows)
+    # ADR-0121: one sitting, three seeds, each summarised on its own.
+    assert sorted(agent["seeds"]) == ["0", "1", "2"]
+    assert sum(s["probes"] for s in agent["seeds"].values()) == len(rows)
+    for seed in agent["seeds"].values():
+        assert seed["answer_states"] == {"answered": seed["probes"]}
+        assert sum(seed["by_module_class_outcome"].values()) == seed["probes"]
     printed = json.dumps(summary)
     assert all(r.scenarioId not in printed for r in rows)
 

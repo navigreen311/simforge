@@ -99,9 +99,20 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
         )
     ).all()
 
+    # ADR-0121: the weakest sitting, not the latest. Every final row counts, so the
+    # weakest over them is the weakest over sittings; an IN_PROGRESS counts only while
+    # it is the agent's newest row - once its seed has a final row it is superseded.
     latest: dict[str, tuple[str, datetime]] = {}
+    newest_seen: set[str] = set()
+    candidates: dict[str, list[tuple[str, datetime]]] = {}
     for agent_id, verdict, decided_at in rows:
-        latest.setdefault(agent_id, (verdict, decided_at))
+        first = agent_id not in newest_seen
+        newest_seen.add(agent_id)
+        if verdict == "IN_PROGRESS" and not first:
+            continue
+        candidates.setdefault(agent_id, []).append((verdict, decided_at))
+    for agent_id, items in candidates.items():
+        latest[agent_id] = min(items, key=lambda it: (_RANK.get(it[0], -1), -_as_ts(it[1])))
 
     if not latest:
         return _answer(venture_id, True, "NOT_RUN", None)

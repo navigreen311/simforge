@@ -246,27 +246,38 @@ async def test_an_unknown_venture_reads_as_an_absent_partition(
     )
 
 
-async def test_weakest_agent_wins_at_its_latest_verdict(
+async def test_weakest_agent_wins_at_its_weakest_sitting(
     bridged: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """ADR-0121: Gate 9.5 reads the weakest sitting, not the latest.
+
+    An agent that failed and later passed reads FAIL. An IN_PROGRESS counts only
+    while it is the agent's newest row; once a final row follows, it is superseded.
+    """
     p = _partition("v-agents")
     await _add(db_session, p)
     await _add(
         db_session,
-        # a1 failed, then passed: its latest is PASS.
+        # a1 failed, then passed: its weakest sitting is FAIL.
         _verdict(p, "a1", "FAIL", at=T0),
         _verdict(p, "a1", "PASS", at=T0 + timedelta(hours=1)),
-        # a2 is still in progress.
+        # a2 was in progress, then passed: the IN_PROGRESS is superseded.
         _verdict(p, "a2", "IN_PROGRESS", at=T0 + timedelta(minutes=30)),
-        # a3 not run.
-        _verdict(p, "a3", "NOT_RUN", at=T0 + timedelta(hours=2)),
+        _verdict(p, "a2", "PASS", at=T0 + timedelta(minutes=40)),
     )
     body = await _ask(bridged, "v-agents")
-    assert body["verdict"] == "IN_PROGRESS"
-    assert body["decided_at"] == "2026-09-23T12:30:00+00:00"
+    assert body["verdict"] == "FAIL"
+    assert body["decided_at"] == "2026-09-23T12:00:00+00:00"
 
-    await _add(db_session, _verdict(p, "a3", "TIMEOUT", at=T0 + timedelta(hours=3)))
-    assert (await _ask(bridged, "v-agents"))["verdict"] == "TIMEOUT"
+    # An open IN_PROGRESS on its own counts while it is the newest row.
+    q = _partition("v-open")
+    await _add(db_session, q)
+    await _add(
+        db_session,
+        _verdict(q, "b1", "PASS", at=T0),
+        _verdict(q, "b1", "IN_PROGRESS", at=T0 + timedelta(hours=1)),
+    )
+    assert (await _ask(bridged, "v-open"))["verdict"] == "IN_PROGRESS"
 
 
 async def test_only_the_current_seal_counts(bridged: AsyncClient, db_session: AsyncSession) -> None:

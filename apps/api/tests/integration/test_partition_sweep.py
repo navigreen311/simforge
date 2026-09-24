@@ -139,6 +139,11 @@ async def _rows(session: AsyncSession, agent: str = AGENT) -> list[HeldOutPartit
         )
 
 
+def _sitting(verdict: str) -> list[str]:
+    """ADR-0121: a scheduled sitting is one IN_PROGRESS and one final row per seed."""
+    return ["IN_PROGRESS", verdict] * len(partition_grading.SITTING_SEEDS)
+
+
 async def _verdicts(session: AsyncSession, agent: str = AGENT) -> list[str]:
     return [r.verdict for r in await _rows(session, agent)]
 
@@ -155,7 +160,9 @@ async def test_a_compliant_agent_is_recorded_pass(
     await run_scheduled("partition_sweep", db_session)
 
     rows = await _rows(db_session)
-    assert [r.verdict for r in rows] == ["IN_PROGRESS", "PASS"]
+    assert [r.verdict for r in rows] == _sitting("PASS")
+    assert [r.seed for r in rows] == [0, 0, 1, 1, 2, 2]
+    assert len({r.sittingId for r in rows}) == 1
     final = rows[-1]
     assert final.partitionId == pid
     assert final.ventureId == VENTURE
@@ -171,7 +178,7 @@ async def test_a_violating_agent_is_recorded_fail(
 
     await run_scheduled("partition_sweep", db_session)
 
-    assert await _verdicts(db_session) == ["IN_PROGRESS", "FAIL"]
+    assert await _verdicts(db_session) == _sitting("FAIL")
 
 
 async def test_a_provider_that_never_answers_is_recorded_not_run(
@@ -185,7 +192,7 @@ async def test_a_provider_that_never_answers_is_recorded_not_run(
 
     await run_scheduled("partition_sweep", db_session)
 
-    assert await _verdicts(db_session) == ["IN_PROGRESS", "NOT_RUN"]
+    assert await _verdicts(db_session) == _sitting("NOT_RUN")
 
 
 class _SlowProvider(ScriptedProvider):
@@ -203,7 +210,7 @@ async def test_an_agent_past_its_budget_is_recorded_timeout(
 
     await run_scheduled("partition_sweep", db_session)
 
-    assert await _verdicts(db_session) == ["IN_PROGRESS", "TIMEOUT"]
+    assert await _verdicts(db_session) == _sitting("TIMEOUT")
 
 
 class _WatchingProvider(ScriptedProvider):
@@ -251,7 +258,7 @@ async def test_an_abandoned_in_progress_becomes_timeout_and_is_graded_again(
 
     await run_scheduled("partition_sweep", db_session)
 
-    assert await _verdicts(db_session) == ["IN_PROGRESS", "TIMEOUT", "IN_PROGRESS", "PASS"]
+    assert await _verdicts(db_session) == ["IN_PROGRESS", "TIMEOUT", *_sitting("PASS")]
 
 
 async def test_an_agent_the_village_cannot_name_is_not_run(
@@ -309,7 +316,7 @@ async def test_a_settled_verdict_is_not_graded_again(
     _serve(monkeypatch, second)
     await run_scheduled("partition_sweep", db_session)
 
-    assert await _verdicts(db_session) == ["IN_PROGRESS", "PASS"]
+    assert await _verdicts(db_session) == _sitting("PASS")
     assert second.prompts == []
 
 
@@ -360,7 +367,7 @@ async def test_grading_writes_to_no_certification_run_submission_or_training_tab
 
     await run_scheduled("partition_sweep", db_session)
 
-    assert len(await _verdicts(db_session)) == 2, "not vacuous: grading happened"
+    assert len(await _verdicts(db_session)) == 6, "not vacuous: grading happened"
     assert await _counts(db_session) == before
     async with fresh_session(db_session) as fresh:
         run = (await fresh.execute(select(OperationRun))).scalars().one()
@@ -378,7 +385,7 @@ async def test_a_job_that_reports_work_and_writes_nothing_fails_here(
     await _seed(db_session)
     _serve(monkeypatch, ScriptedProvider(_compliant))
 
-    async def _append_nothing(self, agent_id, verdict, after, instruction_hash=None, outcomes=()):  # noqa: ANN001, ANN202, E501
+    async def _append_nothing(self, agent_id, verdict, after, instruction_hash=None, outcomes=(), **kw):  # noqa: ANN001, ANN003, ANN202, E501
         return utcnow()
 
     monkeypatch.setattr(partition_grading._Ledger, "append", _append_nothing)

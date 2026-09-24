@@ -104,6 +104,21 @@ TIMEOUT = "TIMEOUT"
 #: partition is re-sealed, which gives it a new id and a new digest.
 SETTLED = frozenset({PASS, FAIL})
 
+#: ADR-0121. A sitting puts the partition at these seeds and keeps the weakest, as the
+#: battery's three attempts do (ADR-0062). phi4 is deterministic at a fixed seed, so one
+#: seed is one sample and a re-sit at the same seed reproduces it byte for byte.
+SITTING_SEEDS: tuple[int, ...] = (0, 1, 2)
+
+#: Weakest first - the order the verdict endpoint folds by (ADR-0111).
+_WEAKEST: tuple[str, ...] = (FAIL, TIMEOUT, IN_PROGRESS, NOT_RUN, PASS)
+
+
+def weakest(verdicts: Sequence[str]) -> str | None:
+    """The weakest of `verdicts` by the endpoint's order; None for none."""
+    ranked = [v for v in verdicts if v in _WEAKEST]
+    return min(ranked, key=_WEAKEST.index) if ranked else None
+
+
 #: How long one agent's grading may take before it is recorded TIMEOUT. Also the
 #: age at which an IN_PROGRESS row with no successor is taken as abandoned.
 #: Read at call time, so a test can shorten it.
@@ -449,6 +464,46 @@ async def latest_verdict(
     ).scalar_one_or_none()
 
 
+async def latest_sitting(
+    session: AsyncSession, partition_id: str, digest: str, agent_id: str
+) -> list[HeldOutPartitionVerdict]:
+    """The rows of the agent's latest sitting on THIS partition at THIS digest (ADR-0121).
+
+    A sitting is the rows sharing the latest row's `sittingId`. A row written before
+    the column is its own sitting.
+    """
+    last = await latest_verdict(session, partition_id, digest, agent_id)
+    if last is None:
+        return []
+    if last.sittingId is None:
+        return [last]
+    return list(
+        (
+            await session.execute(
+                select(HeldOutPartitionVerdict)
+                .where(
+                    HeldOutPartitionVerdict.partitionId == partition_id,
+                    HeldOutPartitionVerdict.agentId == agent_id,
+                    HeldOutPartitionVerdict.sittingId == last.sittingId,
+                )
+                .order_by(HeldOutPartitionVerdict.decidedAt, HeldOutPartitionVerdict.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def sitting_verdict(rows: Sequence[HeldOutPartitionVerdict]) -> str | None:
+    """A sitting's result: the weakest of its final rows, or IN_PROGRESS while its last
+    row is one. A sitting keeps the weakest seed, as the battery does."""
+    if not rows:
+        return None
+    if rows[-1].verdict == IN_PROGRESS:
+        return IN_PROGRESS
+    return weakest([r.verdict for r in rows if r.verdict != IN_PROGRESS])
+
+
 _ONE_MS = timedelta(milliseconds=1)
 
 
@@ -475,6 +530,9 @@ class _Ledger:
         after: datetime | None,
         instruction_hash: str | None = None,
         outcomes: Sequence[ProbeOutcome] = (),
+        *,
+        seed: int | None = None,
+        sitting_id: str | None = None,
     ) -> datetime:
         at = utcnow()
         if after is not None and at <= after:
@@ -489,6 +547,8 @@ class _Ledger:
             instructionContentHash=instruction_hash,
             # ADR-0120. Every row says which protocol the sitting was put under.
             protocolVersion=RESPONSE_PROTOCOL_VERSION,
+            seed=seed,
+            sittingId=sitting_id,
             decidedAt=at,
         )
         self.session.add(row)
@@ -517,6 +577,7 @@ class _Ledger:
                     findings=list(o.findings),
                     answerShape=list(o.answer_shape) if o.answer_shape is not None else None,
                     actWords=list(o.act_words) if o.act_words is not None else None,
+                    seed=seed,
                 )
             )
         await self.session.commit()
@@ -603,9 +664,11 @@ async def grade_partition(
     partition_id: str,
     *,
     runtime: AgentRuntime,
-    seed: int = 0,
+    seeds: Sequence[int] = SITTING_SEEDS,
     limit: int | None = None,
     budget_seconds: float | None = None,
+    only_agents: frozenset[str] | None = None,
+    resit: bool = False,
 ) -> PartitionOutcome:
     """Grade one partition for every agent that is due. Sealed only.
 
@@ -619,6 +682,12 @@ async def grade_partition(
 
     `limit` caps the agents actually PUT (the paid part). `runtime` must
     already be the examiner's (`examiner_runtime`).
+
+    ADR-0121. A sitting puts every seed in `seeds`, each with its own
+    IN_PROGRESS and final row, all sharing one `sittingId`. DUE reads the
+    latest sitting's result, the weakest of its seeds. `resit=True` is the
+    operator's re-sit: it puts `seeds` for `only_agents` whatever they last
+    read. New rows only; nothing is overwritten.
     """
     budget = PARTITION_AGENT_BUDGET_SECONDS if budget_seconds is None else budget_seconds
     partition = await session.get(HeldOutPartition, partition_id)
@@ -651,53 +720,89 @@ async def grade_partition(
 
     put = 0
     for agent in agents:
+        if only_agents is not None and agent.agent_id not in only_agents:
+            continue
         if limit is not None and put >= limit:
             break
-        latest = await latest_verdict(session, pid, digest, agent.agent_id)
-        last = latest.verdict if latest is not None else None
-        last_at = latest.decidedAt if latest is not None else None
-        if last in SETTLED:
-            continue
-        if last == IN_PROGRESS and last_at is not None:
-            if last_at > utcnow() - timedelta(seconds=budget):
+        sitting = await latest_sitting(session, pid, digest, agent.agent_id)
+        last_row = sitting[-1] if sitting else None
+        last = sitting_verdict(sitting)
+        last_at = last_row.decidedAt if last_row is not None else None
+        if not resit:
+            if last in SETTLED:
                 continue
-            last_at = await ledger.append(agent.agent_id, TIMEOUT, last_at)
-            last = TIMEOUT
+            if last == IN_PROGRESS and last_at is not None:
+                if last_at > utcnow() - timedelta(seconds=budget):
+                    continue
+                last_at = await ledger.append(
+                    agent.agent_id,
+                    TIMEOUT,
+                    last_at,
+                    seed=last_row.seed if last_row is not None else None,
+                    sitting_id=last_row.sittingId if last_row is not None else None,
+                )
+                last = TIMEOUT
 
         planned = await _plans_for(session, runtime, forge, agent, by_module)
         if planned is None:
-            if last != NOT_RUN:
-                await ledger.append(agent.agent_id, NOT_RUN, last_at)
+            if last != NOT_RUN or resit:
+                await ledger.append(agent.agent_id, NOT_RUN, last_at, sitting_id=_new_id())
             continue
         plans, sets = planned
         plans = [replace(p, scenario_ids=tuple(ids_by_module.get(p.module_id, ()))) for p in plans]
 
         instruction_hash = instructions_digest(sets)
-        last_at = await ledger.append(agent.agent_id, IN_PROGRESS, last_at, instruction_hash)
+        sitting_id = _new_id()
         put += 1
-        outcomes: list[ProbeOutcome] = []
-        try:
-            verdict = await asyncio.wait_for(
-                put_partition(
-                    agent_id=agent.agent_id,
-                    plans=plans,
-                    runtime=runtime,
-                    seed=seed,
-                    outcomes=outcomes,
-                ),
-                timeout=budget,
+        results: list[str] = []
+        for seed in seeds:
+            last_at = await ledger.append(
+                agent.agent_id,
+                IN_PROGRESS,
+                last_at,
+                instruction_hash,
+                seed=seed,
+                sitting_id=sitting_id,
             )
-        except TimeoutError:
-            # The probes graded before the budget ran out are kept (ADR-0114).
-            verdict = TIMEOUT
-        except Exception as exc:  # noqa: BLE001 - one agent must not end the pass
-            await session.rollback()
-            log.warning("partition_agent_not_graded", error=type(exc).__name__)
-            verdict = NOT_RUN
-            outcomes = []
-        await ledger.append(agent.agent_id, verdict, last_at, instruction_hash, outcomes)
+            outcomes: list[ProbeOutcome] = []
+            try:
+                verdict = await asyncio.wait_for(
+                    put_partition(
+                        agent_id=agent.agent_id,
+                        plans=plans,
+                        runtime=runtime,
+                        seed=seed,
+                        outcomes=outcomes,
+                    ),
+                    timeout=budget,
+                )
+            except TimeoutError:
+                # The probes graded before the budget ran out are kept (ADR-0114).
+                verdict = TIMEOUT
+            except Exception as exc:  # noqa: BLE001 - one agent must not end the pass
+                await session.rollback()
+                log.warning("partition_agent_not_graded", error=type(exc).__name__)
+                verdict = NOT_RUN
+                outcomes = []
+            last_at = await ledger.append(
+                agent.agent_id,
+                verdict,
+                last_at,
+                instruction_hash,
+                outcomes,
+                seed=seed,
+                sitting_id=sitting_id,
+            )
+            results.append(verdict)
         # The verdict is logged; never a reason, a module or a scenario.
-        log.info("partition_agent_graded", partition=pid, agent=agent.agent_id, verdict=verdict)
+        log.info(
+            "partition_agent_graded",
+            partition=pid,
+            agent=agent.agent_id,
+            seeds=list(seeds),
+            verdict=weakest(results),
+            resit=resit,
+        )
 
     return PartitionOutcome(pid, len(agents), put, ledger.recorded)
 
@@ -707,6 +812,7 @@ __all__ = [
     "IN_PROGRESS",
     "NOT_RUN",
     "PARTITION_AGENT_BUDGET_SECONDS",
+    "SITTING_SEEDS",
     "PASS",
     "TIMEOUT",
     "ModulePlan",
@@ -714,6 +820,8 @@ __all__ = [
     "ProbeOutcome",
     "PartitionOutcome",
     "agent_verdict",
+    "latest_sitting",
+    "sitting_verdict",
     "answer_shape",
     "agents_for_partition",
     "current_instruction_set",
@@ -723,4 +831,5 @@ __all__ = [
     "scenario_from_body",
     "unobserved",
     "venture_of_run_ref",
+    "weakest",
 ]
