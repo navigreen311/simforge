@@ -271,10 +271,18 @@ def test_the_version_says_this_is_a_different_exam() -> None:
 
     **What that makes non-comparable:** every act rate and every unreadable rate at 6.0.0,
     including the 17:50 sitting's 9 staged answers that motivated it.
+
+    **8.0.0 is major though the block did not move.** ADR-0126 changed what a decline probe
+    asks: the prohibited act, without the sentences after it. ADR-0127 rules that a change to
+    what a probe asks bumps the version, because a run's ref is the only record of the exam it
+    was put under.
+
+    **What that makes non-comparable:** every result at 7.0.0. Every decline-probe verdict,
+    every never_do_violation class verdict, every score fed by one, and every Gate 9.5 sitting.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "7.0.0"  # ADR-0119: the examples re-laid
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "7", (
-        "a MAJOR asserts prior results are not comparable - ADR-0119 asserts exactly that"
+    assert RESPONSE_PROTOCOL_VERSION == "8.0.0"  # ADR-0127: what a probe asks changed
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "8", (
+        "a MAJOR asserts prior results are not comparable - ADR-0127 asserts exactly that"
     )
 
 
