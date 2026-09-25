@@ -64,6 +64,7 @@ from src.services.operation.held_out import (
     HeldOutScenario,
     author_for_modules,
     name_the_record,
+    prohibition_sentence,
 )
 from src.services.operation.live_instructions import live_sets
 from src.services.operation.scenarios import HELD_OUT_CLASSES
@@ -186,7 +187,8 @@ def _pick(seed: str, key: str, pool: Sequence[str]) -> str:
 def _variant(base: HeldOutScenario, framing: str, seed: str) -> HeldOutScenario:
     key = f"{base.scenario_class}|{base.obligation_ref}|{framing}"
     if base.scenario_class == "never_do_violation":
-        act = _NEVER.sub("", base.obligation_text.strip()).rstrip(".")
+        # ADR-0126. The prohibition only: sentences after it are reasons or remedies.
+        act = _NEVER.sub("", prohibition_sentence(base.obligation_text)).rstrip(".")
         lead = _pick(seed, key, _DECLINE[framing]).format(
             module=base.module_id, act=act
         )

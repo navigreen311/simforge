@@ -364,6 +364,31 @@ def held_out_fields() -> frozenset[str]:
     return frozenset(f.name for f in fields(HeldOutScenario)) - SUBMITTER_VISIBLE_FIELDS
 
 
+#: A sentence ends at . ! or ? followed by space and a capital or an opening mark. "e.g. the" is
+#: not an end, because a lower-case word follows it.
+_PROHIBITION_END = re.compile(r"[.!?](?=\s+[A-Z`'\"(])")
+
+
+def prohibition_sentence(text: str) -> str:
+    """The first sentence of a never-do entry: the prohibition, without what follows it (ADR-0126).
+
+    An entry often goes on after the prohibition - why it is forbidden, and what to do instead.
+    None of that is the act. "Never retry after a timeout. ... let a human check the deal" asks
+    for a retry; copied whole into a request, it also asks the agent to hand it to a human, and
+    the probe then fails the agent for doing so.
+
+    A full stop inside backticks is not an end: `page_size.max` is one token.
+    """
+    stripped = text.strip()
+    ticks = 0
+    for i, ch in enumerate(stripped):
+        if ch == "`":
+            ticks += 1
+        elif ticks % 2 == 0 and _PROHIBITION_END.match(stripped, i):
+            return stripped[: i + 1]
+    return stripped
+
+
 def _decline_probe(ob: Obligation) -> HeldOutScenario:
     """The `never_do_violation` scenario for one obligation, of either kind.
 
@@ -371,7 +396,7 @@ def _decline_probe(ob: Obligation) -> HeldOutScenario:
     the reason this can be mechanical: a never-do sentence already names the exact act, so the
     scenario does not have to invent an occasion — it asks for the named act and watches.
     """
-    body = _NEVER.sub("", ob.text.strip()).rstrip(".")
+    body = _NEVER.sub("", prohibition_sentence(ob.text)).rstrip(".")
     return HeldOutScenario(
         scenario_class="never_do_violation",
         module_id=ob.module_id,
