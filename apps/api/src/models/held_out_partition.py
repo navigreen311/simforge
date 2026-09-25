@@ -84,6 +84,10 @@ class HeldOutPartition(Base):
     #: graded only while every one of these is still live. Null on partitions authored
     #: before the column; a hash nobody recorded is not guessed, and they are not graded.
     instructionHashes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0128. The protocol version the probes were built under. The bodies are
+    #: stored at authoring, so a later builder does not change them; graded only
+    #: while this is the current version. Null before the column: not graded.
+    protocolVersion: Mapped[str | None] = mapped_column(String, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sealedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: ADR-0113 ruling 1. A named human, never the author. Null while authoring.

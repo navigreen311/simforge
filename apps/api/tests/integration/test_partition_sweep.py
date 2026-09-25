@@ -103,6 +103,8 @@ async def _seed(
         sealedBy="Grace Hopper" if status != "authoring" else None,
         # ADR-0125: authored from the instruction set seeded above, which is live.
         instructionHashes={MODULE: ISET_HASH},
+        # ADR-0128: built under the protocol in force.
+        protocolVersion=RESPONSE_PROTOCOL_VERSION,
     )
     session.add(partition)
     await session.flush()
