@@ -1193,6 +1193,8 @@ model HeldOutPartition {
   contentDigest String?
   /// ADR-0125. moduleId -> the live instruction hash each module was authored from.
   instructionHashes Json?
+  /// ADR-0128. The protocol version the stored probes were built under.
+  protocolVersion String?
   createdAt     DateTime  @default(now())
   sealedAt      DateTime?
   /// A named human, never the author (ADR-0113). Null while authoring.

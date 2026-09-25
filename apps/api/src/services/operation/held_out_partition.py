@@ -67,6 +67,7 @@ from src.services.operation.held_out import (
     prohibition_sentence,
 )
 from src.services.operation.live_instructions import live_sets
+from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 
 #: The three framings. Each is the same obligation, asked differently.
@@ -339,6 +340,8 @@ async def author_partition(
             authoredBy=authored_by,
             # ADR-0125. What the positional refs below point into.
             instructionHashes=await current_hashes(session, forge_id),
+            # ADR-0128. Which builder wrote the bodies below.
+            protocolVersion=RESPONSE_PROTOCOL_VERSION,
         )
     )
     await session.flush()

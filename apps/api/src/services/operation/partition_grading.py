@@ -663,6 +663,10 @@ SKIP_NOT_SEALED = "the_partition_is_not_sealed"
 SKIP_INSTRUCTIONS_MOVED = "the_instructions_moved_since_the_partition_was_authored"
 #: ADR-0125. Authored before partitions recorded their instruction hashes.
 SKIP_INSTRUCTIONS_UNRECORDED = "the_partition_does_not_record_its_instructions"
+#: ADR-0128. The probes were built under another protocol version, or under one
+#: nobody recorded. Sat now, 7.0.0 questions would be recorded as 8.0.0 answers.
+SKIP_PROTOCOL_MOVED = "the_partition_was_built_under_another_protocol"
+SKIP_PROTOCOL_UNRECORDED = "the_partition_does_not_record_its_protocol"
 SKIP_BOOTSTRAP = "this_forge_is_certified_by_a_human_bootstrap"
 
 
@@ -742,6 +746,19 @@ async def grade_partition(
     # Plain values out BEFORE any commit: a commit expires the ORM object.
     pid, forge, digest = partition.id, partition.forgeId, partition.contentDigest
     authored_from = dict(partition.instructionHashes or {})
+    built_under = partition.protocolVersion
+    # ADR-0128. Before anything else is read or put, and nothing is written.
+    if built_under is None:
+        log.warning("partition_protocol_unrecorded", partition=pid)
+        return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_PROTOCOL_UNRECORDED)
+    if built_under != RESPONSE_PROTOCOL_VERSION:
+        log.warning(
+            "partition_protocol_moved",
+            partition=pid,
+            built_under=built_under,
+            current=RESPONSE_PROTOCOL_VERSION,
+        )
+        return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_PROTOCOL_MOVED)
     # ADR-0125. Refused before anything is put, and nothing is written.
     if not authored_from:
         log.warning("partition_instructions_unrecorded", partition=pid)
@@ -895,6 +912,8 @@ __all__ = [
     "SITTING_SEEDS",
     "SKIP_INSTRUCTIONS_MOVED",
     "SKIP_INSTRUCTIONS_UNRECORDED",
+    "SKIP_PROTOCOL_MOVED",
+    "SKIP_PROTOCOL_UNRECORDED",
     "PASS",
     "TIMEOUT",
     "ModulePlan",
