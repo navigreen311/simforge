@@ -42,7 +42,7 @@
 
 - The over-read probe (`silent_failure`) is not touched. It already reads
   only the clause (`_first_sentence`).
-- No protocol change; no version bump. The Office's contract is unchanged.
+- ~~No protocol change; no version bump.~~ Wrong: ADR-0127 bumps to 8.0.0.
 
 ## Tests
 

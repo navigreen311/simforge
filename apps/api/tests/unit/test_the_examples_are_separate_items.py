@@ -45,6 +45,9 @@ RULES_SHA_UNCHANGED_SINCE_6 = "4ccf3268b71c6ef3fe18bfd29ce83ced4dd0c4f302f566b82
 #: edit to the text without a bump fails here. Update both together, or neither.
 PINNED = {
     "7.0.0": "2a48e56ef49c226be5b7152a1ee2d8f88811144ec8bb980df503eb6c8d6d4e49",
+    # ADR-0127: the block did not move at 8.0.0. What a probe asks did; that is pinned in
+    # `test_a_probe_change_bumps_the_protocol`.
+    "8.0.0": "2a48e56ef49c226be5b7152a1ee2d8f88811144ec8bb980df503eb6c8d6d4e49",
 }
 
 
