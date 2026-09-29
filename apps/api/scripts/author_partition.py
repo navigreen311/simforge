@@ -42,7 +42,9 @@ async def _run(args: argparse.Namespace) -> dict:
                 "content_digest": digest,
                 "status": "sealed",
             }
-        pid = await author_partition(session, args.venture, args.forge, args.by)
+        raw = getattr(args, "modules", None)
+        modules = raw.split(",") if raw else None
+        pid = await author_partition(session, args.venture, args.forge, args.by, modules)
         return {
             "partition_id": pid,
             "scenarios": await scenario_count(session, pid),
@@ -55,6 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--venture")
     p.add_argument("--forge")
     p.add_argument("--by", help="the author: a named human, never The Office")
+    p.add_argument(
+        "--modules",
+        help="comma-separated: scope to the modules the venture operates (ADR-0129)",
+    )
     p.add_argument("--seal-id", help="seal an existing authoring partition")
     p.add_argument("--sealed-by", help="the sealer: a named human, not the author")
     args = p.parse_args(argv)
