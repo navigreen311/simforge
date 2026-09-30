@@ -251,7 +251,9 @@ def classify_certification_level(
 #: ADR-0129. A statement that opens with "never", after any list or emphasis markup. A statement
 #: starts the entry, follows a line break, or follows a sentence end.
 _PROHIBITION_START = re.compile(
-    r"(?:^|\n|(?<=[.!?])\s)\s*(?:[-*_>#]+\s*|\d+[.)]\s*)*[\"'`(]?(?:\*\*|__)?never\b",
+    # ADR-0133: also a "never" joined into the same sentence by ", and", ";" or an em dash.
+    r"(?:^|\n|(?<=[.!?])\s|,\s+and\s+|;\s*(?:and\s+)?|—\s*(?:and\s+)?)"
+    r"\s*(?:[-*_>#]+\s*|\d+[.)]\s*)*[\"'`(]?(?:\*\*|__)?never\b",
     re.IGNORECASE,
 )
 
