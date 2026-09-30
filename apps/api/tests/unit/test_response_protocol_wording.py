@@ -279,10 +279,17 @@ def test_the_version_says_this_is_a_different_exam() -> None:
 
     **What that makes non-comparable:** every result at 7.0.0. Every decline-probe verdict,
     every never_do_violation class verdict, every score fed by one, and every Gate 9.5 sitting.
+
+    **9.0.0 is major for the same reason.** ADR-0130 strips emphasis markers before a never-do
+    entry is parsed. A bold-led entry asked "to **Never ...**" and read its claims as acts; it
+    now asks for the act and gets an over-read probe for each claim.
+
+    **What that makes non-comparable:** every result at 8.0.0, including Greenstone's Gate 9.5
+    sittings, whose own probes did not change: the version is the exam's, not the forge's.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "8.0.0"  # ADR-0127: what a probe asks changed
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "8", (
-        "a MAJOR asserts prior results are not comparable - ADR-0127 asserts exactly that"
+    assert RESPONSE_PROTOCOL_VERSION == "9.0.0"  # ADR-0130: emphasis stripped before parsing
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "9", (
+        "a MAJOR asserts prior results are not comparable - ADR-0130 asserts exactly that"
     )
 
 

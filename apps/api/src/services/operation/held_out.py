@@ -231,6 +231,29 @@ def _clean(fragment: str) -> str:
     return _first_sentence(fragment).strip().strip(".,;:").strip()
 
 
+def strip_emphasis(text: str) -> str:
+    """The entry without markdown emphasis markers, `**` and `__` (ADR-0130).
+
+    Markup, not meaning: nothing is split, reworded or dropped. Inside backticks
+    a marker is literal (`__init__` stays), so only the prose loses them.
+    Measured: 62 of CapitalForge's 77 entries open `**Never ... .**`. Unstripped,
+    the leading "Never" was not recognised, so the decline request asked the
+    agent "to **Never act on an absence.**", and the sentence cut missed its end.
+    """
+    out: list[str] = []
+    i, code = 0, False
+    while i < len(text):
+        ch = text[i]
+        if ch == "`":
+            code = not code
+        elif not code and text[i : i + 2] in ("**", "__"):
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def parse_obligation(module_id: str, index: int, text: str) -> Obligation:
     """Read one never-do sentence into an `Obligation`.
 
@@ -243,7 +266,8 @@ def parse_obligation(module_id: str, index: int, text: str) -> Obligation:
             "probed, and a scenario built from one would grade an agent on a blank question."
         )
 
-    body = _NEVER.sub("", text.strip())
+    # ADR-0130. Parsed without emphasis markers; `text` below keeps the entry as sent.
+    body = _NEVER.sub("", strip_emphasis(text).strip())
     lowered = body.lower()
     verb = lowered.split(maxsplit=1)[0].strip(".,;:") if lowered.split() else ""
 
@@ -379,7 +403,7 @@ def prohibition_sentence(text: str) -> str:
 
     A full stop inside backticks is not an end: `page_size.max` is one token.
     """
-    stripped = text.strip()
+    stripped = strip_emphasis(text).strip()  # ADR-0130
     ticks = 0
     for i, ch in enumerate(stripped):
         if ch == "`":

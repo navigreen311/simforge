@@ -21,6 +21,8 @@ from src.services.operation.submitted_scoring import SubmittedKey, probe_for
 #: sha256 over every probe the three builders put on the fixtures below.
 PROBES_PINNED = {
     "8.0.0": "919954f4774bc25bd322ee0ceca482b10091c5de76effb45a613e522cd9257a9",
+    # ADR-0130: the fixture gained bold-led entries, and emphasis is stripped before parsing.
+    "9.0.0": "86f2f3a0ec503c6f8b7fec0fae6cd941bb641eff368150d96cdca4125b65f79a",
 }
 
 #: Frozen here, not imported: a pin over a fixture another file may edit is not a pin.
@@ -42,6 +44,12 @@ _LISTS: dict[str, tuple[str, ...]] = {
         "Never report `arv` without `arv_confidence`. They are one fact in two fields.",
         "Never report a figure from this module to a party outside the tenant.",
         "Never assume a repeated analysis confirms the first.",
+    ),
+    # ADR-0130: bold-led entries, as CapitalForge sends them.
+    "record_consent": (
+        "**Never obtain consent.** Only record consent a human obtained.",
+        "**Never report consent as granted** when the record says `pending`.",
+        "__Never backdate.__ The timestamp is when the record was made.",
     ),
 }
 
