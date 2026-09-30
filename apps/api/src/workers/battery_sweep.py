@@ -138,7 +138,13 @@ async def unscored_runs(session: AsyncSession, *, limit: int) -> list[OperationR
         (
             await session.execute(
                 select(OperationRun)
-                .where(OperationRun.verdict.is_(None), OperationRun.endedAt.is_(None))
+                .where(
+                    OperationRun.verdict.is_(None),
+                    OperationRun.endedAt.is_(None),
+                    # ADR-0132. `battery_for_run` skips every other unit (SKIP_NOT_UNIT_A), so
+                    # a department run selected here only takes a slot. It closes by timeout.
+                    OperationRun.unit == "A",
+                )
                 .order_by(OperationRun.startedAt)
             )
         )

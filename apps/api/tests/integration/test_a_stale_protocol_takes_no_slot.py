@@ -42,3 +42,18 @@ async def test_the_limit_still_applies_to_current_runs(db_session: AsyncSession)
     db_session.add_all([_run(f"office:v:f:m@c{i}:h:k{CURRENT}") for i in range(5)])
     await db_session.commit()
     assert len(await battery_sweep.unscored_runs(db_session, limit=2)) == 2
+
+
+async def test_a_department_run_takes_no_slot(db_session: AsyncSession) -> None:
+    """ADR-0132. The battery skips a Unit B run every pass, so it is not selected."""
+    older = _run("x").startedAt - timedelta(hours=1)
+    dept = [_run(f"office:v:f:dept:d{i}:h{CURRENT}", started=older) for i in range(3)]
+    for r in dept:
+        r.unit, r.moduleId = "B", None
+    unit_a = [_run(f"office:v:f:m@e{i}:h:k{CURRENT}") for i in range(2)]
+    db_session.add_all(dept + unit_a)
+    await db_session.commit()
+
+    picked = [r.runRef for r in await battery_sweep.unscored_runs(db_session, limit=2)]
+
+    assert sorted(picked) == sorted(r.runRef for r in unit_a)
