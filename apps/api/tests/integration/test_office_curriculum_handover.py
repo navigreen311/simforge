@@ -51,7 +51,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
 from src.db import get_session
 from src.main import create_app
-from src.services.operation.scenarios import HELD_OUT_CLASSES, LEVEL_DEMONSTRATED
+from src.services.operation.scenarios import (
+    HELD_OUT_CLASSES,
+    LEVEL_DEMONSTRATED,
+    VIOLATION_SEVERAL_PROHIBITIONS,
+    prohibitions_in,
+)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "office_curriculum"
 
@@ -140,8 +145,17 @@ async def test_every_authored_burkham_module_is_accepted(bridged: AsyncClient) -
             continue
         levels[module_id] = body["module_levels"][module_id]
 
-    assert refused == {}, refused
-    assert sorted(levels) == sorted(payloads)
+    # ADR-0133. A module whose captured never-do list joins two prohibitions in one sentence is
+    # refused by name; every other module is accepted. The set is read off the fixture, not typed.
+    joined = {
+        m
+        for m, payload in payloads.items()
+        if any(prohibitions_in(e) > 1 for e in payload["module_never_do"].get(m, []))
+    }
+    assert set(refused) == joined, refused
+    for body in refused.values():
+        assert VIOLATION_SEVERAL_PROHIBITIONS in str(body)
+    assert sorted(levels) == sorted(set(payloads) - joined)
     # The ceiling, not a shortfall - see the module docstring.
     assert set(levels.values()) == {LEVEL_DEMONSTRATED}, levels
 

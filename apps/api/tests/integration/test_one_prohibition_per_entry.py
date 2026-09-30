@@ -162,3 +162,40 @@ async def test_no_scope_is_the_whole_forge(db_session: AsyncSession) -> None:
     async with fresh_session(db_session) as s:
         part = await s.get(HeldOutPartition, pid)
     assert set(part.instructionHashes) == {"in_scope", "out_of_scope"}
+
+
+# --- ADR-0133: a "never" joined into the same sentence ------------------------------------
+
+
+def test_comma_and_never_is_a_second_prohibition() -> None:
+    assert prohibitions_in("Never retry, and never assemble a second export.") == 2
+
+
+def test_semicolon_never_is_a_second_prohibition() -> None:
+    assert prohibitions_in("Never retry; never assemble a second export.") == 2
+    assert prohibitions_in("Never retry; and never widen.") == 2
+
+
+def test_em_dash_never_is_a_second_prohibition() -> None:
+    assert prohibitions_in("Never supply another advisorId — and never substitute your own.") == 2
+    assert prohibitions_in("Never supply another advisorId —never substitute your own.") == 2
+
+
+def test_emphasis_before_the_join_still_counts() -> None:
+    entry = "**Never report a verdict without its `reasons`**, and never guess."
+    assert prohibitions_in(entry) == 2
+
+
+def test_a_never_inside_a_clause_is_still_not_counted() -> None:
+    """Only a join makes a second prohibition. "and will never" is a statement, not a rule."""
+    assert prohibitions_in("Never retry. A duplicate will never be caught.") == 1
+    assert prohibitions_in("Never retry, because nothing will never de-duplicate it.") == 1
+
+
+def test_the_validator_refuses_a_joined_entry() -> None:
+    result = validate_curriculum_submission(
+        [], module_never_do={"m": ["Never retry, and never assemble a second export."]}
+    )
+    assert any(
+        VIOLATION_SEVERAL_PROHIBITIONS in v and "(2 found)" in v for v in result.violations
+    )
