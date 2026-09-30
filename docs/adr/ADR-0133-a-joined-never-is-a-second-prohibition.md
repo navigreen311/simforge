@@ -38,3 +38,11 @@ Six added to `test_one_prohibition_per_entry.py`: `, and`, `;`/`; and`,
 em dash with and without `and`, emphasis before the join, a "never" inside a
 clause not counted, and the validator refusing a joined entry. Removing the
 widening fails 5.
+
+## A contract test changed with it
+
+`test_every_authored_burkham_module_is_accepted` posts The Office's captured
+burkham curricula (theoffice `7ba5efc`). Its `statement_pull` list joins two
+prohibitions in rule 4, so it is now refused, as ruled. The test now expects
+exactly the modules whose captured list holds a joined entry to be refused by
+name - computed from the fixture, not typed - and every other module accepted.
