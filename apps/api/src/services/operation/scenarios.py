@@ -56,6 +56,7 @@ HELD-OUT SET / GATE 9.5 DEPENDENCY (flag — read this):
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -247,6 +248,27 @@ def classify_certification_level(
     return LEVEL_DEMONSTRATED
 
 
+#: ADR-0129. A statement that opens with "never", after any list or emphasis markup. A statement
+#: starts the entry, follows a line break, or follows a sentence end.
+_PROHIBITION_START = re.compile(
+    r"(?:^|\n|(?<=[.!?])\s)\s*(?:[-*_>#]+\s*|\d+[.)]\s*)*[\"'`(]?(?:\*\*|__)?never\b",
+    re.IGNORECASE,
+)
+
+#: ADR-0129. The named reason a hand-over is refused for an entry holding several prohibitions.
+VIOLATION_SEVERAL_PROHIBITIONS = "a_never_do_entry_holds_more_than_one_prohibition"
+
+
+def prohibitions_in(entry: str) -> int:
+    """How many prohibitions one never-do entry states: statements that open with "never".
+
+    Counted, never split. SimForge numbers obligations by entry, so an entry holding eleven
+    prohibitions is one obligation and one probe; the fix is the submitter's list, not a guess
+    here about where one rule ends (ADR-0129).
+    """
+    return len(_PROHIBITION_START.findall(entry or ""))
+
+
 def validate_curriculum_submission(
     scenarios: Sequence[Mapping],
     *,
@@ -428,6 +450,17 @@ def validate_curriculum_submission(
             classes_present,
             declared_not_applicable=module_declared_absences.get(mod, {}),
         )
+
+    # ADR-0129. One prohibition per entry, or the hand-over is refused. Every declared list is
+    # checked, submitted module or not: the list is what the obligations are numbered from.
+    for mod, entries in sorted(module_never_do.items()):
+        for i, entry in enumerate(entries):
+            found = prohibitions_in(entry)
+            if found > 1:
+                violations.append(
+                    f"module_never_do[{mod}][{i}]: {VIOLATION_SEVERAL_PROHIBITIONS} "
+                    f"({found} found). Send one prohibition per entry; SimForge does not split."
+                )
 
     return CurriculumValidation(
         violations=violations,

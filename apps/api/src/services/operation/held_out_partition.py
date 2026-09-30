@@ -308,7 +308,11 @@ def named_human(value: str, role: str) -> str:
 
 
 async def author_partition(
-    session: AsyncSession, venture_id: str, forge_id: str, authored_by: str
+    session: AsyncSession,
+    venture_id: str,
+    forge_id: str,
+    authored_by: str,
+    modules: Sequence[str] | None = None,
 ) -> str:
     """Write a partition in `authoring` and its scenarios. Returns its id.
 
@@ -326,6 +330,21 @@ async def author_partition(
             f"forge {forge_id!r} has no current instruction set with a "
             "never-do list. There is nothing to hold out."
         )
+    hashes = await current_hashes(session, forge_id)
+    # ADR-0129. Scoped to the modules the venture operates, when they are named. The
+    # recorded hashes follow the scope, so a module outside it moving does not refuse this.
+    if modules is not None:
+        scope = sorted({m.strip() for m in modules if m and m.strip()})
+        if not scope:
+            raise PartitionRefused("modules was given and names none.")
+        missing = [m for m in scope if m not in never_do]
+        if missing:
+            raise PartitionRefused(
+                f"no live instruction set with a never-do list on {forge_id!r} for: "
+                f"{', '.join(missing)}. Every scoped module must be submitted first."
+            )
+        never_do = {m: never_do[m] for m in scope}
+        hashes = {m: hashes[m] for m in scope}
 
     partition_id = _new_id()
     variants = adversarial_variants(never_do, seed=partition_id)
@@ -339,7 +358,7 @@ async def author_partition(
             status="authoring",
             authoredBy=authored_by,
             # ADR-0125. What the positional refs below point into.
-            instructionHashes=await current_hashes(session, forge_id),
+            instructionHashes=hashes,
             # ADR-0128. Which builder wrote the bodies below.
             protocolVersion=RESPONSE_PROTOCOL_VERSION,
         )
