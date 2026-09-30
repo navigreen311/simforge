@@ -57,7 +57,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
 from src.services.agent_runtime.runtime import AgentRuntime
-from src.services.operation.battery import BatterySkipped, submit_battery_result
+from src.services.operation.battery import (
+    RESPONSE_PROTOCOL_VERSION,
+    BatterySkipped,
+    protocol_of_run_ref,
+    submit_battery_result,
+)
 from src.telemetry.logging import get_logger
 
 log = get_logger("battery_sweep")
@@ -135,13 +140,20 @@ async def unscored_runs(session: AsyncSession, *, limit: int) -> list[OperationR
                 select(OperationRun)
                 .where(OperationRun.verdict.is_(None), OperationRun.endedAt.is_(None))
                 .order_by(OperationRun.startedAt)
-                .limit(limit)
             )
         )
         .scalars()
         .all()
     )
-    return list(rows)
+    # ADR-0131. A run whose ref names another protocol is refused by `battery_for_run` every
+    # pass (ADR-0120), so it is left out BEFORE the limit. Selected, it took a slot each hour:
+    # 18 stale p8.0.0 rows held all 10 and the p9.0.0 exams behind them were never reached.
+    # A ref naming no protocol is kept, as ADR-0120 keeps it. Open runs are few, so the filter
+    # runs here rather than as SQL, where the ref's grammar would be restated.
+    current = [
+        r for r in rows if protocol_of_run_ref(r.runRef) in (None, RESPONSE_PROTOCOL_VERSION)
+    ]
+    return current[:limit]
 
 
 async def sweep_unscored_runs(
