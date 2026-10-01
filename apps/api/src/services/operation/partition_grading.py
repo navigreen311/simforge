@@ -89,7 +89,8 @@ from src.services.operation.held_out_scoring import (
     grade_scenario,
 )
 from src.services.operation.live_instructions import live_set, live_sets
-from src.services.operation.rubric import VERDICT_FAIL, VERDICT_NOT_RUN
+from src.services.operation.look_alike_groups import in_same_group
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, VERDICT_FAIL, VERDICT_NOT_RUN
 from src.services.village.model_config import VillageConfigError, read_village_agent_model
 from src.telemetry.logging import get_logger
 from src.utils.time import utcnow
@@ -238,6 +239,8 @@ class ModulePlan:
     #: The stored rows the scenarios came from, in the same order (ADR-0114).
     #: A reference for the outcome record; never content.
     scenario_ids: tuple[str, ...] = ()
+    #: ADR-0137. The look-alike groups the partition was authored with, rule numbers 1-based.
+    groups: tuple[tuple[int, ...], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,13 +259,28 @@ class AnswerChoice:
     record_kind: str
 
 
-def answer_choice(answer: AgentAnswer, *, probed_ref: str, refs: Sequence[str]) -> AnswerChoice:
-    """Read the choice off a parsed answer. Codes only (ADR-0124)."""
+def answer_choice(
+    answer: AgentAnswer,
+    *,
+    probed_ref: str,
+    refs: Sequence[str],
+    groups: Sequence[Sequence[int]] | None = None,
+) -> AnswerChoice:
+    """Read the choice off a parsed answer. Codes only (ADR-0124).
+
+    ADR-0137: a citation of another member of the probed rule's look-alike group is
+    `same_group`, never folded into `probed`, so a pass through a group stays visible.
+    """
     cited = answer.cited_rule
     if cited is None:
         citation = "none"
     elif 1 <= cited <= len(refs):
-        citation = "probed" if refs[cited - 1] == probed_ref else "other"
+        if refs[cited - 1] == probed_ref:
+            citation = "probed"
+        elif probed_ref in refs and in_same_group(cited, refs.index(probed_ref) + 1, groups):
+            citation = "same_group"
+        else:
+            citation = "other"
     else:
         citation = "out_of_range"
     return AnswerChoice(
@@ -367,12 +385,17 @@ async def put_partition(
                 choice = None
             else:
                 observed = observe_answer(
-                    answer, probed_ref=scenario.obligation_ref, declared_refs=refs
+                    answer,
+                    probed_ref=scenario.obligation_ref,
+                    declared_refs=refs,
+                    groups=plan.groups,
                 )
                 verdict, findings = decided(grade_scenario(scenario, observed))
                 state = "answered"
                 shape = None
-                choice = answer_choice(answer, probed_ref=scenario.obligation_ref, refs=refs)
+                choice = answer_choice(
+                    answer, probed_ref=scenario.obligation_ref, refs=refs, groups=plan.groups
+                )
             graded.append(verdict)
             sink.append(
                 _outcome(sid, plan.module_id, verdict, state, response, findings, shape, choice)
@@ -580,6 +603,8 @@ class _Ledger:
             instructionContentHash=instruction_hash,
             # ADR-0120. Every row says which protocol the sitting was put under.
             protocolVersion=RESPONSE_PROTOCOL_VERSION,
+            # ADR-0137. And which rubric graded it.
+            rubricVersion=OPERATION_RUBRIC_VERSION,
             seed=seed,
             sittingId=sitting_id,
             decidedAt=at,
@@ -761,6 +786,7 @@ async def grade_partition(
     # Plain values out BEFORE any commit: a commit expires the ORM object.
     pid, forge, digest = partition.id, partition.forgeId, partition.contentDigest
     authored_from = dict(partition.instructionHashes or {})
+    authored_groups = dict(partition.neverDoGroups or {})
     built_under = partition.protocolVersion
     # ADR-0128. Before anything else is read or put, and nothing is written.
     if built_under is None:
@@ -823,6 +849,8 @@ async def grade_partition(
         # ADR-0125. Nor does one sat under instructions that are no longer live.
         current = bool(sitting) and all(
             r.protocolVersion == RESPONSE_PROTOCOL_VERSION
+            # ADR-0137. A sitting graded under another rubric is due again, like a protocol.
+            and r.rubricVersion == OPERATION_RUBRIC_VERSION
             and (
                 r.instructionContentHash is None
                 or live_digest is None
@@ -867,7 +895,15 @@ async def grade_partition(
                 await ledger.append(agent.agent_id, NOT_RUN, last_at, sitting_id=_new_id())
             continue
         plans, sets = planned
-        plans = [replace(p, scenario_ids=tuple(ids_by_module.get(p.module_id, ()))) for p in plans]
+        plans = [
+            replace(
+                p,
+                scenario_ids=tuple(ids_by_module.get(p.module_id, ())),
+                # ADR-0137. Graded against the groups the partition recorded, not live ones.
+                groups=tuple(tuple(g) for g in authored_groups.get(p.module_id, ())),
+            )
+            for p in plans
+        ]
 
         instruction_hash = instructions_digest(sets)
         sitting_id = _new_id()

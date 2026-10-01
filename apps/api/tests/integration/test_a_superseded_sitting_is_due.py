@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartitionVerdict
-from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
 from src.utils.time import utcnow
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
@@ -42,6 +42,7 @@ async def _settle(
                 verdict="IN_PROGRESS",
                 partitionDigest=DIGEST,
                 protocolVersion=protocol,
+                rubricVersion=OPERATION_RUBRIC_VERSION,  # ADR-0137: graded under the current rubric
                 decidedAt=at,
             ),
             HeldOutPartitionVerdict(
@@ -51,6 +52,7 @@ async def _settle(
                 verdict=verdict,
                 partitionDigest=DIGEST,
                 protocolVersion=protocol,
+                rubricVersion=OPERATION_RUBRIC_VERSION,  # ADR-0137: graded under the current rubric
                 decidedAt=at + timedelta(minutes=1),
             ),
         ]

@@ -963,6 +963,8 @@ model ForgeInstructionSet {
   // The module's never-do list. Empty = no never-do rules (never_do_adherence is genuinely n/a);
   // non-empty = the never_do_violation dimension must be tested (an untested one is a coverage hole).
   neverDo            Json     @default("[]")
+  /// ADR-0137. Look-alike groups, rule numbers 1-based.
+  neverDoGroups      Json?
   sections           Json?
   createdAt          DateTime @default(now())
   /// ADR-0125. When The Office last submitted a curriculum naming this set. The live
@@ -1193,6 +1195,8 @@ model HeldOutPartition {
   contentDigest String?
   /// ADR-0125. moduleId -> the live instruction hash each module was authored from.
   instructionHashes Json?
+  /// ADR-0137. moduleId -> the look-alike groups it was authored with.
+  neverDoGroups Json?
   /// ADR-0128. The protocol version the stored probes were built under.
   protocolVersion String?
   createdAt     DateTime  @default(now())
@@ -1244,6 +1248,8 @@ model HeldOutPartitionVerdict {
   instructionContentHash String?
   /// ADR-0120. The protocol version the sitting was put under. Null on older rows.
   protocolVersion        String?
+  /// ADR-0137. The rubric the sitting was graded under.
+  rubricVersion          String?
   /// ADR-0121. The seed the probes were put at. Null on older rows.
   seed                   Int?
   /// ADR-0121. Rows of one sitting share this. Null on older rows.

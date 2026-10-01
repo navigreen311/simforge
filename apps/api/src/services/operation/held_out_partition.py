@@ -331,6 +331,8 @@ async def author_partition(
             "never-do list. There is nothing to hold out."
         )
     hashes = await current_hashes(session, forge_id)
+    live = await live_sets(session, forge_id)
+    groups = {m: list(r.neverDoGroups or []) for m, r in live.items()}
     # ADR-0129. Scoped to the modules the venture operates, when they are named. The
     # recorded hashes follow the scope, so a module outside it moving does not refuse this.
     if modules is not None:
@@ -359,6 +361,8 @@ async def author_partition(
             authoredBy=authored_by,
             # ADR-0125. What the positional refs below point into.
             instructionHashes=hashes,
+            # ADR-0137. The look-alike groups the scoped modules carried at authoring.
+            neverDoGroups={m: groups[m] for m in hashes if groups.get(m)},
             # ADR-0128. Which builder wrote the bodies below.
             protocolVersion=RESPONSE_PROTOCOL_VERSION,
         )

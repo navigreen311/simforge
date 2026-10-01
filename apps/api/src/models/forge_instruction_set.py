@@ -37,6 +37,8 @@ class ForgeInstructionSet(Base):
     # NO never-do rules → never_do_adherence is genuinely not_applicable. A NON-empty list means the
     # never_do_violation dimension MUST be tested; an untested one is a coverage hole, not an n/a.
     neverDo: Mapped[list] = mapped_column(JSON, default=list)
+    #: ADR-0137. Look-alike groups, rule numbers 1-based. Null before the column.
+    neverDoGroups: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     #: THE SECTIONS THE KEYS ARE WRITTEN AGAINST (ADR-0107 ruling 1). `{section_name: prose}`.
     #:

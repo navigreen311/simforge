@@ -30,7 +30,7 @@ from src.models.held_out_partition import (
     HeldOutPartitionVerdict,
 )
 from src.services.operation.partition_verdict import venture_verdict
-from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
 from tests.integration.scheduler_path import fresh_session
 
 TOKEN = "office-tenant-token-for-tests"
@@ -108,6 +108,7 @@ def _verdict(
         verdict=verdict,
         partitionDigest=digest if digest is not None else p.contentDigest,
         protocolVersion=protocol,
+        rubricVersion=OPERATION_RUBRIC_VERSION,  # ADR-0137: graded under the current rubric
         decidedAt=at,
     )
 

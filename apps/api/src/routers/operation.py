@@ -48,6 +48,7 @@ from src.services.operation.held_out import (
     forbids_an_act,
     inventory,
 )
+from src.services.operation.look_alike_groups import VIOLATION_MOVED, normalise
 from src.services.operation.never_do import (
     instruction_set_hashes,
     is_never_do_coverage_hole,
@@ -123,6 +124,7 @@ async def submit_curriculum(
         scenarios,
         module_never_do=body.module_never_do,
         module_not_applicable=body.module_not_applicable,
+        module_never_do_groups=body.module_never_do_groups,
         requested_modules=requested_modules or None,
     )
     if result.rejected:
@@ -136,6 +138,29 @@ async def submit_curriculum(
         )
 
     ref = body.instruction_set_ref
+    groups = normalise(body.module_never_do_groups.get(ref.module_id))
+
+    # ADR-0137. The groups are inside The Office's hashed content, so one hash carries one set of
+    # groups. A row SimForge already holds under this hash with different groups is a contract
+    # break, refused before anything is written.
+    held = (
+        await session.execute(
+            select(ForgeInstructionSet.neverDoGroups).where(
+                ForgeInstructionSet.forgeId == ref.forge_id,
+                ForgeInstructionSet.moduleId == ref.module_id,
+                ForgeInstructionSet.contentHash == ref.content_hash,
+            )
+        )
+    ).first()
+    if held is not None and normalise(held[0]) != groups:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "curriculum_rejected",
+                "violations": [f"module_never_do_groups[{ref.module_id}]: {VIOLATION_MOVED}"],
+                "gate_9_5_flag": result.gate_9_5_flag,
+            },
+        )
 
     # ADR-0069 P1: THE ANSWER KEY IS KEPT.
     #
@@ -222,6 +247,8 @@ async def submit_curriculum(
                 # put them in front of the agent. `None` when the submitter sent none, which is a
                 # different fact from an empty dict and is kept as one.
                 sections=dict(ref.sections) if ref.sections is not None else None,
+                # ADR-0137. Rule numbers per group, 1-based; empty when none were declared.
+                neverDoGroups=groups,
             )
         )
         await session.commit()
