@@ -55,8 +55,12 @@ RESPONSE_PROTOCOL_VERSION = "10.0.0"
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
 #:
+#: **0.6.0 (ADR-0136).** The parser reads one ACT and one RECORD line through list markers,
+#: emphasis and code spans. An answer that was "no ACT line" at 0.5.0 can now be graded, so a
+#: verdict at 0.5.0 and one at 0.6.0 were computed by different rules.
+#:
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
-OPERATION_RUBRIC_VERSION = "0.5.0"
+OPERATION_RUBRIC_VERSION = "0.6.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:
