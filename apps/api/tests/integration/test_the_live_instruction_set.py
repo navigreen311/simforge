@@ -22,7 +22,7 @@ from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerd
 from src.services.operation import held_out_partition as hp
 from src.services.operation import partition_grading as pg
 from src.services.operation.live_instructions import live_set
-from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
 from src.utils.time import utcnow
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_held_out_isolation import FORGE as ISO_FORGE
@@ -204,6 +204,7 @@ async def test_a_sitting_under_instructions_no_longer_live_is_sat_again(
                 verdict=verdict,
                 partitionDigest=DIGEST,
                 protocolVersion=RESPONSE_PROTOCOL_VERSION,
+                rubricVersion=OPERATION_RUBRIC_VERSION,  # ADR-0137: graded under the current rubric
                 instructionContentHash="sha256:not-live",
                 decidedAt=when,
             )

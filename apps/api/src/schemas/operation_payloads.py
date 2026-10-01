@@ -173,6 +173,11 @@ class CoverageDeclaration(BaseModel):
 
 
 class ForgeOperationCurriculum(BaseModel):
+    #: ADR-0137: an undeclared field is REFUSED, not dropped - the same rule ADR-0083 set for a
+    #: scenario. A field The Office believes it sent and SimForge silently ignored is a contract
+    #: both sides think they kept.
+    model_config = ConfigDict(extra="forbid")
+
     instruction_set_ref: InstructionSetRef
     certification_units_requested: list[CertificationUnitRequest]
     operation_scenarios: list[OperationScenarioSubmission]
@@ -188,6 +193,10 @@ class ForgeOperationCurriculum(BaseModel):
     # why this is mandatory rather than encouraged). A declared n/a is NOT a pass: it carries
     # not_applicable and NO score, never a zero.
     module_not_applicable: dict[str, dict[str, str]] = Field(default_factory=dict)
+    #: ADR-0137. module_id -> look-alike groups, each a list of rule numbers as the agent sees
+    #: them (1-based). A REFUSE citing any member of the probed rule's group passes. Part of The
+    #: Office's hashed instruction content, so a change moves the content hash.
+    module_never_do_groups: dict[str, list[list[int]]] = Field(default_factory=dict)
 
     @field_validator("module_not_applicable")
     @classmethod

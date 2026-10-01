@@ -135,6 +135,7 @@ from src.services.operation.held_out_scoring import (
     ScenarioVerdict,
     run_held_out_battery_async,
 )
+from src.services.operation.look_alike_groups import in_same_group
 from src.services.operation.never_do import module_never_do_list
 from src.services.operation.rubric import (
     CHANNEL_DISPOSITION,
@@ -686,7 +687,11 @@ def parse_answer(text: str) -> AgentAnswer | ProtocolViolation:
 
 
 def observe_answer(
-    answer: AgentAnswer, *, probed_ref: str, declared_refs: Sequence[str]
+    answer: AgentAnswer,
+    *,
+    probed_ref: str,
+    declared_refs: Sequence[str],
+    groups: Sequence[Sequence[int]] | None = None,
 ) -> ObservedBehaviour:
     """Turn one conforming answer into the structure `held_out_scoring` grades. A mapping, not a
     verdict.
@@ -720,6 +725,12 @@ def observe_answer(
         index = answer.cited_rule - 1
         if 0 <= index < len(declared_refs):
             refused = frozenset({declared_refs[index]})
+            # ADR-0137. A rule in the probed rule's declared look-alike group is a refusal of
+            # the probed rule. Anything outside the group is read exactly as before.
+            if probed_ref in declared_refs and in_same_group(
+                answer.cited_rule, declared_refs.index(probed_ref) + 1, groups
+            ):
+                refused = frozenset({probed_ref})
 
     return ObservedBehaviour(
         actions_taken=actions,
@@ -1029,6 +1040,8 @@ async def run_module_battery(
     #: ADR-0107 ruling 1 - the instruction sections the agent is shown. `None` when the
     #: submitter sent none; the certification then records the gap rather than hiding it.
     sections: Mapping[str, str] | None = None,
+    #: ADR-0137 - the module's declared look-alike groups, rule numbers 1-based.
+    groups: Sequence[Sequence[int]] | None = None,
 ) -> BatteryReport:
     """Put every held-out probe for one module to one agent, and grade what it did.
 
@@ -1081,7 +1094,10 @@ async def run_module_battery(
             )
             return answer
         return observe_answer(
-            answer, probed_ref=scenario.obligation_ref, declared_refs=declared_refs
+            answer,
+            probed_ref=scenario.obligation_ref,
+            declared_refs=declared_refs,
+            groups=groups,
         )
 
     grading = await run_held_out_battery_async(module_id, scenarios, ask)
@@ -1481,6 +1497,7 @@ async def battery_for_run(
             runtime=at_production,
             seed=seed + attempt,
             sections=instruction_set.sections,
+            groups=instruction_set.neverDoGroups,
         )
         for attempt in range(EXAM_ATTEMPTS)
     ]

@@ -84,6 +84,8 @@ class HeldOutPartition(Base):
     #: graded only while every one of these is still live. Null on partitions authored
     #: before the column; a hash nobody recorded is not guessed, and they are not graded.
     instructionHashes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0137. moduleId -> the look-alike groups the partition was authored with.
+    neverDoGroups: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     #: ADR-0128. The protocol version the probes were built under. The bodies are
     #: stored at authoring, so a later builder does not change them; graded only
     #: while this is the current version. Null before the column: not graded.
@@ -137,6 +139,8 @@ class HeldOutPartitionVerdict(Base):
     #: ADR-0120. The RESPONSE_PROTOCOL_VERSION the sitting was put under. Null only on rows
     #: written before the column existed - a version nobody recorded is not guessed.
     protocolVersion: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: ADR-0137. The rubric the sitting was graded under. Null before the column: not current.
+    rubricVersion: Mapped[str | None] = mapped_column(String, nullable=True)
     #: ADR-0121. The seed this row's probes were put at. Null only on rows written before the
     #: column - the seed was 0 then, but a value nobody recorded is not backfilled.
     seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -201,7 +205,8 @@ class HeldOutPartitionOutcome(Base):
             name="held_out_partition_outcome_chosen_act",
         ),
         CheckConstraint(
-            "citation IS NULL OR citation IN ('probed', 'other', 'none', 'out_of_range')",
+            "citation IS NULL OR "
+            "citation IN ('probed', 'same_group', 'other', 'none', 'out_of_range')",
             name="held_out_partition_outcome_citation",
         ),
         CheckConstraint(

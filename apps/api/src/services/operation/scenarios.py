@@ -62,6 +62,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from src.services.operation.look_alike_groups import group_violations
 from src.services.operation.never_do import (
     CLASS_ABSENT,
     NotApplicableDeclaration,
@@ -278,6 +279,7 @@ def validate_curriculum_submission(
     module_not_applicable: Mapping[str, Mapping[str, str]] | None = None,
     requested_modules: Iterable[str] | None = None,
     rubric_dimensions: tuple[OperationDimension, ...] = OPERATION_DIMENSIONS,
+    module_never_do_groups: Mapping[str, Sequence[Sequence[int]]] | None = None,
 ) -> CurriculumValidation:
     """Validate a submitted operation curriculum against the Batch 3 rules + ADR-0049.
 
@@ -452,6 +454,10 @@ def validate_curriculum_submission(
             classes_present,
             declared_not_applicable=module_declared_absences.get(mod, {}),
         )
+
+    # ADR-0137. A declared look-alike group must name real rules of a module in this hand-over,
+    # have two members or more, and not share a rule with another group.
+    violations.extend(group_violations(module_never_do, module_never_do_groups or {}))
 
     # ADR-0129. One prohibition per entry, or the hand-over is refused. Every declared list is
     # checked, submitted module or not: the list is what the obligations are numbered from.
