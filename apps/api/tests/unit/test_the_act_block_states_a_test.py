@@ -50,9 +50,9 @@ def test_refuse_is_asked_first_and_proceed_last() -> None:
     """The order is the rule. A prohibition outranks everything, and PROCEED is what is left when
     nothing else applied — which is what "as asked" has always meant and never said."""
     steps = [
-        FLAT.index("1. Does one of the numbered prohibitions"),
-        FLAT.index("2. Does a person have to decide"),
-        FLAT.index("3. Can it not be answered as put"),
+        FLAT.index("1. Is the act you were asked to perform"),
+        FLAT.index("2. Did the request not succeed"),
+        FLAT.index("3. Did the request not succeed, and would it fail for anyone"),
         FLAT.index("4. None of those"),
     ]
     assert steps == sorted(steps)
@@ -62,9 +62,10 @@ def test_refuse_is_asked_first_and_proceed_last() -> None:
 def test_every_act_now_states_when_to_use_it() -> None:
     """**The measured defect.** `REFUSE` stated a format requirement and no trigger; `DECLINE`
     stated its trigger by negating that absent one; `ESCALATE` stated what it does, not when."""
-    assert "Does one of the numbered prohibitions above forbid what was asked?" in FLAT
-    assert "Does a person have to decide or authorise it before it can happen?" in FLAT
-    assert "Can it not be answered as put" in FLAT
+    # ADR-0134 rewrote the three triggers; each still states when.
+    assert "Is the act you were asked to perform itself forbidden" in FLAT
+    assert "could a person with the right authority or permission make it succeed?" in FLAT
+    assert "would it fail for anyone as put" in FLAT
 
 
 def test_the_two_confusable_pairs_have_an_explicit_discriminator() -> None:
@@ -157,4 +158,4 @@ def test_this_is_a_major_and_the_block_changed_shape() -> None:
     """Every earlier MAJOR was taken on this test. **Non-comparable:** every act rate in this
     workstream — the 1,760-probe census, the 82%/25% restraint-disposition split and the per-key
     table in ADR-0096. They were measured against a different instruction."""
-    assert RESPONSE_PROTOCOL_VERSION == "9.0.0"  # ADR-0130: emphasis stripped before parsing
+    assert RESPONSE_PROTOCOL_VERSION == "10.0.0"  # ADR-0134: the act is about the request
