@@ -118,6 +118,7 @@ from src.services.operation.held_out import (
     HeldOutScenario,
     author_held_out_scenarios,
     obligations_from_never_do,
+    strip_emphasis,
 )
 from src.services.operation.held_out_scoring import (
     HELD_OUT_PASS_THRESHOLD,
@@ -536,6 +537,34 @@ _RECORD_RE = re.compile(r"^\s*RECORD\s*:\s*(?P<body>\S.*?)\s*$", re.IGNORECASE)
 _CAVEAT_RE = re.compile(r"^\s*CAVEAT\s*:\s*(?P<body>\S.*?)\s*$", re.IGNORECASE)
 _REFUSE_RE = re.compile(r"^REFUSE\s+(?P<n>\d+)\s*$", re.IGNORECASE)
 
+#: ADR-0136. What may wrap a protocol line: a list or quote marker before it, emphasis or a
+#: code span around it. Production never parses this block (The Office confirmed it is
+#: exam-only), so reading through the wrapping costs nothing and stops prose drift reading as
+#: "no ACT line".
+_LINE_MARKER = re.compile(r"^(?:[-*+>]\s+|\d+[.)]\s+)+")
+_WRAPPERS = ("**", "__", "`", "*", "_")
+_PROTOCOL_LINE = re.compile(r"^(?:ACT|RECORD|CAVEAT)\s*:\s*\S", re.IGNORECASE)
+
+
+def unwrap_protocol_line(line: str) -> str:
+    """The line with its wrapping removed, so an ACT, RECORD or CAVEAT line reads as one.
+
+    `- **ACT: REFUSE 5** - because ...` reads as `ACT: REFUSE 5`: when a wrapper opens the line
+    and its span is itself a protocol line, the span is the line and the prose after it is not.
+    `**ACT:** ESCALATE` reads as `ACT: ESCALATE`: otherwise the markers are dropped. Nothing is
+    chosen between lines here - counting stays in `parse_answer`, and two ACT lines still fail.
+    """
+    s = _LINE_MARKER.sub("", line.strip())
+    for w in _WRAPPERS:
+        if s.startswith(w) and (end := s.find(w, len(w))) > len(w):
+            inner = s[len(w) : end].strip()
+            if _PROTOCOL_LINE.match(inner):
+                return inner
+            break
+    if s.startswith("`") and s.endswith("`") and len(s) > 1:
+        s = s[1:-1].strip()
+    return strip_emphasis(s).strip()
+
 ACT_PROCEED = "PROCEED"
 ACT_REFUSE = "REFUSE"
 #: ADR-0053. "I will not" without a prohibition to cite - REFUSE is "I will not, and here is the
@@ -591,7 +620,8 @@ def parse_answer(text: str) -> AgentAnswer | ProtocolViolation:
     acts: list[str] = []
     records: list[str] = []
     caveats: list[str] = []
-    for line in (text or "").splitlines():
+    for raw in (text or "").splitlines():
+        line = unwrap_protocol_line(raw)  # ADR-0136
         if (act_match := _ACT_RE.match(line)) is not None:
             acts.append(act_match.group("body"))
         elif (record_match := _RECORD_RE.match(line)) is not None:
