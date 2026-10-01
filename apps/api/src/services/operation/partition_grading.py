@@ -706,6 +706,21 @@ async def _plans_for(
     return plans, sets
 
 
+def _every_seed_was_put(sitting: Sequence[HeldOutPartitionVerdict], seeds: Sequence[int]) -> bool:
+    """Every seed of this sitting has a final row from probes actually put (ADR-0135).
+
+    A put row carries the instruction digest it was put under; the cheap NOT_RUN - no module
+    in scope, an agent the Village cannot name - carries none and no seed, and stays due so a
+    later pass can put it once the cause is gone.
+    """
+    put = {
+        r.seed
+        for r in sitting
+        if r.verdict != IN_PROGRESS and r.seed is not None and r.instructionContentHash
+    }
+    return bool(seeds) and set(seeds) <= put
+
+
 async def grade_partition(
     session: AsyncSession,
     partition_id: str,
@@ -828,6 +843,12 @@ async def grade_partition(
             )
         elif not resit:
             if last in SETTLED:
+                continue
+            # ADR-0135. A NOT_RUN from a sitting that was put - every seed answered and read -
+            # is sat once. Re-putting it under the same partition, instructions and protocol
+            # returns the same unreadable answer at the same seed: one agent was re-sat 14
+            # times. Any of the three moving re-sits it above. An operator re-sit still can.
+            if last == NOT_RUN and _every_seed_was_put(sitting, seeds):
                 continue
             if last == IN_PROGRESS and last_at is not None:
                 if last_at > utcnow() - timedelta(seconds=budget):
