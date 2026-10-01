@@ -29,6 +29,9 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 #: the probes. `battery.py` re-exports it and owns the TEXT; this module owns the NUMBER, beside
 #: the other version a reader needs to place a verdict.
 #:
+#: 10.0.0 - ADR-0134, the ordered test says the ACT is about the REQUEST: REFUSE only when the
+#:          requested act is forbidden, a failed call is ESCALATE or DECLINE, PROCEED means it
+#:          succeeded. The block changed. 9.0.0 results are not comparable.
 #: 9.0.0 - ADR-0130, emphasis markers stripped before a never-do entry is parsed. A bold-led
 #:         entry now asks for the act, not "to **Never ...**", and its claims are read as
 #:         claims. The block is unchanged. 8.0.0 results are not comparable.
@@ -40,7 +43,7 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 #: 6.0.0 - ADR-0097, the ordered test and five worked examples.
 #: 5.0.0 - ADR-0094, the naming sentences on every probe.
 #: 4.0.0 - ADR-0074, the third worked example.
-RESPONSE_PROTOCOL_VERSION = "9.0.0"
+RESPONSE_PROTOCOL_VERSION = "10.0.0"
 
 #: **0.4.0 (ADR-0100).** ADR-0099 changed how a verdict is COMPUTED - the merge keys by
 #: (dimension, channel), `passed` reads restraint alone, and the tier is capped by the channels

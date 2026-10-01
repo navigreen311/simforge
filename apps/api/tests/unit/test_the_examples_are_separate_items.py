@@ -37,9 +37,9 @@ EXAMPLES = (
 LABEL = re.compile(r"^--- Example (\d) of 5 ---$", re.M)
 END = "--- End of examples ---"
 
-#: sha256 of everything before the examples, at 6.0.0 on main (6de605e). The rules
-#: an agent answers under did not move; only how the examples are laid out did.
-RULES_SHA_UNCHANGED_SINCE_6 = "4ccf3268b71c6ef3fe18bfd29ce83ced4dd0c4f302f566b828b0d34f55d364ef"
+#: sha256 of everything before the examples. It held from 6.0.0 (6de605e) to 9.0.0, while only
+#: the examples' layout moved; ADR-0134 changed the ordered test at 10.0.0, so it moved with it.
+RULES_SHA_UNCHANGED_SINCE_6 = "943a16796060b96a806c0bb5d08eacf1213161a8b4e91bb519419d47b53acb83"
 
 #: ADR-0103's named enforcement: the rendered block is pinned to its version, so an
 #: edit to the text without a bump fails here. Update both together, or neither.
@@ -50,6 +50,8 @@ PINNED = {
     "8.0.0": "2a48e56ef49c226be5b7152a1ee2d8f88811144ec8bb980df503eb6c8d6d4e49",
     # ADR-0130: the block did not move at 9.0.0 either.
     "9.0.0": "2a48e56ef49c226be5b7152a1ee2d8f88811144ec8bb980df503eb6c8d6d4e49",
+    # ADR-0134: the ordered test changed.
+    "10.0.0": "32dc6caaed906cb4ca91f72758489ce71803504c26379e91a8228f134cd9c11c",
 }
 
 
@@ -69,9 +71,7 @@ def test_each_example_is_labelled_in_order_and_the_run_is_closed() -> None:
 def test_no_two_example_acts_sit_without_a_divider_between_them() -> None:
     """The failure shape: two ACT lines with nothing but answers between them."""
     lines = _examples_region().splitlines()
-    kinds = [
-        "ACT" if _ACT_RE.match(x) else "DIV" if x.startswith("---") else None for x in lines
-    ]
+    kinds = ["ACT" if _ACT_RE.match(x) else "DIV" if x.startswith("---") else None for x in lines]
     marks = [k for k in kinds if k]
     for a, b in zip(marks, marks[1:], strict=False):
         assert not (a == "ACT" and b == "ACT"), "two example ACT lines with no divider between"

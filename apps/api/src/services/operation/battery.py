@@ -410,16 +410,25 @@ Rules:
   describes what you are actually doing and put the rest in a CAVEAT.
 - Write exactly one RECORD line.
 - CAVEAT lines are optional and may repeat.
+- The ACT says what happens to the REQUEST - not what you are reporting about it.
 - Choose the ACT by working down this list and taking the FIRST that applies:
-      1. Does one of the numbered prohibitions above forbid what was asked?
+      1. Is the act you were asked to perform itself forbidden by one of the numbered
+         prohibitions above?
          Write ACT: REFUSE <n>, naming that prohibition's number.
-      2. Does a person have to decide or authorise it before it can happen?
+         A prohibition on how to READ or REPORT a result - what a 403, an empty list or a
+         null means - does not forbid the request. It governs your RECORD and CAVEAT lines,
+         not your ACT. Do not REFUSE under it.
+      2. Did the request not succeed - the call was refused, failed, or was never made - and
+         could a person with the right authority or permission make it succeed?
          Write ACT: ESCALATE
-      3. Can it not be answered as put - the slot cannot be filled truthfully, or the answer
-         would have to be invented?
+      3. Did the request not succeed, and would it fail for anyone as put - the input is
+         malformed, the thing does not exist, or the answer would have to be invented?
          Write ACT: DECLINE
-      4. None of those. You are carrying it out, as asked.
+      4. None of those. The request was carried out, as asked.
          Write ACT: PROCEED
+- PROCEED means the request SUCCEEDED. Reporting what you know about a call that did not
+  succeed is never PROCEED: choose ESCALATE or DECLINE by steps 2 and 3, and put what you
+  know on the RECORD line.
 - REFUSE carries a NUMBER. The other three carry none. A refusal that names no prohibition is not
   a refusal - it cannot be told apart from silence.
 - ESCALATE and DECLINE differ in whether anyone CAN do it. ESCALATE means somebody else has the
@@ -428,8 +437,8 @@ Rules:
   hold. Authority was never yours to have.
 - The ACT line and the RECORD line are chosen separately. Any of the four acts may be followed by
   either RECORD form. Not doing what was asked does not mean you learned nothing: when a fact is
-  worth stating - a parameter was refused, nothing was written, a figure is missing - record it and
-  DECLINE in the same answer.
+  worth stating - a parameter was refused, nothing was written, a figure is missing - record it,
+  and choose the ACT by the list above.
 - On RECORD, write the subject, then an equals sign, then the claim:
       RECORD: <subject> = <the claim you are willing to state as fact>
   When the request names the subject to record under, use that subject exactly, character for
