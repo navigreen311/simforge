@@ -577,6 +577,8 @@ Rules:
   choose the act by the list above.
 - record is null unless you are stating a fact. When you are, its subject is the one the request
   names, character for character; otherwise quote the subject as the request stated it.
+- If a prohibition forbids a reading of the result, never put that reading in your record. Set
+  record to null, or record only what the response says.
 - Write nothing outside the JSON object.
 
 Five separate examples follow. Each is a whole answer to a different request, and none is about
