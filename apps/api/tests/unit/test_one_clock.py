@@ -105,4 +105,4 @@ def test_the_protocol_version_lives_where_a_router_may_reach_it() -> None:
     and still owns the TEXT."""
     assert RESPONSE_PROTOCOL_VERSION == FROM_BATTERY
     assert RESPONSE_PROTOCOL_VERSION == "10.0.0"  # ADR-0134: the act is about the request
-    assert OPERATION_RUBRIC_VERSION == "0.7.0"  # ADR-0137
+    assert OPERATION_RUBRIC_VERSION == "0.8.0"  # ADR-0138

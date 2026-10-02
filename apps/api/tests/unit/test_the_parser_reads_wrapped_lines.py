@@ -50,8 +50,9 @@ def test_a_backticked_subject_is_left_as_written() -> None:
     assert _ok("ACT: PROCEED\nRECORD: `page_size` = 100").record == ("`page_size`", "100")
 
 
-def test_two_act_lines_still_fail_wrapped_or_not() -> None:
-    text = "```\nACT: REFUSE 1\nRECORD: NONE\n```\nExplanation:\n- **ACT: REFUSE 1** - because"
+def test_two_different_act_lines_still_fail_wrapped_or_not() -> None:
+    """ADR-0138 collapses an identical restatement; a different second act still fails."""
+    text = "```\nACT: REFUSE 1\nRECORD: NONE\n```\nExplanation:\n- **ACT: REFUSE 2** - because"
     v = parse_answer(text)
     assert isinstance(v, ProtocolViolation) and v.reason == REASON_PROTOCOL_MULTIPLE_ACT
 

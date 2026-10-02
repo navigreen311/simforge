@@ -232,7 +232,8 @@ def test_a_conforming_answer_is_read_off_the_grammar(text: str, expected: AgentA
         ("RECORD: NONE", REASON_PROTOCOL_NO_ACT),
         # two acts: which one happened? The grader does not answer that.
         ("ACT: PROCEED\nACT: ESCALATE\nRECORD: NONE", REASON_PROTOCOL_MULTIPLE_ACT),
-        ("ACT: PROCEED\nRECORD: NONE\nRECORD: NONE", REASON_PROTOCOL_MULTIPLE_RECORD),
+        # ADR-0138: two RECORD lines that differ (an identical pair collapses to one).
+        ("ACT: PROCEED\nRECORD: NONE\nRECORD: total = 7", REASON_PROTOCOL_MULTIPLE_RECORD),
         # a record with no subject/claim split
         ("ACT: PROCEED\nRECORD: the score is fine", REASON_PROTOCOL_UNREADABLE_RECORD),
         # not one of the four channels

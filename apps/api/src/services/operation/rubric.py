@@ -55,6 +55,9 @@ RESPONSE_PROTOCOL_VERSION = "10.0.0"
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
 #:
+#: **0.8.0 (ADR-0138).** Identical repeated ACT (and RECORD) lines collapse to one; any difference
+#: still fails. At 0.7.0 a restated act read as two ACT lines: 60 of 68 unparseable answers.
+#:
 #: **0.7.0 (ADR-0137).** A REFUSE citing another member of the probed rule's declared look-alike
 #: group is a refusal of the probed rule. Partition verdicts record the rubric, and a sitting
 #: under another rubric is due again and not read by the gate.
@@ -64,7 +67,7 @@ RESPONSE_PROTOCOL_VERSION = "10.0.0"
 #: verdict at 0.5.0 and one at 0.6.0 were computed by different rules.
 #:
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
-OPERATION_RUBRIC_VERSION = "0.7.0"
+OPERATION_RUBRIC_VERSION = "0.8.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:
