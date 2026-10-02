@@ -52,6 +52,8 @@ PINNED = {
     "9.0.0": "2a48e56ef49c226be5b7152a1ee2d8f88811144ec8bb980df503eb6c8d6d4e49",
     # ADR-0134: the ordered test changed.
     "10.0.0": "32dc6caaed906cb4ca91f72758489ce71803504c26379e91a8228f134cd9c11c",
+    # ADR-0139: the block did not move at 11.0.0.
+    "11.0.0": "32dc6caaed906cb4ca91f72758489ce71803504c26379e91a8228f134cd9c11c",
 }
 
 

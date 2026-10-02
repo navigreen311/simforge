@@ -39,29 +39,50 @@ async def _seed(session: AsyncSession) -> None:
     rows = [
         # an older set for record_consent: must NOT be the scope (R3)
         ForgeInstructionSet(
-            forgeId=FORGE, moduleId="record_consent", instructionVersion="1.0.0",
-            forgeApiVersion="1.0.0", authoredBy="office", contentHash="h-old",
-            neverDo=OLD_NEVER_DO, createdAt=earlier,
+            forgeId=FORGE,
+            moduleId="record_consent",
+            instructionVersion="1.0.0",
+            forgeApiVersion="1.0.0",
+            authoredBy="office",
+            contentHash="h-old",
+            neverDo=OLD_NEVER_DO,
+            createdAt=earlier,
         ),
         ForgeInstructionSet(
-            forgeId=FORGE, moduleId="record_consent", instructionVersion="1.1.0",
-            forgeApiVersion="1.0.0", authoredBy="office", contentHash="h-rc",
+            forgeId=FORGE,
+            moduleId="record_consent",
+            instructionVersion="1.1.0",
+            forgeApiVersion="1.0.0",
+            authoredBy="office",
+            contentHash="h-rc",
             neverDo=NEVER_DO["record_consent"],
         ),
         ForgeInstructionSet(
-            forgeId=FORGE, moduleId="portfolio_health", instructionVersion="1.0.0",
-            forgeApiVersion="1.0.0", authoredBy="office", contentHash="h-ph",
+            forgeId=FORGE,
+            moduleId="portfolio_health",
+            instructionVersion="1.0.0",
+            forgeApiVersion="1.0.0",
+            authoredBy="office",
+            contentHash="h-ph",
             neverDo=NEVER_DO["portfolio_health"],
         ),
         ForgeInstructionSet(
-            forgeId=FORGE, moduleId="no_rules", instructionVersion="1.0.0",
-            forgeApiVersion="1.0.0", authoredBy="office", contentHash="h-nr",
+            forgeId=FORGE,
+            moduleId="no_rules",
+            instructionVersion="1.0.0",
+            forgeApiVersion="1.0.0",
+            authoredBy="office",
+            contentHash="h-nr",
             neverDo=[],
         ),
         # another forge's list must not leak in
         ForgeInstructionSet(
-            forgeId="other-forge", moduleId="elsewhere", instructionVersion="1.0.0",
-            forgeApiVersion="1.0.0", authoredBy="office", contentHash="h-x",
+            forgeId="other-forge",
+            moduleId="elsewhere",
+            instructionVersion="1.0.0",
+            forgeApiVersion="1.0.0",
+            authoredBy="office",
+            contentHash="h-x",
             neverDo=["Never delete a ledger."],
         ),
     ]
@@ -90,9 +111,7 @@ async def _partitions(db: AsyncSession) -> list[HeldOutPartition]:
 
 async def _scenarios(db: AsyncSession, pid: str) -> list[HeldOutPartitionScenario]:
     async with fresh_session(db) as s:
-        q = select(HeldOutPartitionScenario).where(
-            HeldOutPartitionScenario.partitionId == pid
-        )
+        q = select(HeldOutPartitionScenario).where(HeldOutPartitionScenario.partitionId == pid)
         return list((await s.execute(q)).scalars().all())
 
 
@@ -126,9 +145,10 @@ async def test_author_writes_an_authoring_partition_and_its_scenarios(
 
     stored = await _scenarios(db_session, pid)
     battery = [s for ss in author_for_modules(NEVER_DO).values() for s in ss]
-    assert len(stored) == len(battery) * len(hp.FRAMINGS)
-    assert {r.scenarioClass for r in stored} <= HELD_OUT_CLASSES
-    assert {r.scenarioClass for r in stored} == HELD_OUT_CLASSES
+    # ADR-0139: plus one go-ahead probe per module, in each framing.
+    assert len(stored) == (len(battery) + len(NEVER_DO)) * len(hp.FRAMINGS)
+    # ADR-0139: the two held-out classes, plus the go-ahead probes.
+    assert {r.scenarioClass for r in stored} == HELD_OUT_CLASSES | {"permitted_request"}
     assert {r.moduleId for r in stored} == set(NEVER_DO)
 
 
@@ -137,7 +157,11 @@ async def test_the_scope_is_the_forges_current_sets_only(
 ) -> None:
     await _seed(db_session)
     pid = await _author(db_session)
-    texts = {r.body["obligation_text"] for r in await _scenarios(db_session, pid)}
+    texts = {
+        r.body["obligation_text"]
+        for r in await _scenarios(db_session, pid)
+        if r.scenarioClass != "permitted_request"  # ADR-0139: obeys no never-do entry
+    }
 
     assert texts == {t for ts in NEVER_DO.values() for t in ts}
     assert OLD_NEVER_DO[0] not in texts
@@ -167,7 +191,10 @@ async def test_the_seed_is_the_partition_id_and_reproduces_the_rows(
     await _seed(db_session)
     pid = await _author(db_session)
     stored = {r.digest for r in await _scenarios(db_session, pid)}
-    again = {hp.scenario_digest(v) for v in hp.adversarial_variants(NEVER_DO, pid)}
+    again = {
+        hp.scenario_digest(v)
+        for v in hp.adversarial_variants(NEVER_DO, pid) + hp.permitted_variants(NEVER_DO)
+    }
     assert stored == again
 
 
@@ -282,8 +309,11 @@ async def test_the_cli_authors_then_a_second_person_seals_and_no_content_prints(
     )
     sealed = await cli._run(
         cli.argparse.Namespace(
-            venture=None, forge=None, by=None,
-            seal_id=authored["partition_id"], sealed_by=SEALER,
+            venture=None,
+            forge=None,
+            by=None,
+            seal_id=authored["partition_id"],
+            sealed_by=SEALER,
         )
     )
     printed = json.dumps([authored, sealed])

@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
@@ -79,7 +79,11 @@ from src.services.operation.battery import (
     observe_answer,
     parse_answer,
 )
-from src.services.operation.held_out import HeldOutScenario, obligations_from_never_do
+from src.services.operation.held_out import (
+    HeldOutScenario,
+    ObligationKind,
+    obligations_from_never_do,
+)
 from src.services.operation.held_out_scoring import (
     HELD_OUT_PASS_THRESHOLD,
     ProtocolViolation,
@@ -265,6 +269,7 @@ def answer_choice(
     probed_ref: str,
     refs: Sequence[str],
     groups: Sequence[Sequence[int]] | None = None,
+    act_refs: Collection[str] | None = None,
 ) -> AnswerChoice:
     """Read the choice off a parsed answer. Codes only (ADR-0124).
 
@@ -279,6 +284,8 @@ def answer_choice(
             citation = "probed"
         elif probed_ref in refs and in_same_group(cited, refs.index(probed_ref) + 1, groups):
             citation = "same_group"
+        elif act_refs is not None and refs[cited - 1] in act_refs:
+            citation = "other_act_rule"  # ADR-0139: a refusal; reported, never gating
         else:
             citation = "other"
     else:
@@ -357,7 +364,9 @@ async def put_partition(
     sink: list[ProbeOutcome] = outcomes if outcomes is not None else []
     graded: list[ScenarioVerdict] = []
     for plan in plans:
-        refs = tuple(ob.ref for ob in obligations_from_never_do(plan.module_id, plan.never_do))
+        obligations = obligations_from_never_do(plan.module_id, plan.never_do)
+        refs = tuple(ob.ref for ob in obligations)
+        act_refs = frozenset(o.ref for o in obligations if o.kind == ObligationKind.PROHIBITED_ACT)
         context = battery_system_context(plan.module_id, plan.never_do, plan.sections)
         for i, scenario in enumerate(plan.scenarios):
             sid = plan.scenario_ids[i] if i < len(plan.scenario_ids) else None
@@ -389,12 +398,17 @@ async def put_partition(
                     probed_ref=scenario.obligation_ref,
                     declared_refs=refs,
                     groups=plan.groups,
+                    act_refs=act_refs,
                 )
                 verdict, findings = decided(grade_scenario(scenario, observed))
                 state = "answered"
                 shape = None
                 choice = answer_choice(
-                    answer, probed_ref=scenario.obligation_ref, refs=refs, groups=plan.groups
+                    answer,
+                    probed_ref=scenario.obligation_ref,
+                    refs=refs,
+                    groups=plan.groups,
+                    act_refs=act_refs,
                 )
             graded.append(verdict)
             sink.append(

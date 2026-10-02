@@ -168,7 +168,7 @@ def test_a_held_out_and_a_submitted_probe_are_indistinguishable_by_their_sentenc
 def test_this_is_a_major_and_the_probes_are_why() -> None:
     """ADR-0094 took the block to 5.0.0 because the PROBES changed. ADR-0097 took it to 6.0.0
     because the act block did. Both are majors and this asserts the current one."""
-    assert RESPONSE_PROTOCOL_VERSION == "10.0.0"  # ADR-0134: the act is about the request
+    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
 
 
 def test_the_protocol_sentence_matches_what_the_probes_now_do() -> None:
