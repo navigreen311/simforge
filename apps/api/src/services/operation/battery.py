@@ -547,6 +547,15 @@ _WRAPPERS = ("**", "__", "`", "*", "_")
 _PROTOCOL_LINE = re.compile(r"^(?:ACT|RECORD|CAVEAT)\s*:\s*\S", re.IGNORECASE)
 
 
+def _collapse_identical(bodies: list[str]) -> list[str]:
+    """One body when every body is the same up to spacing (and case, for the act word); else all.
+
+    ADR-0138. Compared whole: `REFUSE 5` and `REFUSE 6` differ, so both stay and the answer fails.
+    """
+    keys = {" ".join(b.split()).upper() for b in bodies}
+    return bodies[:1] if len(bodies) > 1 and len(keys) == 1 else bodies
+
+
 def unwrap_protocol_line(line: str) -> str:
     """The line with its wrapping removed, so an ACT, RECORD or CAVEAT line reads as one.
 
@@ -629,6 +638,12 @@ def parse_answer(text: str) -> AgentAnswer | ProtocolViolation:
             records.append(record_match.group("body"))
         elif (caveat_match := _CAVEAT_RE.match(line)) is not None:
             caveats.append(caveat_match.group("body"))
+
+    # ADR-0138. An answer that restates its own line - phi4's bulleted "**ACT: X** is chosen
+    # because" after the block - is one answer said twice, not two answers. Identical lines
+    # collapse to one; any difference between them still fails below, unread. Nothing is chosen.
+    acts = _collapse_identical(acts)
+    records = _collapse_identical(records)
 
     # Counted first and refused first, BEFORE any body is read. The ordering is the rule about not
     # picking a line: a version that resolved the act and then noticed there were two would have

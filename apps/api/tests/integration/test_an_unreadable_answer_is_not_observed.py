@@ -87,7 +87,8 @@ async def test_a_real_failure_still_fails_beside_an_unreadable_answer(
     """NOT_RUN never hides a FAIL: a wrong decision anywhere fails the agent."""
     await _seed(db_session)
     _serve(
-        monkeypatch, ScriptedProvider(_once("ACT: PROCEED\nACT: PROCEED\nRECORD: NONE", _violating))
+        # ADR-0138: two ACT lines that differ - an identical pair would now collapse to one.
+        monkeypatch, ScriptedProvider(_once("ACT: PROCEED\nACT: DECLINE\nRECORD: NONE", _violating))
     )
 
     await run_scheduled("partition_sweep", db_session)
