@@ -68,7 +68,7 @@ from src.services.operation.held_out import (
 )
 from src.services.operation.held_out_scoring import PERMITTED_CLASS
 from src.services.operation.live_instructions import live_sets
-from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import PARTITION_PROTOCOL_VERSION
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 
 #: The three framings. Each is the same obligation, asked differently.
@@ -407,7 +407,7 @@ async def author_partition(
             # ADR-0137. The look-alike groups the scoped modules carried at authoring.
             neverDoGroups={m: groups[m] for m in hashes if groups.get(m)},
             # ADR-0128. Which builder wrote the bodies below.
-            protocolVersion=RESPONSE_PROTOCOL_VERSION,
+            protocolVersion=PARTITION_PROTOCOL_VERSION,
         )
     )
     await session.flush()

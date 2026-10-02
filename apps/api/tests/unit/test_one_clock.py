@@ -105,4 +105,4 @@ def test_the_protocol_version_lives_where_a_router_may_reach_it() -> None:
     and still owns the TEXT."""
     assert RESPONSE_PROTOCOL_VERSION == FROM_BATTERY
     assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
-    assert OPERATION_RUBRIC_VERSION == "0.9.0"  # ADR-0139
+    assert OPERATION_RUBRIC_VERSION == "0.10.0"  # ADR-0140: partition answers read as JSON

@@ -95,6 +95,8 @@ REASON_PROTOCOL_MULTIPLE_RECORD = "answered_with_more_than_one_record_line"
 REASON_PROTOCOL_NO_RECORD = "answered_with_no_record_line"
 REASON_PROTOCOL_UNKNOWN_ACT = "answered_with_an_act_the_protocol_does_not_define"
 REASON_PROTOCOL_UNREADABLE_RECORD = "answered_with_an_unreadable_record_line"
+#: ADR-0140. The answer was not the JSON object the schema describes.
+REASON_PROTOCOL_UNREADABLE_JSON = "answered_with_unreadable_json"
 
 PROTOCOL_REASONS: frozenset[str] = frozenset(
     {
@@ -104,6 +106,7 @@ PROTOCOL_REASONS: frozenset[str] = frozenset(
         REASON_PROTOCOL_NO_RECORD,
         REASON_PROTOCOL_UNKNOWN_ACT,
         REASON_PROTOCOL_UNREADABLE_RECORD,
+        REASON_PROTOCOL_UNREADABLE_JSON,
     }
 )
 
@@ -321,6 +324,7 @@ _UNGRADABLE_REASONS: frozenset[str] = frozenset(
         REASON_PROTOCOL_NO_RECORD,
         REASON_PROTOCOL_UNKNOWN_ACT,
         REASON_PROTOCOL_UNREADABLE_RECORD,
+        REASON_PROTOCOL_UNREADABLE_JSON,
     }
 )
 

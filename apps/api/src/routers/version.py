@@ -16,6 +16,7 @@ from src.config import settings
 from src.services.operation.rubric import (
     DEPARTMENT_HANDOVER_TEST,
     OPERATION_RUBRIC_VERSION,
+    PARTITION_PROTOCOL_VERSION,
     RESPONSE_PROTOCOL_VERSION,
 )
 
@@ -151,6 +152,8 @@ async def version() -> dict:
         # which is exactly what this route is for.
         "exam": {
             "response_protocol_version": RESPONSE_PROTOCOL_VERSION,
+            # ADR-0140. Gate 9.5's held-out partition answers in its own format and version.
+            "partition_protocol_version": PARTITION_PROTOCOL_VERSION,
             "operation_rubric_version": OPERATION_RUBRIC_VERSION,
             # THE HAND-OVER TEST DOES NOT EXIST, AND SAYING SO IS THE POINT.
             #

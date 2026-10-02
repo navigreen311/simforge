@@ -94,11 +94,13 @@ class ScriptedProvider(LLMProvider):
         self.answer_for = answer_for
         self.systems: list[str] = []
         self.prompts: list[str] = []
+        self.schemas: list[dict | None] = []
 
     async def complete(self, *, system, messages, temperature=0.0, max_tokens=2048, **kwargs):
         user = messages[-1]["content"] if messages else ""
         self.systems.append(system)
         self.prompts.append(user)
+        self.schemas.append(kwargs.get("response_schema"))
         return LLMResponse(content=self.answer_for(system, user), provider=self.name)
 
     async def health_check(self) -> dict:
@@ -465,9 +467,7 @@ async def test_a_refusal_citing_any_act_rule_passes_a_claim_rule_does_not() -> N
     assert len(declines) == len(ACT_RULES)
     assert all(v.verdict == VERDICT_PASS for v in declines)
 
-    claim_rule = next(
-        n for n in range(1, len(PORTFOLIO_HEALTH_NEVER_DO) + 1) if n not in ACT_RULES
-    )
+    claim_rule = next(n for n in range(1, len(PORTFOLIO_HEALTH_NEVER_DO) + 1) if n not in ACT_RULES)
 
     def cites_a_claim(system: str, prompt: str) -> str:
         return f"ACT: REFUSE {claim_rule}\nRECORD: NONE"

@@ -36,7 +36,7 @@ from src.services.operation.look_alike_groups import (
 )
 from src.services.operation.partition_grading import answer_choice
 from src.services.operation.partition_verdict import venture_verdict
-from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 from src.utils.time import utcnow
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_held_out_isolation import _body
@@ -192,7 +192,7 @@ async def _old_rubric_pass(db: AsyncSession, pid: str) -> None:
                 agentId=AGENT,
                 verdict=v,
                 partitionDigest=DIGEST,
-                protocolVersion=RESPONSE_PROTOCOL_VERSION,
+                protocolVersion=PARTITION_PROTOCOL_VERSION,
                 rubricVersion="0.6.0",
                 decidedAt=at + timedelta(minutes=i),
             )

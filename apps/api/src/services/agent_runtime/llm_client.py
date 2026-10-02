@@ -260,6 +260,9 @@ class OllamaProvider(LLMProvider):
                 "num_predict": max_tokens,
             },
         }
+        # ADR-0140. Ollama structured output: decoding held to the exam's answer schema.
+        if kwargs.get("response_schema"):
+            payload["format"] = kwargs["response_schema"]
         started = time.perf_counter()
 
         async def _call() -> dict:

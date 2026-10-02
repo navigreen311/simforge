@@ -72,8 +72,9 @@ from src.services.operation.battery import (
     ACT_ESCALATE,
     ACT_PROCEED,
     ACT_REFUSE,
+    ANSWER_SCHEMA,
     BOOTSTRAP_FORGE_IDS,
-    RESPONSE_PROTOCOL_VERSION,
+    PARTITION_PROTOCOL,
     AgentAnswer,
     battery_system_context,
     observe_answer,
@@ -94,7 +95,12 @@ from src.services.operation.held_out_scoring import (
 )
 from src.services.operation.live_instructions import live_set, live_sets
 from src.services.operation.look_alike_groups import in_same_group
-from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, VERDICT_FAIL, VERDICT_NOT_RUN
+from src.services.operation.rubric import (
+    OPERATION_RUBRIC_VERSION,
+    PARTITION_PROTOCOL_VERSION,
+    VERDICT_FAIL,
+    VERDICT_NOT_RUN,
+)
 from src.services.village.model_config import VillageConfigError, read_village_agent_model
 from src.telemetry.logging import get_logger
 from src.utils.time import utcnow
@@ -367,7 +373,10 @@ async def put_partition(
         obligations = obligations_from_never_do(plan.module_id, plan.never_do)
         refs = tuple(ob.ref for ob in obligations)
         act_refs = frozenset(o.ref for o in obligations if o.kind == ObligationKind.PROHIBITED_ACT)
-        context = battery_system_context(plan.module_id, plan.never_do, plan.sections)
+        # ADR-0140. The partition answers in JSON: its own block, held to the schema.
+        context = battery_system_context(
+            plan.module_id, plan.never_do, plan.sections, protocol=PARTITION_PROTOCOL
+        )
         for i, scenario in enumerate(plan.scenarios):
             sid = plan.scenario_ids[i] if i < len(plan.scenario_ids) else None
             probe = deliver(scenario)
@@ -377,6 +386,7 @@ async def put_partition(
                     [{"role": "scenario", "content": probe.prompt}],
                     seed,
                     extra_system=context,
+                    response_schema=ANSWER_SCHEMA,
                 )
             except Exception:  # noqa: BLE001 - never put is NOT_RUN, never FAIL
                 verdict = grade_scenario(scenario, None)
@@ -616,7 +626,7 @@ class _Ledger:
             partitionDigest=self.digest,
             instructionContentHash=instruction_hash,
             # ADR-0120. Every row says which protocol the sitting was put under.
-            protocolVersion=RESPONSE_PROTOCOL_VERSION,
+            protocolVersion=PARTITION_PROTOCOL_VERSION,
             # ADR-0137. And which rubric graded it.
             rubricVersion=OPERATION_RUBRIC_VERSION,
             seed=seed,
@@ -806,12 +816,12 @@ async def grade_partition(
     if built_under is None:
         log.warning("partition_protocol_unrecorded", partition=pid)
         return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_PROTOCOL_UNRECORDED)
-    if built_under != RESPONSE_PROTOCOL_VERSION:
+    if built_under != PARTITION_PROTOCOL_VERSION:
         log.warning(
             "partition_protocol_moved",
             partition=pid,
             built_under=built_under,
-            current=RESPONSE_PROTOCOL_VERSION,
+            current=PARTITION_PROTOCOL_VERSION,
         )
         return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_PROTOCOL_MOVED)
     # ADR-0125. Refused before anything is put, and nothing is written.
@@ -862,7 +872,7 @@ async def grade_partition(
         # grader re-sits the agent under the current version instead of leaving NOT_RUN.
         # ADR-0125. Nor does one sat under instructions that are no longer live.
         current = bool(sitting) and all(
-            r.protocolVersion == RESPONSE_PROTOCOL_VERSION
+            r.protocolVersion == PARTITION_PROTOCOL_VERSION
             # ADR-0137. A sitting graded under another rubric is due again, like a protocol.
             and r.rubricVersion == OPERATION_RUBRIC_VERSION
             and (
@@ -878,7 +888,7 @@ async def grade_partition(
                 partition=pid,
                 agent=agent.agent_id,
                 was=sorted({str(r.protocolVersion) for r in sitting}),
-                now=RESPONSE_PROTOCOL_VERSION,
+                now=PARTITION_PROTOCOL_VERSION,
                 instructions_moved=any(
                     r.instructionContentHash not in (None, live_digest) for r in sitting
                 ),

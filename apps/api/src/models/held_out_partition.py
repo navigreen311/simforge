@@ -136,7 +136,8 @@ class HeldOutPartitionVerdict(Base):
     #: re-sealed partition does not describe the current one.
     partitionDigest: Mapped[str] = mapped_column(String)
     instructionContentHash: Mapped[str | None] = mapped_column(String, nullable=True)
-    #: ADR-0120. The RESPONSE_PROTOCOL_VERSION the sitting was put under. Null only on rows
+    #: ADR-0120. The protocol version the sitting was put under - PARTITION_PROTOCOL_VERSION
+    #: since ADR-0140 split it from the battery's. Null only on rows
     #: written before the column existed - a version nobody recorded is not guessed.
     protocolVersion: Mapped[str | None] = mapped_column(String, nullable=True)
     #: ADR-0137. The rubric the sitting was graded under. Null before the column: not current.

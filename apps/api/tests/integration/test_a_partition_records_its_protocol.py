@@ -19,7 +19,7 @@ from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
 from src.services.operation import held_out_partition as hp
 from src.services.operation import partition_grading as pg
-from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import PARTITION_PROTOCOL_VERSION
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
     _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
@@ -60,7 +60,7 @@ async def test_a_new_partition_records_the_protocol_it_was_built_under(
     async with fresh_session(db_session) as s:
         pid = await hp.author_partition(s, "v-p", "f-p", "Ivan Green")
     async with fresh_session(db_session) as s:
-        assert (await s.get(HeldOutPartition, pid)).protocolVersion == RESPONSE_PROTOCOL_VERSION
+        assert (await s.get(HeldOutPartition, pid)).protocolVersion == PARTITION_PROTOCOL_VERSION
 
 
 async def test_a_partition_built_under_another_protocol_is_not_graded(
@@ -75,6 +75,22 @@ async def test_a_partition_built_under_another_protocol_is_not_graded(
     async with fresh_session(db_session) as s:
         out = await pg.grade_partition(s, pid, runtime=None)  # refused before any runtime use
     await run_scheduled("partition_sweep", db_session)
+
+    assert out.skipped == pg.SKIP_PROTOCOL_MOVED
+    assert provider.prompts == [] and await _verdicts(db_session) == []
+
+
+async def test_an_11_0_0_partition_is_refused_under_12_0_0(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0140. Text-protocol questions are not put to a JSON-protocol sitting (60HHB4)."""
+    pid = await _seed(db_session)
+    await _set_version(db_session, pid, "11.0.0")
+    provider = ScriptedProvider(_compliant)
+    _serve(monkeypatch, provider)
+
+    async with fresh_session(db_session) as s:
+        out = await pg.grade_partition(s, pid, runtime=None)
 
     assert out.skipped == pg.SKIP_PROTOCOL_MOVED
     assert provider.prompts == [] and await _verdicts(db_session) == []
@@ -109,7 +125,7 @@ async def test_a_partition_built_under_the_current_protocol_is_graded(
     rows = await _verdicts(db_session)
     assert provider.prompts and rows
     assert {r.partitionId for r in rows} == {pid}
-    assert {r.protocolVersion for r in rows} == {RESPONSE_PROTOCOL_VERSION}
+    assert {r.protocolVersion for r in rows} == {PARTITION_PROTOCOL_VERSION}
 
 
 async def test_the_migration_adds_the_column_and_backfills_nothing() -> None:

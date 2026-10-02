@@ -7,7 +7,11 @@ import json
 
 import pytest
 
-from src.services.operation.battery import battery_system_context
+from src.services.operation.battery import (
+    ANSWER_SCHEMA,
+    PARTITION_PROTOCOL,
+    battery_system_context,
+)
 from src.services.operation.held_out import author_for_module
 from src.services.operation.held_out_scoring import (
     REASON_NOT_RUN,
@@ -121,12 +125,14 @@ async def test_a_violating_agent_fails_it() -> None:
 
 async def test_the_agent_receives_the_delivered_probe_and_nothing_else() -> None:
     """Each prompt is `deliver(scenario).prompt`, in order, one per scenario.
-    The system context is the battery's own, byte for byte."""
+    The system context is the battery's own, byte for byte, with the partition's JSON block
+    in place of the text one (ADR-0140), and every call is held to `ANSWER_SCHEMA`."""
     runtime, provider = _runtime(_compliant)
     await put_partition(agent_id=AGENT, plans=[_plan()], runtime=runtime)
 
     assert provider.prompts == [deliver(s).prompt for s in _scenarios()]
-    context = battery_system_context(MODULE, PORTFOLIO_HEALTH_NEVER_DO)
+    context = battery_system_context(MODULE, PORTFOLIO_HEALTH_NEVER_DO, protocol=PARTITION_PROTOCOL)
+    assert provider.schemas == [ANSWER_SCHEMA] * len(provider.prompts)
     for system in provider.systems:
         assert system.endswith(context)
         for leaked in ("never_do_violation", "silent_failure", "held_out", "partition"):

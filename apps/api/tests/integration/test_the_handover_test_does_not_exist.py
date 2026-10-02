@@ -97,6 +97,7 @@ async def test_it_sits_in_the_exam_block_beside_the_versions(client: AsyncClient
 
     assert set(body["exam"]) == {
         "response_protocol_version",
+        "partition_protocol_version",  # ADR-0140
         "operation_rubric_version",
         "department_handover_test",
     }
