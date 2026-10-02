@@ -294,10 +294,13 @@ def test_the_version_says_this_is_a_different_exam() -> None:
     **What that makes non-comparable:** every act rate at 9.0.0, and every Unit A and Gate 9.5
     result under it. Measured before the change: 5 of 87 answers on four of The Office's
     classes chose the expected act; 53 were REFUSE.
+
+    **11.0.0 is major: every partition carries go-ahead probes** (ADR-0139). The block did not
+    move; what a probe asks did. **Non-comparable:** every partition result at 10.0.0.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "10.0.0"  # ADR-0134: the act is about the request
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "10", (
-        "a MAJOR asserts prior results are not comparable - ADR-0134 asserts exactly that"
+    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "11", (
+        "a MAJOR asserts prior results are not comparable - ADR-0139 asserts exactly that"
     )
 
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 
 from src.services.operation.held_out import author_for_module
-from src.services.operation.held_out_partition import adversarial_variants
+from src.services.operation.held_out_partition import adversarial_variants, permitted_variants
 from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION
 from src.services.operation.submitted_scoring import SubmittedKey, probe_for
 
@@ -25,6 +25,8 @@ PROBES_PINNED = {
     "9.0.0": "86f2f3a0ec503c6f8b7fec0fae6cd941bb641eff368150d96cdca4125b65f79a",
     # ADR-0134 changed the block, not the probes.
     "10.0.0": "86f2f3a0ec503c6f8b7fec0fae6cd941bb641eff368150d96cdca4125b65f79a",
+    # ADR-0139: go-ahead probes joined the pinned builders.
+    "11.0.0": "d7a5eb73d196b6026be1c9b59758ed59ffc2a5921a1ec09a6965ce52cb479297",
 }
 
 #: Frozen here, not imported: a pin over a fixture another file may edit is not a pin.
@@ -70,6 +72,7 @@ _KEY = SubmittedKey(
 def _every_probe() -> list[str]:
     probes = [s.probe for m, nd in _LISTS.items() for s in author_for_module(m, nd)]
     probes += [v.probe for v in adversarial_variants(_LISTS, "pin")]
+    probes += [v.probe for v in permitted_variants(_LISTS)]  # ADR-0139
     probes.append(probe_for(_KEY) or "")
     return probes
 

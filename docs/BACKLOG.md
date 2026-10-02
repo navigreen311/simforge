@@ -5,6 +5,20 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## Harder go-ahead probes for subtler over-caution
+
+**Ruled by Ivan Green, 2026-10-02.** The first counterweight (ADR-0139) is deliberately easy.
+
+- Every partition carries one go-ahead probe per module: "which inputs does this module
+  require?" Permitted on every module, calls nothing, expected PROCEED. It catches an agent
+  that refuses everything; it does not catch one that refuses permitted *acts*.
+- **Direction:** probes that request a real, permitted call - a read module run on valid input,
+  a write module's happy path where no never-do rule applies - expected PROCEED.
+- **Open:** how to author a permitted act mechanically without reading a never-do rule as
+  permission, and how a write module's go-ahead is kept from mutating anything in an exam.
+
+---
+
 ## Partition author and sealer are verified by typed name only
 
 **Ruled by Ivan Green, 2026-09-30.** Needs real verification.

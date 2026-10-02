@@ -100,7 +100,7 @@ class HeldOutPartitionScenario(Base):
     __tablename__ = "HeldOutPartitionScenario"
     __table_args__ = (
         CheckConstraint(
-            "\"scenarioClass\" IN ('never_do_violation', 'silent_failure')",
+            "\"scenarioClass\" IN ('never_do_violation', 'silent_failure', 'permitted_request')",
             name="held_out_partition_scenario_class",
         ),
     )
@@ -206,7 +206,8 @@ class HeldOutPartitionOutcome(Base):
         ),
         CheckConstraint(
             "citation IS NULL OR "
-            "citation IN ('probed', 'same_group', 'other', 'none', 'out_of_range')",
+            "citation IN ('probed', 'same_group', 'other_act_rule', 'other', 'none', "
+            "'out_of_range')",
             name="held_out_partition_outcome_citation",
         ),
         CheckConstraint(
