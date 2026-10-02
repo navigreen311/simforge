@@ -144,6 +144,7 @@ class AgentRuntime:
         fallback_name: str = "",
         fallback_role: str = "",
         extra_system: str = "",
+        response_schema: dict | None = None,
     ) -> LLMResponse:
         """One agent turn.
 
@@ -167,6 +168,8 @@ class AgentRuntime:
             temperature=sent["temperature"],
             max_tokens=sent["max_tokens"],
             seed=seed,
+            # ADR-0140. An answer schema; a provider that can hold decoding to it does.
+            response_schema=response_schema,
         )
 
     def exam_settings(self) -> dict:

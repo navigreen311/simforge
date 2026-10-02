@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartitionVerdict
-from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 from src.utils.time import utcnow
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
@@ -26,7 +26,7 @@ from tests.unit.test_operation_battery import ScriptedProvider, _compliant
 pytestmark = pytest.mark.asyncio
 
 OLD = "6.0.0"
-assert OLD != RESPONSE_PROTOCOL_VERSION
+assert OLD != PARTITION_PROTOCOL_VERSION
 
 
 async def _settle(
@@ -90,7 +90,7 @@ async def test_a_settled_agent_under_an_old_protocol_is_sat_again(
     new = rows[2:]
     assert provider.prompts, "the agent was put the partition again"
     assert [r.verdict for r in new] == ["IN_PROGRESS", "PASS"] * 3
-    assert {r.protocolVersion for r in new} == {RESPONSE_PROTOCOL_VERSION}
+    assert {r.protocolVersion for r in new} == {PARTITION_PROTOCOL_VERSION}
     assert [(r.verdict, r.protocolVersion) for r in rows[:2]] == [
         ("IN_PROGRESS", protocol),
         ("PASS", protocol),
@@ -115,7 +115,7 @@ async def test_a_settled_agent_under_the_current_protocol_is_not_sat_again(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pid = await _seed(db_session)
-    await _settle(db_session, pid, AGENT, "PASS", RESPONSE_PROTOCOL_VERSION)
+    await _settle(db_session, pid, AGENT, "PASS", PARTITION_PROTOCOL_VERSION)
     provider = ScriptedProvider(_compliant)
     _serve(monkeypatch, provider)
 
@@ -136,5 +136,5 @@ async def test_an_unnameable_agent_gets_one_current_not_run_not_one_per_pass(
     await run_scheduled("partition_sweep", db_session)
 
     rows = await _rows(db_session, "nobody_at_all")
-    current = [r for r in rows if r.protocolVersion == RESPONSE_PROTOCOL_VERSION]
+    current = [r for r in rows if r.protocolVersion == PARTITION_PROTOCOL_VERSION]
     assert [r.verdict for r in current] == ["NOT_RUN"], "once under the new version"

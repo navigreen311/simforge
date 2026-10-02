@@ -47,6 +47,14 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 #: 4.0.0 - ADR-0074, the third worked example.
 RESPONSE_PROTOCOL_VERSION = "11.0.0"
 
+#: WHICH ANSWER FORMAT THE HELD-OUT PARTITION PUTS (ADR-0140). Its own number since 12.0.0:
+#: Gate 9.5 sittings answer in JSON held to `ANSWER_SCHEMA`; the battery and The Office's keys
+#: (Gate 9) still answer in the 11.0.0 text block. The two formats are not comparable.
+#:
+#: 12.0.0 - ADR-0140, JSON answers (record null by default) on the partition path only.
+#: Up to 11.0.0 the partition shared RESPONSE_PROTOCOL_VERSION.
+PARTITION_PROTOCOL_VERSION = "12.0.0"
+
 #: **0.4.0 (ADR-0100).** ADR-0099 changed how a verdict is COMPUTED - the merge keys by
 #: (dimension, channel), `passed` reads restraint alone, and the tier is capped by the channels
 #: measured. A grading change that does not bump the version lets an old verdict pass for a
@@ -56,6 +64,8 @@ RESPONSE_PROTOCOL_VERSION = "11.0.0"
 #: **0.5.0 (ADR-0102).** The score beside a verdict now measures the channel the verdict was
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
+#:
+#: **0.10.0 (ADR-0140).** Partition answers are read as JSON (`_parse_json_answer`).
 #:
 #: **0.9.0 (ADR-0139).** A REFUSE citing any act-rule of the module is a refusal of the probed
 #: rule; a go-ahead probe fails on anything but PROCEED.
@@ -72,7 +82,7 @@ RESPONSE_PROTOCOL_VERSION = "11.0.0"
 #: verdict at 0.5.0 and one at 0.6.0 were computed by different rules.
 #:
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
-OPERATION_RUBRIC_VERSION = "0.9.0"
+OPERATION_RUBRIC_VERSION = "0.10.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:

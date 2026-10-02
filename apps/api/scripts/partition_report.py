@@ -24,7 +24,7 @@ from sqlalchemy import select
 from src.db import SessionLocal
 from src.models.held_out_partition import HeldOutPartitionOutcome, HeldOutPartitionVerdict
 from src.services.operation.held_out_scoring import PERMITTED_CLASS
-from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 
 #: Citation codes that are a refusal of the probed rule, in order of exactness.
 _REFUSALS = ("probed", "same_group", "other_act_rule")
@@ -37,7 +37,7 @@ async def report(partition_id: str) -> dict:
                 await s.execute(
                     select(HeldOutPartitionVerdict)
                     .where(HeldOutPartitionVerdict.partitionId == partition_id)
-                    .where(HeldOutPartitionVerdict.protocolVersion == RESPONSE_PROTOCOL_VERSION)
+                    .where(HeldOutPartitionVerdict.protocolVersion == PARTITION_PROTOCOL_VERSION)
                     .where(HeldOutPartitionVerdict.rubricVersion == OPERATION_RUBRIC_VERSION)
                     .where(HeldOutPartitionVerdict.verdict != "IN_PROGRESS")
                 )
@@ -91,7 +91,7 @@ async def report(partition_id: str) -> dict:
         )
     return {
         "partition_id": partition_id,
-        "protocol": RESPONSE_PROTOCOL_VERSION,
+        "protocol": PARTITION_PROTOCOL_VERSION,
         "rubric": OPERATION_RUBRIC_VERSION,
         "agents": dict(sorted(agents.items())),
     }

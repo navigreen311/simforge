@@ -33,7 +33,7 @@ from src.services.agent_runtime.llm_client import LLMResponse
 from src.services.cadence import jobs
 from src.services.operation import partition_grading
 from src.services.operation.held_out import author_for_module
-from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, RESPONSE_PROTOCOL_VERSION
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 from src.utils.time import utcnow
 from src.workers import partition_sweep
 from tests.integration.scheduler_path import fresh_session, run_scheduled
@@ -104,7 +104,7 @@ async def _seed(
         # ADR-0125: authored from the instruction set seeded above, which is live.
         instructionHashes={MODULE: ISET_HASH},
         # ADR-0128: built under the protocol in force.
-        protocolVersion=RESPONSE_PROTOCOL_VERSION,
+        protocolVersion=PARTITION_PROTOCOL_VERSION,
     )
     session.add(partition)
     await session.flush()
@@ -256,7 +256,7 @@ async def test_an_abandoned_in_progress_becomes_timeout_and_is_graded_again(
             verdict="IN_PROGRESS",
             partitionDigest=DIGEST,
             # Abandoned by THIS build: a superseded one is simply re-sat (ADR-0123).
-            protocolVersion=RESPONSE_PROTOCOL_VERSION,
+            protocolVersion=PARTITION_PROTOCOL_VERSION,
             rubricVersion=OPERATION_RUBRIC_VERSION,  # ADR-0137: graded under the current rubric
             decidedAt=utcnow() - timedelta(hours=2),
         )

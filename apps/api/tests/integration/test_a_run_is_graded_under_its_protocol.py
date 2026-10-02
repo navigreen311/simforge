@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.held_out_partition import HeldOutPartitionVerdict
 from src.models.operation_cert import OperationCertification
 from src.services.operation.battery import (
+    PARTITION_PROTOCOL_VERSION,
     RESPONSE_PROTOCOL_VERSION,
     SKIP_PROTOCOL_MISMATCH,
     BatterySkipped,
@@ -112,7 +113,7 @@ async def test_a_partition_verdict_says_which_protocol_it_was_sat_under(
             .all()
         )
     assert rows
-    assert {r.protocolVersion for r in rows} == {RESPONSE_PROTOCOL_VERSION}
+    assert {r.protocolVersion for r in rows} == {PARTITION_PROTOCOL_VERSION}  # ADR-0140
 
 
 async def test_both_schemas_carry_the_column() -> None:
