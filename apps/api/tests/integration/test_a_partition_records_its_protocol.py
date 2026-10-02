@@ -96,6 +96,22 @@ async def test_an_11_0_0_partition_is_refused_under_12_0_0(
     assert provider.prompts == [] and await _verdicts(db_session) == []
 
 
+async def test_a_12_0_0_partition_is_refused_under_13_0_0(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0141. A sitting built before the record rule is not graded under it (26PH)."""
+    pid = await _seed(db_session)
+    await _set_version(db_session, pid, "12.0.0")
+    provider = ScriptedProvider(_compliant)
+    _serve(monkeypatch, provider)
+
+    async with fresh_session(db_session) as s:
+        out = await pg.grade_partition(s, pid, runtime=None)
+
+    assert out.skipped == pg.SKIP_PROTOCOL_MOVED
+    assert provider.prompts == [] and await _verdicts(db_session) == []
+
+
 async def test_a_partition_that_never_recorded_its_protocol_is_not_graded(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

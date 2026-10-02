@@ -37,12 +37,13 @@ from tests.unit.test_operation_battery import _compliant, _runtime
 #: ADR-0103 for the partition's block: what the agent reads is pinned to its version.
 PINNED = {
     "12.0.0": "b6742e73c9a61bbfc71701e32de1550a905f90ed1beef3379679f409e999cc67",
+    "13.0.0": "390281ee2433c225c49e406eadea4e0972bf17f74ee38f402dcb343a8b0c4b3b",
 }
 
 
 def test_the_versions_split() -> None:
     assert RESPONSE_PROTOCOL_VERSION == "11.0.0"
-    assert PARTITION_PROTOCOL_VERSION == "12.0.0"
+    assert PARTITION_PROTOCOL_VERSION == "13.0.0"
 
 
 def test_the_json_block_is_pinned_to_its_version() -> None:
@@ -138,3 +139,13 @@ async def test_the_battery_sends_the_text_block_and_no_schema() -> None:
     assert provider.systems and provider.schemas
     assert all(s is None for s in provider.schemas)
     assert all(sys.endswith(RESPONSE_PROTOCOL) for sys in provider.systems)
+
+
+def test_a_forbidden_reading_never_goes_in_the_record() -> None:
+    """ADR-0141. In the partition's block only; the battery's text block is unchanged."""
+    flat = " ".join(PARTITION_PROTOCOL.split())
+    assert (
+        "If a prohibition forbids a reading of the result, never put that reading in your "
+        "record. Set record to null, or record only what the response says." in flat
+    )
+    assert "never put that reading" not in RESPONSE_PROTOCOL
