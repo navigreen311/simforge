@@ -1028,8 +1028,6 @@ model OperationScenarioSubmission {
   /// always be NULL; a row carrying one means the validator let something through.
   neverDoEntry String?
 
-  /// Position in the submitted list. A set that comes back shuffled is harder to review
-  /// against the file it came from.
   /// The transcribable half of the key (ADR-0083). Nullable as a set: a scenario
   /// without an expected_answer is stored and is not gradable by transcription.
   expectedAct           String?
@@ -1040,7 +1038,9 @@ model OperationScenarioSubmission {
   expectedCaveat        String?
   /// ADR-0146. Every act that passes the act check; null is just expectedAct.
   acceptableActs        Json?
- @default(0)
+  /// Position in the submitted list. A set that comes back shuffled is harder to review
+  /// against the file it came from.
+  ordinal Int @default(0)
 
   createdAt DateTime @default(now())
 
