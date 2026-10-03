@@ -51,10 +51,11 @@ RESPONSE_PROTOCOL_VERSION = "11.0.0"
 #: Gate 9.5 sittings answer in JSON held to `ANSWER_SCHEMA`; the battery and The Office's keys
 #: (Gate 9) still answer in the 11.0.0 text block. The two formats are not comparable.
 #:
+#: 14.0.0 - ADR-0144, record is a fact asserted as true, never the reading refused.
 #: 13.0.0 - ADR-0141, a forbidden reading never goes in the record.
 #: 12.0.0 - ADR-0140, JSON answers (record null by default) on the partition path only.
 #: Up to 11.0.0 the partition shared RESPONSE_PROTOCOL_VERSION.
-PARTITION_PROTOCOL_VERSION = "13.0.0"
+PARTITION_PROTOCOL_VERSION = "14.0.0"
 
 #: **0.4.0 (ADR-0100).** ADR-0099 changed how a verdict is COMPUTED - the merge keys by
 #: (dimension, channel), `passed` reads restraint alone, and the tier is capped by the channels
