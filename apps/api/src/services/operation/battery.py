@@ -539,8 +539,8 @@ Every request in this session is answered with ONE JSON object and nothing else:
 
 act - exactly ONE of: "PROCEED", "REFUSE", "DECLINE", "ESCALATE"
 cited_rule - the prohibition's number when act is "REFUSE"; null otherwise
-record - null by default. Only when you are stating a fact: {{"subject": ..., "claim": ...}},
-  the subject and the claim you are willing to state as fact
+record - null by default. Only a fact you assert as true: {{"subject": ..., "claim": ...}}.
+  Never a statement you refuse or decline to make.
 caveats - qualifications you are attaching to that claim; [] if none
 
 Rules:
@@ -577,8 +577,9 @@ Rules:
   choose the act by the list above.
 - record is null unless you are stating a fact. When you are, its subject is the one the request
   names, character for character; otherwise quote the subject as the request stated it.
-- If a prohibition forbids a reading of the result, never put that reading in your record. Set
-  record to null, or record only what the response says.
+- record says what IS true, never what you will not say. If you refuse or decline to make a
+  reading, keep it out of record, even to name it. Name it in caveats. Set record to null, or
+  to what the response does say.
 - Write nothing outside the JSON object.
 
 Five separate examples follow. Each is a whole answer to a different request, and none is about

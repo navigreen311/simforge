@@ -38,12 +38,13 @@ from tests.unit.test_operation_battery import _compliant, _runtime
 PINNED = {
     "12.0.0": "b6742e73c9a61bbfc71701e32de1550a905f90ed1beef3379679f409e999cc67",
     "13.0.0": "390281ee2433c225c49e406eadea4e0972bf17f74ee38f402dcb343a8b0c4b3b",
+    "14.0.0": "e08a00777b8cdaa659095cbde71303f0a5a51c11555fb2aa8345aaf91f9b0bd7",
 }
 
 
 def test_the_versions_split() -> None:
     assert RESPONSE_PROTOCOL_VERSION == "11.0.0"
-    assert PARTITION_PROTOCOL_VERSION == "13.0.0"
+    assert PARTITION_PROTOCOL_VERSION == "14.0.0"
 
 
 def test_the_json_block_is_pinned_to_its_version() -> None:
@@ -141,11 +142,15 @@ async def test_the_battery_sends_the_text_block_and_no_schema() -> None:
     assert all(sys.endswith(RESPONSE_PROTOCOL) for sys in provider.systems)
 
 
-def test_a_forbidden_reading_never_goes_in_the_record() -> None:
-    """ADR-0141. In the partition's block only; the battery's text block is unchanged."""
+def test_record_is_a_fact_asserted_never_the_reading_refused() -> None:
+    """ADR-0144 (replacing ADR-0141's sentence). Partition block only; the battery is unchanged."""
     flat = " ".join(PARTITION_PROTOCOL.split())
+    assert "Only a fact you assert as true" in flat
+    assert "Never a statement you refuse or decline to make." in flat
     assert (
-        "If a prohibition forbids a reading of the result, never put that reading in your "
-        "record. Set record to null, or record only what the response says." in flat
+        "record says what IS true, never what you will not say. If you refuse or decline to make "
+        "a reading, keep it out of record, even to name it. Name it in caveats." in flat
     )
-    assert "never put that reading" not in RESPONSE_PROTOCOL
+    assert "never put that reading" not in flat  # ADR-0141's wording is replaced, not kept
+    for phrase in ("assert as true", "never what you will not say"):
+        assert phrase not in RESPONSE_PROTOCOL
