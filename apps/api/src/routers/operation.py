@@ -139,6 +139,8 @@ async def submit_curriculum(
 
     ref = body.instruction_set_ref
     groups = normalise(body.module_never_do_groups.get(ref.module_id))
+    # ADR-0146. None when not declared, which is read as mutating.
+    mutating = body.module_mutating.get(ref.module_id)
 
     # ADR-0137. The groups are inside The Office's hashed content, so one hash carries one set of
     # groups. A row SimForge already holds under this hash with different groups is a contract
@@ -216,6 +218,10 @@ async def submit_curriculum(
                 expectedCaveat=(
                     scenario.expected_answer.expected_caveat if scenario.expected_answer else None
                 ),
+                # ADR-0146. Null when the key sent none: just its own act, as before.
+                acceptableActs=(
+                    scenario.expected_answer.acceptable_acts if scenario.expected_answer else None
+                ),
                 ordinal=ordinal,
             )
         )
@@ -249,11 +255,14 @@ async def submit_curriculum(
                 sections=dict(ref.sections) if ref.sections is not None else None,
                 # ADR-0137. Rule numbers per group, 1-based; empty when none were declared.
                 neverDoGroups=groups,
+                mutating=mutating,
             )
         )
         await session.commit()
-    elif (never_do and not existing.neverDo) or (
-        ref.sections is not None and existing.sections is None
+    elif (
+        (never_do and not existing.neverDo)
+        or (ref.sections is not None and existing.sections is None)
+        or (mutating is not None and existing.mutating != mutating)
     ):
         # Backfill the never-do list if this submission declares one and the set didn't carry it -
         # and the sections on the same rule (ADR-0107). A row written before this field existed
@@ -263,6 +272,10 @@ async def submit_curriculum(
             existing.neverDo = never_do
         if ref.sections is not None and existing.sections is None:
             existing.sections = dict(ref.sections)
+        # ADR-0146. The latest declaration stands: the keys it governs arrive in the same
+        # submission (delete-then-insert above), so the flag and the sets cannot disagree.
+        if mutating is not None:
+            existing.mutating = mutating
         await session.commit()
     else:
         # The instruction set was already correct, and the SCENARIOS still need committing: the
@@ -327,9 +340,7 @@ async def gate_result(
     # ADR-0116: the never-do dimension is owed only where an entry forbids an ACT.
     module_has_never_do = forbids_an_act(
         ref.module_id or "",
-        await module_never_do_list(
-            session, ref.forge_id, ref.module_id, body.run_content_hash
-        ),
+        await module_never_do_list(session, ref.forge_id, ref.module_id, body.run_content_hash),
     )
 
     if void:
@@ -479,10 +490,14 @@ async def gate_result(
         # for two shapes a constraint cannot distinguish: a timed-out run got no answer,
         # and a `department_context` unit is cleared by department state. The verdict
         # class is only known at this point.
-        if state in (
-            OperationState.CERTIFIED.value,
-            OperationState.PROVISIONAL.value,
-        ) and not (outcome.agent_model or "").strip():
+        if (
+            state
+            in (
+                OperationState.CERTIFIED.value,
+                OperationState.PROVISIONAL.value,
+            )
+            and not (outcome.agent_model or "").strip()
+        ):
             raise HTTPException(
                 status_code=422,
                 detail=(
@@ -685,9 +700,7 @@ async def gate_result(
         # where the hand-over went. Option B, a real escalation-path test, is the answer and is not
         # built. What this buys is that a department can no longer pass in silence, and the
         # difference between "verified" and "nobody said otherwise" is now visible in the state.
-        verified = (
-            d_outcome.escalation_path_verified and d_outcome.compliance_coupling_verified
-        )
+        verified = d_outcome.escalation_path_verified and d_outcome.compliance_coupling_verified
         if void:
             d_state = OperationState.REVOKED.value
         elif not d_outcome.passed:
