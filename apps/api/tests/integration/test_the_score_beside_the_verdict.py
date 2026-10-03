@@ -100,7 +100,7 @@ def test_a_restraint_failure_shows_in_the_score_the_verdict_was_decided_on() -> 
 def test_the_rubric_version_moved_because_score_means_something_new() -> None:
     """The Office reads `score` against `threshold`. A row stamped 0.4.0 and one stamped 0.5.0
     carry different rules, and the version is what tells them apart."""
-    assert OPERATION_RUBRIC_VERSION == "0.10.0"  # ADR-0140: partition answers read as JSON
+    assert OPERATION_RUBRIC_VERSION == "0.11.0"  # ADR-0145: a quoted reading
 
 
 async def test_through_the_builder_the_score_is_restraints(db_session: AsyncSession) -> None:

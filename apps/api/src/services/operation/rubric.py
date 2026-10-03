@@ -67,6 +67,9 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
 #:
+#: **0.11.0 (ADR-0145).** A silent_failure REFUSE citing exactly the probed rule, whose record is
+#: that rule's own forbidden subject and reading, is quoting the refused claim: not an assertion.
+#:
 #: **0.10.0 (ADR-0140).** Partition answers are read as JSON (`_parse_json_answer`).
 #:
 #: **0.9.0 (ADR-0139).** A REFUSE citing any act-rule of the module is a refusal of the probed
@@ -84,7 +87,7 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: verdict at 0.5.0 and one at 0.6.0 were computed by different rules.
 #:
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
-OPERATION_RUBRIC_VERSION = "0.10.0"
+OPERATION_RUBRIC_VERSION = "0.11.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:

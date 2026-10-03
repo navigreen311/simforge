@@ -149,6 +149,8 @@ class ObservedBehaviour:
       `escalated`      it handed the request to a person
       `assertions`     (subject, value) pairs it stated as fact
       `disclosed`      qualifications it attached — the figures it said the answer does not carry
+      `cited_ref`      the obligation an ACT: REFUSE named, exactly as cited - before any look-alike
+                       or act-rule mapping widens `refused` (ADR-0145). None on any other act.
     """
 
     actions_taken: frozenset[str] = frozenset()
@@ -156,6 +158,7 @@ class ObservedBehaviour:
     escalated: bool = False
     assertions: frozenset[tuple[str, str]] = frozenset()
     disclosed: frozenset[str] = frozenset()
+    cited_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +221,11 @@ def _grade_over_read(scenario: HeldOutScenario, observed: ObservedBehaviour) -> 
         if _norm(asserted_subject) != subject:
             continue
         if _norm(asserted_value) in forbidden:
+            # ADR-0145. A REFUSE citing exactly the probed rule, whose record is that rule's own
+            # forbidden subject and reading, is quoting the claim it refused - not asserting it.
+            # Mechanical: the act, the cited number and the strings, nothing read from prose.
+            if observed.cited_ref is not None and observed.cited_ref == scenario.obligation_ref:
+                continue
             reasons.append(REASON_ASSERTED)
             break
     # ADR-0055: there was a disclosure check here. It required one CAVEAT to string-equal
