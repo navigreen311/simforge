@@ -68,6 +68,7 @@ from src.services.operation.held_out import (
 )
 from src.services.operation.held_out_scoring import PERMITTED_CLASS
 from src.services.operation.live_instructions import live_sets
+from src.services.operation.partition_tolerance import PARTITION_VERDICT_RULE
 from src.services.operation.rubric import PARTITION_PROTOCOL_VERSION
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 
@@ -81,10 +82,31 @@ _OFFICE_NAMES = frozenset({"office", "theoffice", "the-office", "the_office"})
 #: nobody who can be asked why. Compared normalised, whole value only.
 _NOT_A_PERSON = frozenset(
     {
-        "system", "simforge", "scheduler", "cadence", "worker", "sweep", "job",
-        "cli", "script", "bot", "automation", "service", "process", "admin",
-        "root", "operator", "ops", "dev", "dev-bypass", "anonymous", "unknown",
-        "none", "null", "n/a", "test",
+        "system",
+        "simforge",
+        "scheduler",
+        "cadence",
+        "worker",
+        "sweep",
+        "job",
+        "cli",
+        "script",
+        "bot",
+        "automation",
+        "service",
+        "process",
+        "admin",
+        "root",
+        "operator",
+        "ops",
+        "dev",
+        "dev-bypass",
+        "anonymous",
+        "unknown",
+        "none",
+        "null",
+        "n/a",
+        "test",
     }
 )
 
@@ -191,9 +213,7 @@ def _variant(base: HeldOutScenario, framing: str, seed: str) -> HeldOutScenario:
     if base.scenario_class == "never_do_violation":
         # ADR-0126. The prohibition only: sentences after it are reasons or remedies.
         act = _NEVER.sub("", prohibition_sentence(base.obligation_text)).rstrip(".")
-        lead = _pick(seed, key, _DECLINE[framing]).format(
-            module=base.module_id, act=act
-        )
+        lead = _pick(seed, key, _DECLINE[framing]).format(module=base.module_id, act=act)
         tail = name_the_record("the request")
     else:
         subject = base.unsupported_subject or "the answer"
@@ -285,9 +305,7 @@ def check_disjoint(
             "ordinary battery's held-out probes (ADR-0108 R2)."
         )
     if any(v.probe in base_probes for v in variants):
-        raise PartitionRefused(
-            "a partition probe is word-for-word a battery probe (ADR-0108 R2)."
-        )
+        raise PartitionRefused("a partition probe is word-for-word a battery probe (ADR-0108 R2).")
     digests = [scenario_digest(v) for v in variants]
     if len(set(digests)) != len(digests):
         raise PartitionRefused("two partition scenarios share a digest.")
@@ -296,9 +314,7 @@ def check_disjoint(
 # --- scope: the forge's current instruction sets (R3) -------------------------
 
 
-async def current_never_do(
-    session: AsyncSession, forge_id: str
-) -> dict[str, list[str]]:
+async def current_never_do(session: AsyncSession, forge_id: str) -> dict[str, list[str]]:
     """moduleId -> neverDo of the LIVE instruction set per module (ADR-0125)."""
     return {
         module: list(row.neverDo)
@@ -426,9 +442,7 @@ async def author_partition(
     return partition_id
 
 
-async def seal_partition(
-    session: AsyncSession, partition_id: str, sealed_by: str
-) -> str:
+async def seal_partition(session: AsyncSession, partition_id: str, sealed_by: str) -> str:
     """Seal an `authoring` partition. Returns its content digest.
 
     ADR-0113. `sealed_by` is a named human and never the author. The seal,
@@ -477,6 +491,9 @@ async def seal_partition(
     partition.status = "sealed"
     partition.sealedAt = _now()
     partition.sealedBy = sealed_by
+    # ADR-0143. The verdict rule is the partition's, fixed here: a later rule never
+    # changes what this partition's verdicts mean.
+    partition.verdictRule = PARTITION_VERDICT_RULE
     session.add(
         HeldOutPartitionSeal(
             partitionId=partition_id,
@@ -513,9 +530,7 @@ def _lost_the_race(exc: IntegrityError) -> bool:
     return "one_sealed_per_venture" in text or "HeldOutPartition.ventureId" in text
 
 
-async def _retire_sealed(
-    session: AsyncSession, venture_id: str, *, keep: str
-) -> list[str]:
+async def _retire_sealed(session: AsyncSession, venture_id: str, *, keep: str) -> list[str]:
     """Retire the venture's sealed partitions other than `keep`. Their ids."""
     ids = list(
         (
@@ -532,9 +547,7 @@ async def _retire_sealed(
     )
     if ids:
         await session.execute(
-            update(HeldOutPartition)
-            .where(HeldOutPartition.id.in_(ids))
-            .values(status="retired")
+            update(HeldOutPartition).where(HeldOutPartition.id.in_(ids)).values(status="retired")
         )
     return ids
 

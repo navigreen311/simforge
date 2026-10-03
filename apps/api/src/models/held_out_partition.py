@@ -69,6 +69,10 @@ class HeldOutPartition(Base):
         ),
         CheckConstraint(SEALER_IS_NOT_AUTHOR_SQL, name="held_out_partition_sealer_is_not_author"),
         CheckConstraint(A_SEAL_NAMES_ITS_SEALER_SQL, name="held_out_partition_seal_names_sealer"),
+        CheckConstraint(
+            '"verdictRule" IS NULL OR "verdictRule" IN (1, 2)',
+            name="held_out_partition_verdict_rule",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -90,6 +94,9 @@ class HeldOutPartition(Base):
     #: stored at authoring, so a later builder does not change them; graded only
     #: while this is the current version. Null before the column: not graded.
     protocolVersion: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: ADR-0143. The verdict rule stamped at seal. Null - sealed before the rule - is rule 1,
+    #: zero tolerance; rule 2 tolerates one slip per agent (`partition_tolerance`).
+    verdictRule: Mapped[int | None] = mapped_column(Integer, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sealedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: ADR-0113 ruling 1. A named human, never the author. Null while authoring.
@@ -124,6 +131,10 @@ class HeldOutPartitionVerdict(Base):
             "verdict IN ('PASS', 'FAIL', 'NOT_RUN', 'IN_PROGRESS', 'TIMEOUT')",
             name="held_out_partition_verdict_value",
         ),
+        CheckConstraint(
+            '"slipCount" IS NULL OR "slipCount" >= 0',
+            name="held_out_partition_verdict_slip_count",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -148,6 +159,9 @@ class HeldOutPartitionVerdict(Base):
     #: ADR-0121. Rows of one sitting share this: the scheduled three-seed sitting, or one
     #: operator re-sit. Null on rows written before the column.
     sittingId: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    #: ADR-0143. The sitting's slips when every FAIL in it is one; null when any FAIL is hard,
+    #: on IN_PROGRESS / TIMEOUT / NOT_RUN rows, and on rows written before the column.
+    slipCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     decidedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

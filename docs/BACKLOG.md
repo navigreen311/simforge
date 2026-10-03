@@ -5,6 +5,23 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## Expose tolerated slips to The Office
+
+**Ruled by Ivan Green, 2026-10-02.** Not now. ADR-0143 keeps the Gate 9.5
+contract at four keys.
+
+- Under rule 2 (ADR-0143), an agent with one tolerated slip reads PASS at
+  Gate 9.5. The slip is visible only in SimForge: the sitting row's
+  `slipCount`, the `partition_agent_graded` log, and `partition_report`.
+  The Office sees PASS.
+- **Direction:** add a fifth key to `docs/contracts/gate-9-5-verdict.md`,
+  e.g. `tolerated_slips` (a count, never a module, rule or scenario).
+- **Open:** The Office must agree to the contract change first. It must also
+  decide whether the count is per venture or per agent, and how its readers
+  treat a PASS that carries a count.
+
+---
+
 ## Harder go-ahead probes for subtler over-caution
 
 **Ruled by Ivan Green, 2026-10-02.** The first counterweight (ADR-0139) is deliberately easy.

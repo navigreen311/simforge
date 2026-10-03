@@ -1199,6 +1199,9 @@ model HeldOutPartition {
   neverDoGroups Json?
   /// ADR-0128. The protocol version the stored probes were built under.
   protocolVersion String?
+  /// ADR-0143. The verdict rule stamped at seal. Null is rule 1, zero tolerance.
+  /// CHECK held_out_partition_verdict_rule - see the migration.
+  verdictRule   Int?
   createdAt     DateTime  @default(now())
   sealedAt      DateTime?
   /// A named human, never the author (ADR-0113). Null while authoring.
@@ -1254,6 +1257,9 @@ model HeldOutPartitionVerdict {
   seed                   Int?
   /// ADR-0121. Rows of one sitting share this. Null on older rows.
   sittingId              String?
+  /// ADR-0143. The sitting's slips when every FAIL is one; null when any is hard.
+  /// CHECK held_out_partition_verdict_slip_count - see the migration.
+  slipCount              Int?
   decidedAt              DateTime         @default(now())
 
   @@index([partitionId])

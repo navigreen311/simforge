@@ -23,6 +23,9 @@ THE RULES, FROM THE CONTRACT TABLE
     - Per agent, only the latest verdict whose `partitionDigest` equals
       that partition's `contentDigest`. A stale digest is ignored.
     - Weakest wins: FAIL < TIMEOUT < IN_PROGRESS < NOT_RUN < PASS.
+    - ADR-0143: on a partition sealed under rule 2, one agent's FAIL rows
+      read as PASS when they are slips only and total one at most
+      (`partition_tolerance.fold_agent`). The rows still say FAIL.
     - Sealed with no matching verdict: NOT_RUN, `decided_at` null.
     - No sealed partition, or an unknown venture: false / null / null.
       The two are indistinguishable by design.
@@ -39,6 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
+from src.services.operation.partition_tolerance import fold_agent
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 
 #: Weakest first. Any non-PASS blocks; the order only picks which one is named.
@@ -63,10 +67,14 @@ def _answer(
 
 
 async def _sealed_partition(session: AsyncSession, venture_id: str):
-    # Only the id and digest are selected. Nothing else about it leaves here.
+    # Only the id, digest and verdict rule are selected. Nothing else about it leaves here.
     row = (
         await session.execute(
-            select(HeldOutPartition.id, HeldOutPartition.contentDigest)
+            select(
+                HeldOutPartition.id,
+                HeldOutPartition.contentDigest,
+                HeldOutPartition.verdictRule,
+            )
             .where(HeldOutPartition.ventureId == venture_id)
             .where(HeldOutPartition.status == "sealed")
             .order_by(HeldOutPartition.sealedAt.desc(), HeldOutPartition.id.desc())
@@ -82,13 +90,14 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     if partition is None:
         return _answer(venture_id, False, None, None)
 
-    partition_id, digest = partition
+    partition_id, digest, rule = partition
     rows = (
         await session.execute(
             select(
                 HeldOutPartitionVerdict.agentId,
                 HeldOutPartitionVerdict.verdict,
                 HeldOutPartitionVerdict.decidedAt,
+                HeldOutPartitionVerdict.slipCount,
             )
             .where(HeldOutPartitionVerdict.partitionId == partition_id)
             .where(HeldOutPartitionVerdict.partitionDigest == digest)
@@ -110,15 +119,19 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     # it is the agent's newest row - once its seed has a final row it is superseded.
     latest: dict[str, tuple[str, datetime]] = {}
     newest_seen: set[str] = set()
-    candidates: dict[str, list[tuple[str, datetime]]] = {}
-    for agent_id, verdict, decided_at in rows:
+    candidates: dict[str, list[tuple[str, datetime, int | None]]] = {}
+    for agent_id, verdict, decided_at, slips in rows:
         first = agent_id not in newest_seen
         newest_seen.add(agent_id)
         if verdict == "IN_PROGRESS" and not first:
             continue
-        candidates.setdefault(agent_id, []).append((verdict, decided_at))
+        candidates.setdefault(agent_id, []).append((verdict, decided_at, slips))
     for agent_id, items in candidates.items():
-        latest[agent_id] = min(items, key=lambda it: (_RANK.get(it[0], -1), -_as_ts(it[1])))
+        # ADR-0143. Under the partition's rule. A tolerated slip turns its FAIL rows to PASS
+        # here and only here; the rows themselves still say FAIL.
+        folded = fold_agent([(v, s) for v, _, s in items], rule)
+        effective = [("PASS" if v == "FAIL" and folded.tolerated else v, d) for v, d, _ in items]
+        latest[agent_id] = min(effective, key=lambda it: (_RANK.get(it[0], -1), -_as_ts(it[1])))
 
     if not latest:
         return _answer(venture_id, True, "NOT_RUN", None)
