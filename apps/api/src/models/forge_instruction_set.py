@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -39,6 +39,9 @@ class ForgeInstructionSet(Base):
     neverDo: Mapped[list] = mapped_column(JSON, default=list)
     #: ADR-0137. Look-alike groups, rule numbers 1-based. Null before the column.
     neverDoGroups: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0146. Whether the module changes anything when it runs, as The Office declared it.
+    #: Null - not declared - is read as mutating: PROCEED never joins a set of acceptable acts.
+    mutating: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     #: THE SECTIONS THE KEYS ARE WRITTEN AGAINST (ADR-0107 ruling 1). `{section_name: prose}`.
     #:

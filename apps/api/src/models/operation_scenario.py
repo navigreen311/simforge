@@ -116,6 +116,9 @@ class OperationScenarioSubmission(Base):
     recordClaim: Mapped[str | None] = mapped_column(Text, nullable=True)
     recordClaimOptions: Mapped[list | None] = mapped_column(JSON, nullable=True)
     expectedCaveat: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: ADR-0146. Every act that passes the act check, the expected one included. Null: just
+    #: `expectedAct`, the grading before the field.
+    acceptableActs: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     ordinal: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -965,6 +965,8 @@ model ForgeInstructionSet {
   neverDo            Json     @default("[]")
   /// ADR-0137. Look-alike groups, rule numbers 1-based.
   neverDoGroups      Json?
+  /// ADR-0146. Whether the module mutates, as declared. Null is read as mutating.
+  mutating           Boolean?
   sections           Json?
   createdAt          DateTime @default(now())
   /// ADR-0125. When The Office last submitted a curriculum naming this set. The live
@@ -1036,6 +1038,8 @@ model OperationScenarioSubmission {
   recordClaim           String?
   recordClaimOptions    Json?
   expectedCaveat        String?
+  /// ADR-0146. Every act that passes the act check; null is just expectedAct.
+  acceptableActs        Json?
  @default(0)
 
   createdAt DateTime @default(now())
