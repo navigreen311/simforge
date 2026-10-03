@@ -95,6 +95,11 @@ from src.services.operation.held_out_scoring import (
 )
 from src.services.operation.live_instructions import live_set, live_sets
 from src.services.operation.look_alike_groups import in_same_group
+from src.services.operation.partition_tolerance import (
+    RULE_ZERO_TOLERANCE,
+    fold_agent,
+    slip_count,
+)
 from src.services.operation.rubric import (
     OPERATION_RUBRIC_VERSION,
     PARTITION_PROTOCOL_VERSION,
@@ -613,6 +618,7 @@ class _Ledger:
         *,
         seed: int | None = None,
         sitting_id: str | None = None,
+        slips: int | None = None,
     ) -> datetime:
         at = utcnow()
         if after is not None and at <= after:
@@ -631,6 +637,8 @@ class _Ledger:
             rubricVersion=OPERATION_RUBRIC_VERSION,
             seed=seed,
             sittingId=sitting_id,
+            # ADR-0143. Written on the sitting row; the row's verdict is never rewritten.
+            slipCount=slips,
             decidedAt=at,
         )
         self.session.add(row)
@@ -811,6 +819,8 @@ async def grade_partition(
     pid, forge, digest = partition.id, partition.forgeId, partition.contentDigest
     authored_from = dict(partition.instructionHashes or {})
     authored_groups = dict(partition.neverDoGroups or {})
+    # ADR-0143. The rule stamped at seal; null is rule 1, zero tolerance.
+    verdict_rule = partition.verdictRule
     built_under = partition.protocolVersion
     # ADR-0128. Before anything else is read or put, and nothing is written.
     if built_under is None:
@@ -932,7 +942,7 @@ async def grade_partition(
         instruction_hash = instructions_digest(sets)
         sitting_id = _new_id()
         put += 1
-        results: list[str] = []
+        results: list[tuple[str, int | None]] = []
         for seed in seeds:
             last_at = await ledger.append(
                 agent.agent_id,
@@ -962,6 +972,12 @@ async def grade_partition(
                 log.warning("partition_agent_not_graded", error=type(exc).__name__)
                 verdict = NOT_RUN
                 outcomes = []
+            # ADR-0143. Counted on every graded sitting, whatever the partition's rule.
+            slips = (
+                slip_count((o.outcome, o.scenario_class, o.failure_modes) for o in outcomes)
+                if verdict in (PASS, FAIL)
+                else None
+            )
             last_at = await ledger.append(
                 agent.agent_id,
                 verdict,
@@ -970,15 +986,21 @@ async def grade_partition(
                 outcomes,
                 seed=seed,
                 sitting_id=sitting_id,
+                slips=slips,
             )
-            results.append(verdict)
+            results.append((verdict, slips))
+        folded = fold_agent(results, verdict_rule)
         # The verdict is logged; never a reason, a module or a scenario.
         log.info(
             "partition_agent_graded",
             partition=pid,
             agent=agent.agent_id,
             seeds=list(seeds),
-            verdict=weakest(results),
+            verdict=folded.verdict,
+            # ADR-0143. A tolerated slip is never folded silently: counted, and named.
+            slips=folded.slips,
+            verdict_detail=folded.detail,
+            verdict_rule=verdict_rule or RULE_ZERO_TOLERANCE,
             resit=resit,
         )
 
