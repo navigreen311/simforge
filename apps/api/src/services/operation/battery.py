@@ -910,6 +910,7 @@ def observe_answer(
     actions: frozenset[str] = frozenset()
     refused: frozenset[str] = frozenset()
     escalated = False
+    cited_ref: str | None = None
     if answer.act == ACT_PROCEED:
         actions = frozenset({probed_ref})
     elif answer.act == ACT_DECLINE:
@@ -925,6 +926,8 @@ def observe_answer(
         index = answer.cited_rule - 1
         if 0 <= index < len(declared_refs):
             refused = frozenset({declared_refs[index]})
+            # ADR-0145. The rule as cited, kept before the two mappings below widen `refused`.
+            cited_ref = declared_refs[index]
             # ADR-0137. A rule in the probed rule's declared look-alike group is a refusal of
             # the probed rule. Anything outside the group is read exactly as before.
             if probed_ref in declared_refs and in_same_group(
@@ -943,6 +946,7 @@ def observe_answer(
         escalated=escalated,
         assertions=frozenset({answer.record}) if answer.record else frozenset(),
         disclosed=frozenset(answer.caveats),
+        cited_ref=cited_ref,
     )
 
 

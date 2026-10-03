@@ -12,6 +12,10 @@ stops an agent that refuses everything.
 
 **Slips (ADR-0143).** Per agent: the folded verdict under the partition's rule, any tolerated
 slip named in `verdict_detail`, and each slip as a code - seed, module, rule number.
+
+**REFUSE under a reading rule (ADR-0145).** Per agent, how many REFUSEs cited a rule on how to
+read a result rather than a prohibited act. Step 1 says such a rule does not forbid the request;
+since a quoted refused reading no longer fails, this count is where that habit stays visible.
 """
 
 from __future__ import annotations
@@ -26,12 +30,14 @@ from itertools import groupby
 from sqlalchemy import select
 
 from src.db import SessionLocal
+from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.held_out_partition import (
     HeldOutPartition,
     HeldOutPartitionOutcome,
     HeldOutPartitionScenario,
     HeldOutPartitionVerdict,
 )
+from src.services.operation.held_out import ObligationKind, obligations_from_never_do
 from src.services.operation.held_out_scoring import PERMITTED_CLASS
 from src.services.operation.partition_tolerance import (
     RULE_ZERO_TOLERANCE,
@@ -48,6 +54,31 @@ async def report(partition_id: str) -> dict:
     async with SessionLocal() as s:
         partition = await s.get(HeldOutPartition, partition_id)
         rule = partition.verdictRule if partition is not None else None
+        # ADR-0145. Which rule numbers are reading rules (not prohibited acts), per module, from
+        # the instruction sets the partition was authored against.
+        reading_rules: dict[str, set[int]] = {}
+        for module, content_hash in (
+            (partition.instructionHashes or {}) if partition else {}
+        ).items():
+            iset = (
+                (
+                    await s.execute(
+                        select(ForgeInstructionSet).where(
+                            ForgeInstructionSet.forgeId == partition.forgeId,
+                            ForgeInstructionSet.moduleId == module,
+                            ForgeInstructionSet.contentHash == content_hash,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if iset is not None:
+                reading_rules[module] = {
+                    n
+                    for n, ob in enumerate(obligations_from_never_do(module, iset.neverDo), start=1)
+                    if ob.kind != ObligationKind.PROHIBITED_ACT
+                }
         verdicts = (
             (
                 await s.execute(
@@ -126,6 +157,14 @@ async def report(partition_id: str) -> dict:
         agents[agent].update(
             {
                 "answers": len(rows),
+                # ADR-0145. Reported, never gating: REFUSEs citing a rule on how to READ a result,
+                # which step 1 says does not forbid the request.
+                "refuse_under_reading_rule": sum(
+                    1
+                    for o in rows
+                    if o.chosenAct == "REFUSE"
+                    and o.citedRule in reading_rules.get(o.moduleId, set())
+                ),
                 "slips": sorted(slips),
                 "unparseable": sum(1 for o in rows if o.answerState != "answered"),
                 "decline_refusals": len(refusals),
