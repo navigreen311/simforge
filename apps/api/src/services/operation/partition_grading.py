@@ -74,9 +74,11 @@ from src.services.operation.battery import (
     ACT_REFUSE,
     ANSWER_SCHEMA,
     BOOTSTRAP_FORGE_IDS,
+    FINDING_PLACEHOLDER,
     PARTITION_PROTOCOL,
     AgentAnswer,
     battery_system_context,
+    is_placeholder_record,
     observe_answer,
     parse_answer,
 )
@@ -416,6 +418,9 @@ async def put_partition(
                     act_refs=act_refs,
                 )
                 verdict, findings = decided(grade_scenario(scenario, observed))
+                # ADR-0151. Reported on the outcome, never graded: the verdict above is final.
+                if is_placeholder_record(answer.record):
+                    findings = (*findings, FINDING_PLACEHOLDER)
                 state = "answered"
                 shape = None
                 choice = answer_choice(

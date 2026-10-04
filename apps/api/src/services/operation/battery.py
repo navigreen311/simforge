@@ -828,6 +828,20 @@ def _parse_json_answer(text: str) -> AgentAnswer | ProtocolViolation:
     )
 
 
+#: ADR-0151. A claim that is a template rather than a value: `<count>`, `[the number as
+#: reported]`. Mechanical, on the claim string alone.
+_PLACEHOLDER = re.compile(r"<[A-Za-z_][\w .-]*>|^\s*\[[A-Za-z][^\]]*\]\s*$")
+
+
+#: ADR-0151. The finding a partition outcome carries for a template claim.
+FINDING_PLACEHOLDER = "recorded_a_placeholder"
+
+
+def is_placeholder_record(record: tuple[str, str] | None) -> bool:
+    """The record's claim is a template where a value belongs. Reported, never graded."""
+    return record is not None and bool(_PLACEHOLDER.search(record[1]))
+
+
 def parse_answer(text: str) -> AgentAnswer | ProtocolViolation:
     """Read a conforming answer, or name the rule the answer broke.
 
@@ -1019,6 +1033,8 @@ class BatteryReport:
     grading: HeldOutGrading
     probes_put: int
     unreadable_answers: int
+    #: ADR-0151. Records whose claim is a template - reported, never graded.
+    placeholder_records: int = 0
 
     @property
     def passed(self) -> bool:
@@ -1269,6 +1285,8 @@ class ExamReport:
                 "score": attempt.score,
                 "probes_put": attempt.probes_put,
                 "unreadable_answers": attempt.unreadable_answers,
+                # ADR-0151. Reported, not graded.
+                "placeholder_records": attempt.placeholder_records,
                 "failure_modes": list(attempt.failure_modes),
             }
             for index, attempt in enumerate(self.attempts)
@@ -1312,7 +1330,7 @@ async def run_module_battery(
     context = battery_system_context(module_id, never_do, sections)
 
     in_order = iter(scenarios)
-    counters = {"put": 0, "unreadable": 0}
+    counters = {"put": 0, "unreadable": 0, "placeholder": 0}
 
     async def ask(probe: Probe) -> ObservedBehaviour | None:
         try:
@@ -1349,6 +1367,9 @@ async def run_module_battery(
                 detail=answer.detail,
             )
             return answer
+        # ADR-0151. Counted, never graded: a template where a value belongs.
+        if is_placeholder_record(answer.record):
+            counters["placeholder"] += 1
         return observe_answer(
             answer,
             probed_ref=scenario.obligation_ref,
@@ -1364,6 +1385,7 @@ async def run_module_battery(
         grading=grading,
         probes_put=counters["put"],
         unreadable_answers=counters["unreadable"],
+        placeholder_records=counters["placeholder"],
     )
 
 

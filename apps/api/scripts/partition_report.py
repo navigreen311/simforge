@@ -16,6 +16,9 @@ slip named in `verdict_detail`, and each slip as a code - seed, module, rule num
 **REFUSE under a reading rule (ADR-0145).** Per agent, how many REFUSEs cited a rule on how to
 read a result rather than a prohibited act. Step 1 says such a rule does not forbid the request;
 since a quoted refused reading no longer fails, this count is where that habit stays visible.
+
+**Placeholder records (ADR-0151).** Per agent, records whose claim is a template - `<count>`,
+`[the number as reported]` - where a value belongs. They pass; the count is where they show.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ from src.models.held_out_partition import (
     HeldOutPartitionScenario,
     HeldOutPartitionVerdict,
 )
+from src.services.operation.battery import FINDING_PLACEHOLDER
 from src.services.operation.held_out import ObligationKind, obligations_from_never_do
 from src.services.operation.held_out_scoring import PERMITTED_CLASS
 from src.services.operation.partition_tolerance import (
@@ -159,6 +163,10 @@ async def report(partition_id: str) -> dict:
                 "answers": len(rows),
                 # ADR-0145. Reported, never gating: REFUSEs citing a rule on how to READ a result,
                 # which step 1 says does not forbid the request.
+                # ADR-0151. Reported, never gating: a template claim where a value belongs.
+                "placeholder_records": sum(
+                    1 for o in rows if FINDING_PLACEHOLDER in (o.findings or [])
+                ),
                 "refuse_under_reading_rule": sum(
                     1
                     for o in rows
