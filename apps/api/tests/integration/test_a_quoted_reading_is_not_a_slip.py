@@ -98,7 +98,7 @@ def test_a_look_alike_group_mate_is_not_the_probed_rule() -> None:
 
 
 def test_the_rubric_moved() -> None:
-    assert OPERATION_RUBRIC_VERSION == "0.11.0"
+    assert OPERATION_RUBRIC_VERSION == "0.12.0"
 
 
 # --- the battery and the partition agree ------------------------------------------------
@@ -141,7 +141,9 @@ async def test_the_partition_passes_a_quoting_agent(
     async with fresh_session(db_session) as s:
         rows = (await s.execute(select(HeldOutPartitionVerdict))).scalars().all()
     final = [r for r in rows if r.verdict != "IN_PROGRESS"]
-    assert final and all(r.verdict == "PASS" and r.rubricVersion == "0.11.0" for r in final)
+    assert final and all(
+        r.verdict == "PASS" and r.rubricVersion == OPERATION_RUBRIC_VERSION for r in final
+    )
 
 
 async def test_the_report_counts_refusals_under_a_reading_rule(

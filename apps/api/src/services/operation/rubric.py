@@ -67,6 +67,9 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
 #:
+#: **0.12.0 (ADR-0149).** ADR-0147's exam tolerance: one slip across an exam's attempts is
+#: forgiven before they roll up, and the certification records it.
+#:
 #: **0.11.0 (ADR-0145).** A silent_failure REFUSE citing exactly the probed rule, whose record is
 #: that rule's own forbidden subject and reading, is quoting the refused claim: not an assertion.
 #:
@@ -87,7 +90,11 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: verdict at 0.5.0 and one at 0.6.0 were computed by different rules.
 #:
 #: 0.3.0 was ADR-0096's split into two channels. 0.2.0 was everything before it.
-OPERATION_RUBRIC_VERSION = "0.11.0"
+#: WHEN THIS MOVES (ADR-0149). A change to `grade_scenario` or `battery_for_run` - how a probe is
+#: graded, or how an exam's attempts become a verdict - bumps it. A change confined to one key's
+#: content does not: the key travels on the certification as `scenario_set_hash`. Enforced by
+#: `test_a_grader_change_bumps_the_rubric`, which pins both functions to this version.
+OPERATION_RUBRIC_VERSION = "0.12.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:
