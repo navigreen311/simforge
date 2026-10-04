@@ -1161,6 +1161,10 @@ model OperationCertification {
   /// only on a provisional row. Recorded rather than recomputed by every reader.
   withheldBecause       Json?
   failureModesObserved  Json?
+  /// ADR-0147. Slips forgiven on this exam (0 or 1); null before the rule.
+  toleratedSlips        Int?
+  /// ADR-0147. Every non-PASS probe of every attempt with its reasons. Codes only.
+  scenarioReasons       Json?
   versionSensitivity    Json? // {module: [major|minor|patch]} (Rev 2 Q4)
   expiresAt             DateTime?
 

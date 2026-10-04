@@ -478,6 +478,12 @@ def grade_module(
         )
         for s in scenarios
     )
+    return grading_from_verdicts(module_id, verdicts)
+
+
+def grading_from_verdicts(module_id: str, verdicts: tuple[ScenarioVerdict, ...]) -> HeldOutGrading:
+    """The rubric rows a set of probe verdicts rolls into. Shared by `grade_module` and by an
+    exam that tolerated a slip (ADR-0147), so a forgiven verdict rolls up by the same rule."""
     # ADR-0096 - one row per (dimension, CHANNEL). `verdicts` stays whole-probe, because
     # `HeldOutGrading.passed` and the coverage checks ask about probes rather than channels.
     by_dimension: dict[tuple[str, str], list[ScenarioVerdict]] = {}

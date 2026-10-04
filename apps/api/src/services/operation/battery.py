@@ -115,6 +115,13 @@ from src.services.agent_runtime.agent_identity import (
 from src.services.agent_runtime.examiner import check_examiner
 from src.services.agent_runtime.llm_client import provider_label
 from src.services.agent_runtime.runtime import PROMPT_VERSION, AgentRuntime
+from src.services.operation.exam_tolerance import (
+    HALF_HELD_OUT,
+    HALF_KEYS,
+    forgive,
+    scenario_reasons,
+)
+from src.services.operation.exam_tolerance import decide as decide_tolerance
 from src.services.operation.held_out import (
     HeldOutScenario,
     ObligationKind,
@@ -124,6 +131,7 @@ from src.services.operation.held_out import (
 )
 from src.services.operation.held_out_scoring import (
     HELD_OUT_PASS_THRESHOLD,
+    PROTOCOL_REASONS,
     REASON_PROTOCOL_MULTIPLE_ACT,
     REASON_PROTOCOL_MULTIPLE_RECORD,
     REASON_PROTOCOL_NO_ACT,
@@ -136,6 +144,7 @@ from src.services.operation.held_out_scoring import (
     Probe,
     ProtocolViolation,
     ScenarioVerdict,
+    grading_from_verdicts,
     run_held_out_battery_async,
 )
 from src.services.operation.look_alike_groups import in_same_group
@@ -1350,6 +1359,10 @@ def build_gate_result_request(
     #: against what its keys were written against. `None` only from a caller that cannot know,
     #: which is a hand-built payload rather than a battery.
     instruction_sections: dict | None = None,
+    #: ADR-0147. 0 or 1 from a battery; None from a caller that applied no tolerance.
+    tolerated_slips: int | None = None,
+    #: ADR-0147. Every non-PASS probe of every attempt, codes only.
+    scenario_reasons: list[dict] | None = None,
 ) -> GateResultRequest:
     """Turn one battery's report into the payload `POST /operation/gate-result` accepts.
 
@@ -1506,6 +1519,8 @@ def build_gate_result_request(
         # to see WHICH attempt failed, and a reader who sees a PASS has to be able to see that
         # three attempts stood behind it rather than one lucky sample at temperature 0.7.
         attempts=report.attempt_records,
+        tolerated_slips=tolerated_slips,
+        scenario_reasons=scenario_reasons,
     )
     return GateResultRequest(
         instruction_set_ref=InstructionSetRef(
@@ -1720,6 +1735,7 @@ async def battery_for_run(
     # gradeable, and a submitted-only run would be the mirror image of today's discipline-only one,
     # needing a second clause on the breadth rule to catch. Everything this needs is already in
     # scope here - the run, the gates, the production-settings runtime and the never-do list.
+    key_attempts: list[tuple[ScenarioVerdict, ...]] = []
     submitted, submitted_set_hash, sections_required = await run_submitted_battery(
         session,
         run=run,
@@ -1728,7 +1744,37 @@ async def battery_for_run(
         runtime=at_production,
         seed=seed,
         sections=instruction_set.sections,
+        attempts_out=key_attempts,
     )
+
+    # ADR-0147. One slip across every attempt of both halves is forgiven, BEFORE the attempts
+    # roll up, so the rubric rows, the score and the verdict all read the forgiven exam. The
+    # reasons are taken first, from the verdicts as graded, so the forgiven one is still listed.
+    held_out_verdicts = [a.grading.verdicts for a in attempts]
+    tolerance = decide_tolerance(held_out_verdicts, key_attempts)
+    reasons = scenario_reasons(held_out_verdicts, key_attempts, tolerance, seed=seed)
+    slip = tolerance.tolerated
+    if slip is not None and slip.half == HALF_HELD_OUT:
+        before = attempts[slip.attempt]
+        kept = forgive(before.grading.verdicts, slip)
+        unreadable = any(
+            r in PROTOCOL_REASONS
+            for v in before.grading.verdicts
+            if v.obligation_ref == slip.ref and v.scenario_class == slip.scenario_class
+            for r in v.reasons
+        )
+        attempts[slip.attempt] = replace(
+            before,
+            grading=replace(
+                grading_from_verdicts(before.grading.module_id, kept),
+                exercised_refs=before.grading.exercised_refs,
+            ),
+            unreadable_answers=before.unreadable_answers - (1 if unreadable else 0),
+        )
+        report = ExamReport.of(*attempts)
+    elif slip is not None and slip.half == HALF_KEYS:
+        key_attempts[slip.attempt] = forgive(key_attempts[slip.attempt], slip)
+        submitted = merge_submitted_attempts(key_attempts)
 
     log.info(
         "exam_ran",
@@ -1744,6 +1790,9 @@ async def battery_for_run(
         passed=report.passed,
         submitted_scenarios=len(submitted),
         submitted_failed=sum(1 for v in submitted if v.verdict == VERDICT_FAIL),
+        # ADR-0147. Counted and named, never folded silently.
+        slips=len(tolerance.slips),
+        tolerated_slips=tolerance.tolerated_count,
     )
     return build_gate_result_request(
         report=report,
@@ -1781,6 +1830,9 @@ async def battery_for_run(
         ),
         # ADR-0092 ruling 4. Travels with the halves it describes.
         scenario_set_hash=submitted_set_hash,
+        # ADR-0147.
+        tolerated_slips=tolerance.tolerated_count,
+        scenario_reasons=reasons,
     )
 
 
@@ -1795,6 +1847,9 @@ async def run_submitted_battery(
     #: ADR-0107 ruling 1 - the instruction sections the agent is shown. `None` when the
     #: submitter sent none; the certification then records the gap rather than hiding it.
     sections: Mapping[str, str] | None = None,
+    #: ADR-0147. The caller's list, filled with each attempt's verdicts before the merge, so an
+    #: exam can count slips per attempt. The merged return is unchanged.
+    attempts_out: list[tuple[ScenarioVerdict, ...]] | None = None,
 ) -> tuple[tuple[ScenarioVerdict, ...], str | None, list[str]]:
     """The submitted half: put each stored scenario's situation, grade the answer by transcription.
 
@@ -1846,6 +1901,8 @@ async def run_submitted_battery(
             )
             answers[key.ref] = parse_answer(response.content)
         attempts.append(grade_submitted_module(keys, answers))
+    if attempts_out is not None:
+        attempts_out.extend(attempts)
     return merge_submitted_attempts(attempts), set_hash, sections_required_by(keys)
 
 
