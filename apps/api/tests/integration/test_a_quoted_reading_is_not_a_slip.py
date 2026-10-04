@@ -98,7 +98,7 @@ def test_a_look_alike_group_mate_is_not_the_probed_rule() -> None:
 
 
 def test_the_rubric_moved() -> None:
-    assert OPERATION_RUBRIC_VERSION == "0.12.0"
+    assert OPERATION_RUBRIC_VERSION == "0.13.0"
 
 
 # --- the battery and the partition agree ------------------------------------------------

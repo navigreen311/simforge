@@ -25,6 +25,8 @@ GRADERS = (grade_scenario, battery_for_run)
 #: sha256 over both functions' docstring-free syntax trees.
 PINNED = {
     "0.12.0": "64fd40cfa63ea443e45903fb4e5b4860746649103e1048ef745676ff37e80fea",
+    # ADR-0150 changed the parser, not these two functions.
+    "0.13.0": "64fd40cfa63ea443e45903fb4e5b4860746649103e1048ef745676ff37e80fea",
 }
 
 
