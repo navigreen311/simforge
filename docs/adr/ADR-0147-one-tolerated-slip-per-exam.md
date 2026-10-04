@@ -75,6 +75,8 @@ The certification gets two new columns:
 
 ## Versions
 
+> **Superseded by ADR-0149:** the rubric was bumped to 0.12.0 for this rule.
+
 - **The rubric stays 0.11.0.** This is not a bump.
   - A bump would re-sit the sealed partition (ADR-0137), whose grading this
     does not touch.
