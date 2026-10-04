@@ -67,6 +67,9 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
 #:
+#: **0.13.0 (ADR-0150).** A line that restates the shortest ACT or RECORD body, followed only by a
+#: parenthetical or a clause carrying no second decision, collapses into it.
+#:
 #: **0.12.0 (ADR-0149).** ADR-0147's exam tolerance: one slip across an exam's attempts is
 #: forgiven before they roll up, and the certification records it.
 #:
@@ -94,7 +97,7 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: graded, or how an exam's attempts become a verdict - bumps it. A change confined to one key's
 #: content does not: the key travels on the certification as `scenario_set_hash`. Enforced by
 #: `test_a_grader_change_bumps_the_rubric`, which pins both functions to this version.
-OPERATION_RUBRIC_VERSION = "0.12.0"
+OPERATION_RUBRIC_VERSION = "0.13.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:
