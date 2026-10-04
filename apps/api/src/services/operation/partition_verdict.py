@@ -29,6 +29,11 @@ THE RULES, FROM THE CONTRACT TABLE
     - Sealed with no matching verdict: NOT_RUN, `decided_at` null.
     - No sealed partition, or an unknown venture: false / null / null.
       The two are indistinguishable by design.
+    - ADR-0148: a sealed partition whose recorded instruction hashes no
+      longer match the live sets answers NOT_RUN, `decided_at` null, until a
+      new partition is sealed. Its scenarios number rules that moved, so its
+      verdicts describe instructions no longer in force - the same reason
+      the grader refuses to put it (ADR-0125).
 
 Pure read. No flush, no cache: every call asks the database.
 """
@@ -42,6 +47,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
+from src.services.operation.live_instructions import live_sets
 from src.services.operation.partition_tolerance import fold_agent
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 
@@ -67,13 +73,16 @@ def _answer(
 
 
 async def _sealed_partition(session: AsyncSession, venture_id: str):
-    # Only the id, digest and verdict rule are selected. Nothing else about it leaves here.
+    # Only these are selected. Nothing else about it leaves here, and none of it is scenario
+    # content: the hashes are the instruction sets' own identities (ADR-0125).
     row = (
         await session.execute(
             select(
                 HeldOutPartition.id,
                 HeldOutPartition.contentDigest,
                 HeldOutPartition.verdictRule,
+                HeldOutPartition.forgeId,
+                HeldOutPartition.instructionHashes,
             )
             .where(HeldOutPartition.ventureId == venture_id)
             .where(HeldOutPartition.status == "sealed")
@@ -90,7 +99,13 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     if partition is None:
         return _answer(venture_id, False, None, None)
 
-    partition_id, digest, rule = partition
+    partition_id, digest, rule, forge_id, authored_from = partition
+    # ADR-0148. Before any verdict is read: a partition authored from instructions that are no
+    # longer live answers nothing about the agents operating the live ones. Null hashes predate
+    # ADR-0125; such a partition is never graded and its sittings are not current, so it already
+    # reads NOT_RUN below.
+    if authored_from and await _instructions_moved(session, forge_id, authored_from):
+        return _answer(venture_id, True, "NOT_RUN", None)
     rows = (
         await session.execute(
             select(
@@ -147,6 +162,14 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     if verdict not in _RANK:
         verdict = "FAIL"
     return _answer(venture_id, True, verdict, _iso_utc(decided_at))
+
+
+async def _instructions_moved(
+    session: AsyncSession, forge_id: str, authored_from: dict[str, str]
+) -> bool:
+    """Any module whose live instruction set is not the one the partition was authored from."""
+    live = await live_sets(session, forge_id)
+    return any(m not in live or live[m].contentHash != h for m, h in authored_from.items())
 
 
 def _as_ts(dt: datetime) -> float:
