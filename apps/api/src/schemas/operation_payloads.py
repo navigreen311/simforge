@@ -383,6 +383,12 @@ class AgentRunOutcome(BaseModel):
     failure_modes_observed: list[str] = Field(default_factory=list)
     version_sensitivity: dict[str, list[str]] = Field(default_factory=dict)
     expires_at: datetime | None = None
+    #: ADR-0147. Slips forgiven on this exam: 0 or 1 from SimForge's battery. None when the
+    #: result was graded by something that applied no tolerance (a posted result, an old row).
+    tolerated_slips: int | None = None
+    #: ADR-0147. Every non-PASS probe of every attempt: half, seed, ref, class, verdict,
+    #: reasons, tolerated. Codes only - never a probe, a situation or an answer.
+    scenario_reasons: list[dict] | None = None
 
 
 class DepartmentRunOutcome(BaseModel):

@@ -46,6 +46,11 @@ class OperationCertification(Base):
             '"score" IS NULL OR "scoreMeasure" IS NOT NULL',
             name="OperationCertification_score_is_labelled",
         ),
+        # ADR-0147. Mirrored from the migration.
+        CheckConstraint(
+            '"toleratedSlips" IS NULL OR "toleratedSlips" IN (0, 1)',
+            name="operation_cert_tolerated_slips",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -168,6 +173,11 @@ class OperationCertification(Base):
     #: them. The same lesson as `rubricSpreadMeasure`, one column along.
     withheldBecause: Mapped[list | None] = mapped_column(JSON, nullable=True)
     failureModesObserved: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0147. Slips forgiven on this exam (0 or 1). Null: graded before the rule, or by
+    #: something that applied none - the row says which rule produced it.
+    toleratedSlips: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ADR-0147. Every non-PASS probe of every attempt with its reasons tuple. Codes only.
+    scenarioReasons: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Which version components (major/minor/patch) this cert is sensitive to, per module (Rev 2 Q4).
     versionSensitivity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     expiresAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

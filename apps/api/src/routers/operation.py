@@ -653,6 +653,9 @@ async def gate_result(
                 withheld if state == OperationState.PROVISIONAL.value and withheld else None
             ),
             failureModesObserved=list(outcome.failure_modes_observed),
+            # ADR-0147. Visible on every row a battery graded; null on rows graded before it.
+            toleratedSlips=outcome.tolerated_slips,
+            scenarioReasons=outcome.scenario_reasons,
             versionSensitivity=outcome.version_sensitivity or None,
             expiresAt=outcome.expires_at,
         )

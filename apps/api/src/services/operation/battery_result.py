@@ -140,6 +140,9 @@ async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None
                 getattr(c, "examAttempts", None)
             ),
             "failure_modes_observed": c.failureModesObserved,
+            # ADR-0147. Why an exam failed, per scenario and attempt, and what was forgiven.
+            "tolerated_slips": getattr(c, "toleratedSlips", None),
+            "scenario_reasons": getattr(c, "scenarioReasons", None),
             # ADR-0112. Recorded since ADR-0107, serialized by nothing until now.
             "instruction_sections": section_names(c.instructionSections),
             "created_at": c.createdAt.isoformat() if c.createdAt else None,
