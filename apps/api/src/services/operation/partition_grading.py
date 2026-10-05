@@ -59,7 +59,6 @@ from src.models.held_out_partition import (
     HeldOutPartitionScenario,
     HeldOutPartitionVerdict,
 )
-from src.models.operation_run import OperationRun
 from src.services.agent_runtime.agent_identity import check_agent_identity
 from src.services.agent_runtime.examiner import check_examiner
 from src.services.agent_runtime.llm_client import LLMResponse
@@ -97,6 +96,11 @@ from src.services.operation.held_out_scoring import (
 )
 from src.services.operation.live_instructions import live_set, live_sets
 from src.services.operation.look_alike_groups import in_same_group
+from src.services.operation.partition_roster import (
+    PartitionAgent,
+    partition_roster,
+    venture_of_run_ref,
+)
 from src.services.operation.partition_tolerance import (
     RULE_ZERO_TOLERANCE,
     fold_agent,
@@ -144,11 +148,6 @@ def weakest(verdicts: Sequence[str]) -> str | None:
 #: Read at call time, so a test can shorten it.
 PARTITION_AGENT_BUDGET_SECONDS: float = 1800.0
 
-#: The run-ref prefix The Office mints (`mint_run_ref`), venture in segment 2:
-#: `office:{venture_id}:{forge_id}:{target}:...`. Measured, ADR-0110.
-OFFICE_REF_PREFIX = "office"
-
-
 # =========================================================================
 # Reading the seam
 # =========================================================================
@@ -166,66 +165,22 @@ def scenario_from_body(body: Mapping[str, object]) -> HeldOutScenario:
     return HeldOutScenario(**fields)  # type: ignore[arg-type]
 
 
-def venture_of_run_ref(run_ref: str) -> str | None:
-    """The venture segment of an Office-minted run ref, or None.
-
-    The only place the operation path carries the venture (ADR-0058). A ref
-    not minted by The Office names no venture and selects no agent.
-    """
-    parts = (run_ref or "").split(":")
-    if len(parts) < 3 or parts[0] != OFFICE_REF_PREFIX or not parts[1]:
-        return None
-    return parts[1]
-
-
 # =========================================================================
-# Who is graded (ADR-0110, R3/R4)
+# Who is graded (ADR-0110, R3/R4; the roster is ADR-0152)
 # =========================================================================
-
-
-@dataclass(frozen=True, slots=True)
-class PartitionAgent:
-    """One agent of a venture on a forge, and the modules it operates there.
-
-    `agent_id` is the Village ref - the id the examiner resolves and the one
-    a probe is put to (ADR-0083: `villageAgentRef`, else `agentId`).
-    """
-
-    agent_id: str
-    modules: tuple[str, ...]
 
 
 async def agents_for_partition(
     session: AsyncSession, partition: HeldOutPartition
 ) -> list[PartitionAgent]:
-    """The venture's agents on the partition's forge, read off Unit-A runs.
-
-    Nothing in the operation path has a venture column. The venture reaches
-    SimForge only as segment 2 of the run ref, so that is what is matched.
-    Sorted by agent id so a pass is deterministic.
-    """
-    rows = (
-        await session.execute(
-            select(
-                OperationRun.runRef,
-                OperationRun.moduleId,
-                OperationRun.agentId,
-                OperationRun.villageAgentRef,
-            ).where(
-                OperationRun.forgeId == partition.forgeId,
-                OperationRun.unit == "A",
-                OperationRun.moduleId.is_not(None),
-                OperationRun.agentId.is_not(None),
-            )
-        )
-    ).all()
-    modules: dict[str, set[str]] = {}
-    for run_ref, module_id, agent_id, village_ref in rows:
-        if venture_of_run_ref(run_ref) != partition.ventureId:
-            continue
-        who = village_ref or agent_id
-        modules.setdefault(who, set()).add(module_id)
-    return [PartitionAgent(a, tuple(sorted(m))) for a, m in sorted(modules.items())]
+    """Who sits the partition: the shared roster (ADR-0152), scoped to its modules."""
+    scope = partition.instructionHashes
+    return await partition_roster(
+        session,
+        venture_id=partition.ventureId,
+        forge_id=partition.forgeId,
+        scope=set(scope) if scope is not None else None,
+    )
 
 
 async def current_instruction_set(

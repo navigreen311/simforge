@@ -6,8 +6,9 @@ The shape is fixed by `docs/contracts/gate-9-5-verdict.md`. Four keys, always:
 WHAT THIS READS, AND WHAT IT MAY NEVER READ
 ===========================================
 
-    `HeldOutPartition` (which one is sealed, and its digest) and
-    `HeldOutPartitionVerdict` (who was graded, and how). Nothing more.
+    `HeldOutPartition` (which one is sealed, and its digest),
+    `HeldOutPartitionVerdict` (who was graded, and how) and, through
+    `partition_roster`, `OperationRun` (who sits it, ADR-0152). Nothing more.
 
     It never touches `HeldOutPartitionScenario`. A function that never
     held a scenario cannot leak one, whatever is later written in it.
@@ -34,6 +35,9 @@ THE RULES, FROM THE CONTRACT TABLE
       new partition is sealed. Its scenarios number rules that moved, so its
       verdicts describe instructions no longer in force - the same reason
       the grader refuses to put it (ADR-0125).
+    - ADR-0152: only agents on the partition's roster count - those whose runs
+      touch a module it covers (`partition_roster`, the grader's own list). A
+      row for anyone else stays in the table and is not read.
 
 Pure read. No flush, no cache: every call asks the database.
 """
@@ -48,6 +52,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
 from src.services.operation.live_instructions import live_sets
+from src.services.operation.partition_roster import partition_roster
 from src.services.operation.partition_tolerance import fold_agent
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 
@@ -128,6 +133,14 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
             )
         )
     ).all()
+    # ADR-0152. The grader's roster, read the same way. A partition that recorded no
+    # modules predates ADR-0125 and keeps every agent's rows, as it always read.
+    if authored_from is not None:
+        roster = await partition_roster(
+            session, venture_id=venture_id, forge_id=forge_id, scope=set(authored_from)
+        )
+        sitters = {a.agent_id for a in roster}
+        rows = [r for r in rows if r[0] in sitters]
 
     # ADR-0121: the weakest sitting, not the latest. Every final row counts, so the
     # weakest over them is the weakest over sittings; an IN_PROGRESS counts only while
