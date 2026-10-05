@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.forge_instruction_set import ForgeInstructionSet
+from src.models.operation_run import OperationRun
 from src.services.operation.partition_verdict import RESPONSE_KEYS, venture_verdict
 from tests.integration.test_gate_9_5_verdict import (
     AUTH,
@@ -46,6 +47,20 @@ def _set(module: str, content_hash: str, at: datetime) -> ForgeInstructionSet:
     )
 
 
+def _run(venture: str, agent: str, module: str) -> OperationRun:
+    """ADR-0152: an agent sits a partition only with a run on one of its modules."""
+    return OperationRun(
+        runRef=f"office:{venture}:forge-a:{module}@{agent}:abc1:p6.0.0:r0.5.0",
+        unit="A",
+        forgeId="forge-a",
+        moduleId=module,
+        agentId=agent,
+        instructionContentHash=f"{AUTHORED}-{module}",
+        rubricKind="operation",
+        rubricVersion="0.5.0",
+    )
+
+
 async def _passed(db: AsyncSession, venture: str, modules=("m", "n")) -> object:  # noqa: ANN001
     """A sealed partition authored from the live sets, with every agent's sittings PASS."""
     for m in modules:
@@ -53,6 +68,7 @@ async def _passed(db: AsyncSession, venture: str, modules=("m", "n")) -> object:
     p = _partition(venture)
     p.instructionHashes = {m: f"{AUTHORED}-{m}" for m in modules}
     await _add(db, p)
+    await _add(db, _run(venture, "a1", modules[0]), _run(venture, "a2", modules[-1]))
     await _add(db, _verdict(p, "a1", "PASS"), _verdict(p, "a2", "PASS", at=T0 + timedelta(1)))
     return p
 

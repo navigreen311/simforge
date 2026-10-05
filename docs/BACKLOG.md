@@ -5,6 +5,23 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## A partition roster backed by The Office's live grants
+
+**Ruled by Ivan Green, 2026-10-05.** Not now. ADR-0152 scopes the roster
+to the partition's modules as the stopgap.
+
+- The roster is read off Unit-A runs. SimForge holds no grants, so a
+  retired agent whose runs touched a partition module is still rostered.
+  It can still hold Gate 9.5 with a NOT_RUN.
+- **Direction:** The Office sends the venture's live grants (agent and
+  module) to SimForge, for example on the Gate 8 hand-over.
+  `partition_roster` then keeps only agents with a live grant on a
+  partition module.
+- **Open:** a contract change in both repos. Also: which grants count
+  (live at seal, or live now), and what a grant retired mid-sitting means.
+
+---
+
 ## Expose tolerated slips to The Office
 
 **Ruled by Ivan Green, 2026-10-02.** Not now. ADR-0143 keeps the Gate 9.5
