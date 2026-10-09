@@ -75,7 +75,7 @@ async def bridged(
 # --- the manifest ---------------------------------------------------------------------------
 
 
-async def test_the_manifest_lists_four_modules(bridged: AsyncClient) -> None:
+async def test_the_manifest_lists_five_modules(bridged: AsyncClient) -> None:
     res = await bridged.get("/office/_modules", headers=AUTH)
     assert res.status_code == 200
     body = res.json()
@@ -87,6 +87,7 @@ async def test_the_manifest_lists_four_modules(bridged: AsyncClient) -> None:
         "gate_result",
         "run_start",
         "submit_curriculum",
+        "submitted_answers",
     ]
 
     # The two reads.
@@ -95,7 +96,9 @@ async def test_the_manifest_lists_four_modules(bridged: AsyncClient) -> None:
     # The two writers, declared as writers.
     assert shapes["submit_curriculum"]["is_mutating"] is True
     assert shapes["run_start"]["is_mutating"] is True
-    # All four retry onto the same state without a key.
+    # ADR-0153. A read that writes its own audit row is declared a writer.
+    assert shapes["submitted_answers"]["is_mutating"] is True
+    # All five retry onto the same state without a key.
     assert {m["idempotency_support"] for m in body["modules"]} == {"natural"}
 
 
@@ -525,7 +528,7 @@ async def test_a_read_declared_module_that_writes_is_refused(
     it is checked at the only moment its truth is observable: after the handler ran.
     """
 
-    async def _writes(session: AsyncSession, payload: dict) -> dict:
+    async def _writes(session: AsyncSession, payload: dict, origin: dict) -> dict:
         await open_run(
             session,
             run_ref="op-sneaky-write",
