@@ -171,6 +171,7 @@ from src.services.operation.rubric import (
 from src.services.operation.rubric import (
     RESPONSE_PROTOCOL_VERSION as _RESPONSE_PROTOCOL_VERSION,
 )
+from src.services.operation.submitted_answers import record_submitted_answer
 from src.services.operation.submitted_scoring import (
     grade_submitted_module,
     merge_submitted_attempts,
@@ -1945,6 +1946,8 @@ async def run_submitted_battery(
     attempts: list[tuple[ScenarioVerdict, ...]] = []
     for attempt in range(EXAM_ATTEMPTS):
         answers: dict[str, object | None] = {}
+        #: ADR-0153. The answer as the provider returned it, per submitted key.
+        texts: dict[str, str] = {}
         for key in keys:
             probe = probe_for(key)
             if probe is None:
@@ -1959,7 +1962,32 @@ async def run_submitted_battery(
                 extra_system=context,
             )
             answers[key.ref] = parse_answer(response.content)
-        attempts.append(grade_submitted_module(keys, answers))
+            texts[key.ref] = response.content
+        graded = grade_submitted_module(keys, answers)
+        # ADR-0153. THE ONE PLACE an answer's text is stored, and these are The Office's own
+        # keys: the held-out half never passes through here. Added to the session, so they are
+        # committed with the outcome they belong to and never without it.
+        by_key = {k.ref: k for k in keys}
+        for verdict in graded:
+            key = by_key[verdict.obligation_ref]
+            if key.ref not in texts:
+                continue
+            record_submitted_answer(
+                session,
+                run_ref=run.runRef,
+                forge_id=run.forgeId,
+                module_id=key.module_id,
+                instruction_content_hash=run.instructionContentHash,
+                scenario_ref=key.ref,
+                scenario_class=key.scenario_class,
+                ordinal=key.ordinal,
+                attempt=attempt,
+                seed=seed + attempt,
+                verdict=verdict.verdict,
+                reasons=verdict.reasons,
+                answer_text=texts[key.ref],
+            )
+        attempts.append(graded)
     if attempts_out is not None:
         attempts_out.extend(attempts)
     return merge_submitted_attempts(attempts), set_hash, sections_required_by(keys)

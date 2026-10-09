@@ -422,6 +422,8 @@ def test_no_router_can_reach_the_scenarios() -> None:
     # Positive controls: the walk reaches the verdict service and the model.
     assert "src.services.operation.partition_verdict" in reachable
     assert "src.models.held_out_partition" in reachable
+    # ADR-0153. The submitted-answer reader is on this path too, so this walk covers it.
+    assert "src.services.operation.submitted_answers" in reachable
 
     assert not FORBIDDEN_MODULES & set(reachable), sorted(FORBIDDEN_MODULES & set(reachable))
     # ADR-0114 adds the per-probe why. It is as closed to a request as the scenarios.

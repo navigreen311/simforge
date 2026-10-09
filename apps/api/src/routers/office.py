@@ -109,6 +109,7 @@ from src.schemas.operation_payloads import (
 )
 from src.services.operation.partition_verdict import venture_verdict
 from src.services.operation.run_registry import gate_result_for
+from src.services.operation.submitted_answers import read_for_office
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,9 @@ API_VERSION = "1.0.0"
 #: The three values `forge_module_registry.idempotency_support` accepts.
 IdempotencySupport = Literal["key", "natural", "at_most_once"]
 
-Handler = Callable[[AsyncSession, dict[str, Any]], Awaitable[dict[str, Any]]]
+#: (session, payload, origin). `origin` is the call's headers as `call_module` logs them; only
+#: a handler that audits its caller reads it (ADR-0153).
+Handler = Callable[[AsyncSession, dict[str, Any], dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -163,7 +166,9 @@ class ModuleSpec:
 # --- Handlers -------------------------------------------------------------------------------
 
 
-async def _gate_result(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+async def _gate_result(
+    session: AsyncSession, payload: dict[str, Any], origin: dict[str, Any]
+) -> dict[str, Any]:
     """The verdict of a certification run, by `run_ref`.
 
     A pure read. It returns exactly the fields The Office's
@@ -216,7 +221,9 @@ def _validated(model: type, payload: dict[str, Any], module_id: str):
         ) from exc
 
 
-async def _submit_curriculum(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+async def _submit_curriculum(
+    session: AsyncSession, payload: dict[str, Any], origin: dict[str, Any]
+) -> dict[str, Any]:
     """The Office hands over a curriculum. `POST /api/operation/curriculum`.
 
     REACHED WITH THE TENANT CREDENTIAL, NOT AN AGENT GRANT
@@ -246,7 +253,9 @@ async def _submit_curriculum(session: AsyncSession, payload: dict[str, Any]) -> 
     return await submit_curriculum(body=body, session=session)
 
 
-async def _run_start(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+async def _run_start(
+    session: AsyncSession, payload: dict[str, Any], origin: dict[str, Any]
+) -> dict[str, Any]:
     """A battery is starting. `POST /api/operation/run/start`.
 
     Without this reaching The Office, the run window is unreachable from the outside: the
@@ -260,7 +269,9 @@ async def _run_start(session: AsyncSession, payload: dict[str, Any]) -> dict[str
     return started.model_dump(mode="json")
 
 
-async def _gate_9_5_verdict(session: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+async def _gate_9_5_verdict(
+    session: AsyncSession, payload: dict[str, Any], origin: dict[str, Any]
+) -> dict[str, Any]:
     """Gate 9.5: whether this venture's sealed partition passed. Never why.
 
     The shape is `docs/contracts/gate-9-5-verdict.md` (ADR-0108 R5, ADR-0111).
@@ -276,6 +287,38 @@ async def _gate_9_5_verdict(session: AsyncSession, payload: dict[str, Any]) -> d
     # Validated on the way out: a fifth key, or a verdict outside the
     # contract, is a 500 here rather than a surprise at The Office.
     return Gate95VerdictResponse.model_validate(answer).model_dump(mode="json")
+
+
+async def _submitted_answers(
+    session: AsyncSession, payload: dict[str, Any], origin: dict[str, Any]
+) -> dict[str, Any]:
+    """What the agent answered to The Office's OWN probes on one run (ADR-0153).
+
+    Never a held-out answer: none is stored (`submitted_answer`). Readable only for a run
+    The Office minted, under the venture that run names - `X-Office-Venture` must match
+    segment 2 of the run ref. Every call writes an audit row, a refusal included, and
+    every refusal is the same 404 so the call cannot probe which runs exist.
+    """
+    run_ref = payload.get("run_ref")
+    if not isinstance(run_ref, str) or not run_ref:
+        raise HTTPException(
+            status_code=422,  # unprocessable content
+            detail="submitted_answers requires a non-empty string 'run_ref' in the payload",
+        )
+    read = await read_for_office(
+        session,
+        run_ref=run_ref,
+        office_venture=origin.get("office_venture"),
+        office_agent_id=origin.get("office_agent_id"),
+        office_trace=origin.get("office_trace"),
+        forge_request_id=str(origin.get("forge_request_id") or ""),
+    )
+    if read.answers is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"SimForge holds no answers The Office may read for run_ref {run_ref!r}",
+        )
+    return {"run_ref": read.run_ref, "answers": read.answers}
 
 
 #: module_id -> spec. A dict rather than a chain of ifs because The Office's registry is
@@ -309,6 +352,16 @@ MODULES: dict[str, ModuleSpec] = {
         # same row and does not accumulate a second instruction set. A different
         # content_hash is a different instruction set and SHOULD produce a new row — that
         # is not a retry, it is a new submission.
+        idempotency_support="natural",
+    ),
+    "submitted_answers": ModuleSpec(
+        _submitted_answers,
+        # Mutating, honestly: every read writes its own audit row (ADR-0153). It changes
+        # nothing an agent could act on, but a read that writes is not a read, and The Office
+        # keys unattended access on this field.
+        is_mutating=True,
+        # The same run_ref returns the same answers. A retry adds a second audit row, which
+        # is the record of the retry and is meant to exist. `natural`.
         idempotency_support="natural",
     ),
     "run_start": ModuleSpec(
@@ -478,7 +531,7 @@ async def call_module(
     if listening:
         event.listen(session.sync_session, "after_flush", _on_flush)
     try:
-        result = await spec.handler(session, payload)
+        result = await spec.handler(session, payload, origin)
     finally:
         if listening:
             event.remove(session.sync_session, "after_flush", _on_flush)

@@ -1334,3 +1334,43 @@ model HeldOutPartitionOutcome {
   @@index([partitionId])
   @@index([agentId])
 }
+
+/// The agent's answer to one of The Office's own probes, per exam attempt (ADR-0153).
+/// Never a held-out answer: the migration's CHECK refuses never_do_violation,
+/// silent_failure and permitted_request. Written only by the submitted half.
+model SubmittedProbeAnswer {
+  id                     String   @id @default(cuid())
+  runRef                 String
+  forgeId                String
+  moduleId               String
+  instructionContentHash String
+  /// SubmittedKey.ref: module#class#ordinal.
+  scenarioRef            String
+  scenarioClass          String
+  ordinal                Int
+  attempt                Int
+  seed                   Int
+  verdict                String
+  reasons                Json     @default("[]")
+  answerText             String
+  createdAt              DateTime @default(now())
+
+  @@index([runRef])
+}
+
+/// One read of SubmittedProbeAnswer by The Office, refusals included (ADR-0153).
+/// Append-only.
+model SubmittedAnswerRead {
+  id              String   @id @default(cuid())
+  runRef          String
+  officeVenture   String?
+  officeAgentId   String?
+  officeTrace     String?
+  forgeRequestId  String
+  outcome         String
+  refusal         String?
+  answersReturned Int      @default(0)
+  at              DateTime @default(now())
+
+  @@index([runRef])
+}
