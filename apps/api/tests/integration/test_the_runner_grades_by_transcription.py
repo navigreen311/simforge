@@ -25,6 +25,7 @@ from src.services.operation.submitted_scoring import (
     REASON_CAVEAT_ABSENT,
     REASON_CLAIM_MISMATCH,
     REASON_CLAIM_NOT_OFFERED,
+    REASON_NO_EXPECTED_ANSWER,
     REASON_NO_SITUATION,
     REASON_NOT_PUT,
     REASON_RECORD_ABSENT,
@@ -185,6 +186,26 @@ def test_a_key_with_no_expected_answer_is_not_the_agent_s_failure() -> None:
         AgentAnswer(act="PROCEED", record=("total", "143")),
     )
     assert v.verdict == VERDICT_NOT_RUN
+    # ADR-0155. Its own reason: the probe WAS put and answered.
+    assert v.reasons == (REASON_NO_EXPECTED_ANSWER,)
+
+
+def test_an_ungradable_key_is_never_reported_as_never_put() -> None:
+    """ADR-0155. Answered or not, a key with no expected answer names the omission - never a
+    runner fault. The old reason sent The Office looking for a probe nobody had put."""
+    ungradable = _key(expected_act=None, record_subject=None, record_claim=None)
+
+    for answer in (AgentAnswer(act="PROCEED", record=("total", "143")), None):
+        v = grade_submitted(ungradable, answer)
+        assert v.verdict == VERDICT_NOT_RUN
+        assert v.reasons == (REASON_NO_EXPECTED_ANSWER,)
+        assert REASON_NOT_PUT not in v.reasons
+
+
+def test_both_submitter_omissions_are_named() -> None:
+    v = grade_submitted(_key(situation=None, expected_act=None), None)
+    assert v.verdict == VERDICT_NOT_RUN
+    assert v.reasons == (REASON_NO_SITUATION, REASON_NO_EXPECTED_ANSWER)
 
 
 def test_a_probe_that_was_never_put_is_not_run() -> None:

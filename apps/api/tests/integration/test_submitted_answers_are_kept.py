@@ -300,3 +300,35 @@ async def test_the_module_is_declared_as_writing_its_audit_row() -> None:
     spec = MODULES["submitted_answers"]
     assert spec.is_mutating is True
     assert spec.idempotency_support == "natural"
+
+
+# --- ADR-0155. An ungradable key names its omission, end to end -----------------------------------
+
+
+async def test_an_ungradable_key_reads_key_has_no_expected_answer_through_the_battery(
+    db_session: AsyncSession,
+) -> None:
+    from src.services.operation.battery import battery_for_run
+    from src.services.operation.submitted_scoring import (
+        REASON_NO_EXPECTED_ANSWER,
+        REASON_NOT_PUT,
+    )
+
+    await _seed(db_session, run_ref=RUN_REF)
+    db_session.add(_scenario(0, expectedAct=None, recordSubject=None, recordClaim=None))
+    await db_session.commit()
+
+    built = await battery_for_run(db_session, RUN_REF, runtime=_runtime(ScriptedProvider(_answer)))
+    assert not isinstance(built, BatterySkipped)
+
+    keys = [r for r in built.agent_outcomes[0].scenario_reasons or [] if r["half"] == "keys"]
+    assert len(keys) == 3, keys  # one per attempt
+    for row in keys:
+        assert row["verdict"] == "NOT_RUN"
+        assert row["reasons"] == [REASON_NO_EXPECTED_ANSWER]
+        assert REASON_NOT_PUT not in row["reasons"]
+    # It was put and answered: the answer is kept, under the same reason.
+    await db_session.commit()
+    stored = await _stored(db_session)
+    assert len(stored) == 3
+    assert {tuple(r.reasons) for r in stored} == {(REASON_NO_EXPECTED_ANSWER,)}
