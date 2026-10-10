@@ -89,6 +89,11 @@ REASON_NOT_PUT = "the_scenario_was_never_put"
 #: is a runner problem, and a scenario with no situation is a SUBMITTER problem, visible only
 #: if the two are told apart.
 REASON_NO_SITUATION = "the_submission_carried_no_situation"
+#: ADR-0155. The key carries no expected answer, so nothing can be compared - whatever the agent
+#: said, and whether or not it was asked. A SUBMITTER problem, like a missing situation, and
+#: reported under its own name: it was once reported as `the_scenario_was_never_put`, which sent
+#: The Office looking for a runner fault on a probe that had been put and answered.
+REASON_NO_EXPECTED_ANSWER = "key_has_no_expected_answer"
 
 #: `battery` imports this module, so `battery.ACT_PROCEED` cannot be imported back. Named
 #: here and asserted equal to it in `test_two_channels.py`.
@@ -296,34 +301,32 @@ def grade_submitted(key: SubmittedKey, answer: object | None) -> ScenarioVerdict
             reasons=(answer.reason,),
         )
 
-    if not key.puttable:
-        # ADR-0087. Nothing was asked because the submission carried no situation - so there is no
-        # answer this key could be compared against, and any answer in hand belongs to some other
-        # question. NOT_RUN rather than FAIL: the omission is the submitter's and must not land on
-        # the agent, which is the same rule a missing `expected_answer` follows below.
-        #
-        # CHECKED BEFORE `answer is None`, and the order is the point: with no situation there
-        # was nothing to run, so `the_scenario_was_never_put` would name a runner that had
-        # nothing to put. The submitter's omission is the primary fact and must not hide
-        # behind a reason that reads as somebody else's.
+    # The submitter's omissions, both named when both apply (ADR-0155). NOT_RUN rather than
+    # FAIL: an omission in the curriculum must not land on the agent.
+    #
+    # CHECKED BEFORE `answer is None`, and the order is the point (ADR-0087): an omission is the
+    # primary fact, and `the_scenario_was_never_put` would name a runner fault instead.
+    #
+    # - ADR-0087. No situation: nothing was asked, so any answer in hand belongs to some other
+    #   question.
+    # - ADR-0155. No expected answer: nothing to compare against, asked or not.
+    omissions = tuple(
+        reason
+        for reason, missing in (
+            (REASON_NO_SITUATION, not key.puttable),
+            (REASON_NO_EXPECTED_ANSWER, not key.gradable),
+        )
+        if missing
+    )
+    if omissions:
         return ScenarioVerdict(
             obligation_ref=key.ref,
             scenario_class=key.scenario_class,
             verdict=VERDICT_NOT_RUN,
-            reasons=(REASON_NO_SITUATION,),
+            reasons=omissions,
         )
 
     if answer is None:
-        return ScenarioVerdict(
-            obligation_ref=key.ref,
-            scenario_class=key.scenario_class,
-            verdict=VERDICT_NOT_RUN,
-            reasons=(REASON_NOT_PUT,),
-        )
-
-    if not key.gradable:
-        # A key with no expected answer is not a failure of the agent. It is a scenario nobody
-        # can grade, and reporting it as a FAIL would put the submitter's omission on the agent.
         return ScenarioVerdict(
             obligation_ref=key.ref,
             scenario_class=key.scenario_class,
