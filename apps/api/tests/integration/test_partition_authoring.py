@@ -18,8 +18,10 @@ from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionScenario
 from src.services.operation import held_out_partition as hp
 from src.services.operation.held_out import author_for_modules
+from src.services.operation.partition_operators import find_operator
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 from src.utils.time import utcnow
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session
 
 pytestmark = pytest.mark.asyncio
@@ -92,7 +94,8 @@ async def _seed(session: AsyncSession) -> None:
 
 async def _author(db: AsyncSession, venture: str = VENTURE, by: str = "ivan") -> str:
     async with fresh_session(db) as s:
-        return await hp.author_partition(s, venture, FORGE, by)
+        await ensure(s, by)
+        return await hp.author_partition(s, venture, FORGE, by, credential=credential_of(by))
 
 
 #: ADR-0113. Not the author, who is "ivan" throughout.
@@ -101,7 +104,8 @@ SEALER = "Grace Hopper"
 
 async def _seal(db: AsyncSession, pid: str, by: str = SEALER) -> str:
     async with fresh_session(db) as s:
-        return await hp.seal_partition(s, pid, by)
+        await ensure(s, by)
+        return await hp.seal_partition(s, pid, by, credential=credential_of(by))
 
 
 async def _partitions(db: AsyncSession) -> list[HeldOutPartition]:
@@ -212,8 +216,11 @@ async def test_a_forge_with_no_never_do_is_refused_and_nothing_written(
     db_session: AsyncSession,
 ) -> None:
     async with fresh_session(db_session) as s:
+        await ensure(s, "ivan")
         with pytest.raises(hp.PartitionRefused, match="nothing to hold out"):
-            await hp.author_partition(s, VENTURE, "empty-forge", "ivan")
+            await hp.author_partition(
+                s, VENTURE, "empty-forge", "ivan", credential=credential_of("ivan")
+            )
     assert await _partitions(db_session) == []
 
 
@@ -263,7 +270,13 @@ async def test_sealing_retires_the_earlier_sealed_one_for_that_venture_only(
 
 async def test_an_empty_partition_cannot_be_sealed(db_session: AsyncSession) -> None:
     async with fresh_session(db_session) as s:
-        row = HeldOutPartition(ventureId=VENTURE, forgeId=FORGE, authoredBy="ivan")
+        await ensure(s, "ivan")
+        author = await find_operator(s, "ivan")
+        assert author is not None
+        # ADR-0154: an authenticated author, so the seal reaches the emptiness check.
+        row = HeldOutPartition(
+            ventureId=VENTURE, forgeId=FORGE, authoredBy="ivan", authoredByOperatorId=author.id
+        )
         s.add(row)
         await s.commit()
         pid = row.id
@@ -301,11 +314,22 @@ async def test_the_cli_authors_then_a_second_person_seals_and_no_content_prints(
     from tests.integration.scheduler_path import _maker
 
     await _seed(db_session)
+    async with fresh_session(db_session) as s:
+        await ensure(s, "ivan")
+        await ensure(s, SEALER)
     monkeypatch.setattr(cli, "SessionLocal", _maker(db_session))
+    asked: list[str] = []
+
+    def prompt(question: str) -> str:
+        # ADR-0154: each person types their own credential when asked for it by name.
+        asked.append(question)
+        return credential_of(question.removeprefix("Credential for ").removesuffix(": "))
+
     authored = await cli._run(
         cli.argparse.Namespace(
-            venture=VENTURE, forge=FORGE, by="ivan", seal_id=None, sealed_by=None
-        )
+            venture=VENTURE, forge=FORGE, by="ivan", seal_id=None, sealed_by=None, enrol=None
+        ),
+        prompt,
     )
     sealed = await cli._run(
         cli.argparse.Namespace(
@@ -314,8 +338,11 @@ async def test_the_cli_authors_then_a_second_person_seals_and_no_content_prints(
             by=None,
             seal_id=authored["partition_id"],
             sealed_by=SEALER,
-        )
+            enrol=None,
+        ),
+        prompt,
     )
+    assert asked == ["Credential for ivan: ", f"Credential for {SEALER}: "]
     printed = json.dumps([authored, sealed])
 
     [row] = await _partitions(db_session)

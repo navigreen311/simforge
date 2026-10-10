@@ -1199,6 +1199,9 @@ model HeldOutPartition {
   status        String    @default("authoring")
   /// Who triggered and sealed it (ADR-0108 R1). Never The Office.
   authoredBy    String
+  /// ADR-0154. The enrolled operators who authenticated to author and seal; must differ.
+  authoredByOperatorId String?
+  sealedByOperatorId   String?
   /// sha256 over the scenario digests, set at seal.
   contentDigest String?
   /// ADR-0125. moduleId -> the live instruction hash each module was authored from.
@@ -1373,4 +1376,32 @@ model SubmittedAnswerRead {
   at              DateTime @default(now())
 
   @@index([runRef])
+}
+
+/// A person enrolled to author or seal a held-out partition (ADR-0154).
+/// One per name, compared trimmed and case-folded (a functional unique index
+/// in the migration). The credential is stored only as a scrypt hash.
+model PartitionOperator {
+  id             String   @id @default(cuid())
+  name           String
+  credentialHash String
+  /// The enrolled operator who witnessed this enrolment. Null only for the first.
+  witnessedBy    String?
+  enrolledAt     DateTime @default(now())
+}
+
+/// Every enrolment, authoring and seal, refusals included (ADR-0154). Append-only.
+model PartitionOperatorEvent {
+  id                String   @id @default(cuid())
+  act               String
+  claimedName       String
+  operatorId        String?
+  witnessOperatorId String?
+  outcome           String
+  refusal           String?
+  partitionId       String?
+  ventureId         String?
+  at                DateTime @default(now())
+
+  @@index([partitionId])
 }

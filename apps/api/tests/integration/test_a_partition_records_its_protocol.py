@@ -20,6 +20,7 @@ from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerd
 from src.services.operation import held_out_partition as hp
 from src.services.operation import partition_grading as pg
 from src.services.operation.rubric import PARTITION_PROTOCOL_VERSION
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
     _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
@@ -58,7 +59,10 @@ async def test_a_new_partition_records_the_protocol_it_was_built_under(
     )
     await db_session.commit()
     async with fresh_session(db_session) as s:
-        pid = await hp.author_partition(s, "v-p", "f-p", "Ivan Green")
+        await ensure(s, "Ivan Green")
+        pid = await hp.author_partition(
+            s, "v-p", "f-p", "Ivan Green", credential=credential_of("Ivan Green")
+        )
     async with fresh_session(db_session) as s:
         assert (await s.get(HeldOutPartition, pid)).protocolVersion == PARTITION_PROTOCOL_VERSION
 

@@ -68,6 +68,14 @@ from src.services.operation.held_out import (
 )
 from src.services.operation.held_out_scoring import PERMITTED_CLASS
 from src.services.operation.live_instructions import live_sets
+from src.services.operation.partition_operators import (
+    REFUSED_NOT_A_PERSON,
+    REFUSED_SAME_OPERATOR,
+    OperatorRefused,
+    audit,
+    authenticate,
+    refuse,
+)
 from src.services.operation.partition_tolerance import PARTITION_VERDICT_RULE
 from src.services.operation.rubric import PARTITION_PROTOCOL_VERSION
 from src.services.operation.scenarios import HELD_OUT_CLASSES
@@ -365,22 +373,65 @@ def named_human(value: str, role: str) -> str:
     return value
 
 
+#: ADR-0154. A partition authored before authentication names its author by typed name only.
+REFUSED_AUTHOR_UNAUTHENTICATED = "author_did_not_authenticate"
+
+
+async def _operator(
+    session: AsyncSession,
+    name: str,
+    role: str,
+    credential: str,
+    *,
+    act: str,
+    partition_id: str | None = None,
+    venture_id: str | None = None,
+):
+    """The named human, authenticated (ADR-0154). Every refusal is audited, then raised."""
+    try:
+        named_human(name, role)
+    except PartitionRefused as exc:
+        refused = await refuse(
+            session,
+            str(exc),
+            REFUSED_NOT_A_PERSON,
+            act=act,
+            claimed_name=name or "",
+            partition_id=partition_id,
+            venture_id=venture_id,
+        )
+        raise PartitionRefused(str(refused)) from exc
+    try:
+        return await authenticate(
+            session, name, credential, act=act, partition_id=partition_id, venture_id=venture_id
+        )
+    except OperatorRefused as exc:
+        raise PartitionRefused(str(exc)) from exc
+
+
 async def author_partition(
     session: AsyncSession,
     venture_id: str,
     forge_id: str,
     authored_by: str,
     modules: Sequence[str] | None = None,
+    *,
+    credential: str,
 ) -> str:
     """Write a partition in `authoring` and its scenarios. Returns its id.
 
     Refuses, writing nothing, when: an argument is blank; `authored_by`
-    names The Office (R1); the forge has no never-do list; or a variant
-    is not disjoint from the battery (R2).
+    names The Office (R1); `authored_by` is not an enrolled operator whose
+    `credential` this is (ADR-0154); the forge has no never-do list; or a
+    variant is not disjoint from the battery (R2).
     """
     venture_id = _require(venture_id, "venture_id")
     forge_id = _require(forge_id, "forge_id")
-    authored_by = named_human(authored_by, "authored_by")
+    author = await _operator(
+        session, authored_by, "authored_by", credential, act="author", venture_id=venture_id
+    )
+    # The enrolled spelling, not the typed one.
+    authored_by = author.name
 
     never_do = await current_never_do(session, forge_id)
     if not never_do:
@@ -418,6 +469,8 @@ async def author_partition(
             forgeId=forge_id,
             status="authoring",
             authoredBy=authored_by,
+            # ADR-0154.
+            authoredByOperatorId=author.id,
             # ADR-0125. What the positional refs below point into.
             instructionHashes=hashes,
             # ADR-0137. The look-alike groups the scoped modules carried at authoring.
@@ -438,11 +491,23 @@ async def author_partition(
                 digest=body_digest(body),
             )
         )
+    # ADR-0154. In the same commit: an authored partition without its record cannot exist.
+    audit(
+        session,
+        act="author",
+        claimed_name=author.name,
+        outcome="done",
+        operator_id=author.id,
+        partition_id=partition_id,
+        venture_id=venture_id,
+    )
     await session.commit()
     return partition_id
 
 
-async def seal_partition(session: AsyncSession, partition_id: str, sealed_by: str) -> str:
+async def seal_partition(
+    session: AsyncSession, partition_id: str, sealed_by: str, *, credential: str
+) -> str:
     """Seal an `authoring` partition. Returns its content digest.
 
     ADR-0113. `sealed_by` is a named human and never the author. The seal,
@@ -450,21 +515,57 @@ async def seal_partition(session: AsyncSession, partition_id: str, sealed_by: st
     own audit record are one commit. The database holds one sealed
     partition per venture; a seal that loses a race is refused and leaves
     nothing behind, including no audit record.
+
+    ADR-0154. `sealed_by` must authenticate with `credential`, the author
+    must have authenticated too, and the two must be different operators.
     """
-    sealed_by = named_human(sealed_by, "sealed_by")
     partition = await session.get(HeldOutPartition, partition_id)
     if partition is None:
         raise PartitionRefused(f"no partition {partition_id!r}.")
+    venture = partition.ventureId
+    sealer = await _operator(
+        session,
+        sealed_by,
+        "sealed_by",
+        credential,
+        act="seal",
+        partition_id=partition_id,
+        venture_id=venture,
+    )
     if partition.status != "authoring":
         raise PartitionRefused(
             f"partition {partition_id!r} is {partition.status}; only an "
             "authoring partition can be sealed."
         )
-    if same_person(sealed_by, partition.authoredBy):
-        raise PartitionRefused(
-            f"{sealed_by!r} authored partition {partition_id!r} and may not "
-            "seal it. The sealer is never the author (ADR-0113)."
+    if partition.authoredByOperatorId is None:
+        refused = await refuse(
+            session,
+            f"partition {partition_id!r} was authored before authentication; its "
+            "author is a typed name. Author it again (ADR-0154).",
+            REFUSED_AUTHOR_UNAUTHENTICATED,
+            act="seal",
+            claimed_name=sealer.name,
+            operator_id=sealer.id,
+            partition_id=partition_id,
+            venture_id=venture,
         )
+        raise PartitionRefused(str(refused))
+    if sealer.id == partition.authoredByOperatorId or same_person(
+        sealer.name, partition.authoredBy
+    ):
+        refused = await refuse(
+            session,
+            f"{sealer.name!r} authored partition {partition_id!r} and may not "
+            "seal it. The sealer is never the author (ADR-0113).",
+            REFUSED_SAME_OPERATOR,
+            act="seal",
+            claimed_name=sealer.name,
+            operator_id=sealer.id,
+            partition_id=partition_id,
+            venture_id=venture,
+        )
+        raise PartitionRefused(str(refused))
+    sealed_by = sealer.name
     digests = (
         (
             await session.execute(
@@ -491,6 +592,7 @@ async def seal_partition(session: AsyncSession, partition_id: str, sealed_by: st
     partition.status = "sealed"
     partition.sealedAt = _now()
     partition.sealedBy = sealed_by
+    partition.sealedByOperatorId = sealer.id
     # ADR-0143. The verdict rule is the partition's, fixed here: a later rule never
     # changes what this partition's verdicts mean.
     partition.verdictRule = PARTITION_VERDICT_RULE
@@ -504,6 +606,16 @@ async def seal_partition(session: AsyncSession, partition_id: str, sealed_by: st
             retiredPartitionIds=retired,
             sealedAt=partition.sealedAt,
         )
+    )
+    # ADR-0154. In the seal's own commit: a lost race leaves no "done" behind.
+    audit(
+        session,
+        act="seal",
+        claimed_name=sealer.name,
+        outcome="done",
+        operator_id=sealer.id,
+        partition_id=partition_id,
+        venture_id=venture_id,
     )
     try:
         await session.commit()

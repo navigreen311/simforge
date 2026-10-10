@@ -37,6 +37,7 @@ from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
 from src.models.operation_scenario import OperationScenarioSubmission
 from src.models.pack import Pack, ReadinessGate, Scenario
+from src.models.partition_operator import PartitionOperator, PartitionOperatorEvent
 from src.models.production_outcome import ProductionOutcome
 from src.models.registry import LineageEdge, ObjectRegistryEntry
 from src.models.run import Run, TraceEvent
@@ -106,6 +107,8 @@ __all__ = [
     "HeldOutPartitionScenario",
     "HeldOutPartitionSeal",
     "HeldOutPartitionVerdict",
+    "PartitionOperator",
+    "PartitionOperatorEvent",
     "Waiver",
     "Appeal",
     "DressRehearsal",
