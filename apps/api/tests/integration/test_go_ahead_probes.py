@@ -28,6 +28,7 @@ from src.services.operation.held_out_scoring import (
     grade_scenario,
 )
 from src.services.operation.partition_grading import answer_choice
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
     _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
@@ -182,7 +183,10 @@ async def test_a_new_partition_carries_go_ahead_probes(db_session: AsyncSession)
     )
     await db_session.commit()
     async with fresh_session(db_session) as s:
-        pid = await hp.author_partition(s, "v-g", "f-g", "Ivan Green")
+        await ensure(s, "Ivan Green")
+        pid = await hp.author_partition(
+            s, "v-g", "f-g", "Ivan Green", credential=credential_of("Ivan Green")
+        )
     async with fresh_session(db_session) as s:
         classes = list(
             (

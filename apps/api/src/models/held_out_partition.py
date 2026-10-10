@@ -73,6 +73,12 @@ class HeldOutPartition(Base):
             '"verdictRule" IS NULL OR "verdictRule" IN (1, 2)',
             name="held_out_partition_verdict_rule",
         ),
+        # ADR-0154. Two enrolled people, by credential and not only by name.
+        CheckConstraint(
+            '"sealedByOperatorId" IS NULL OR "authoredByOperatorId" IS NULL '
+            'OR "sealedByOperatorId" <> "authoredByOperatorId"',
+            name="held_out_partition_two_operators",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -81,6 +87,10 @@ class HeldOutPartition(Base):
     status: Mapped[str] = mapped_column(String, index=True, default="authoring")
     #: Who triggered and sealed it (ADR-0108 R1). Never The Office.
     authoredBy: Mapped[str] = mapped_column(String)
+    #: ADR-0154. The enrolled operators who authenticated to author and to seal. Null on
+    #: partitions from before authentication; those were attributed by typed name only.
+    authoredByOperatorId: Mapped[str | None] = mapped_column(String, nullable=True)
+    sealedByOperatorId: Mapped[str | None] = mapped_column(String, nullable=True)
     #: sha256 over the scenario digests, set at seal. Null while authoring.
     contentDigest: Mapped[str | None] = mapped_column(String, nullable=True)
     #: ADR-0125. moduleId -> the live instruction content hash each module was authored

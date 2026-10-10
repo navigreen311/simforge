@@ -24,6 +24,7 @@ from src.services.operation import partition_grading as pg
 from src.services.operation.live_instructions import live_set
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 from src.utils.time import utcnow
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_held_out_isolation import FORGE as ISO_FORGE
 from tests.integration.test_held_out_isolation import MODULE as ISO_MODULE
@@ -134,7 +135,10 @@ async def test_a_new_partition_records_the_live_hashes(db_session: AsyncSession)
     )
     await db_session.commit()
     async with fresh_session(db_session) as s:
-        pid = await hp.author_partition(s, "v-auth", "f-auth", "Ivan Green")
+        await ensure(s, "Ivan Green")
+        pid = await hp.author_partition(
+            s, "v-auth", "f-auth", "Ivan Green", credential=credential_of("Ivan Green")
+        )
     async with fresh_session(db_session) as s:
         assert (await s.get(HeldOutPartition, pid)).instructionHashes == {"m": "h-live"}
 

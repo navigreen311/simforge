@@ -57,6 +57,11 @@ contract at four keys.
 
 **Ruled by Ivan Green, 2026-09-30.** Needs real verification.
 
+**Partly done, ADR-0154 (2026-10-09):** both acts now authenticate as the
+named person with their own credential, enrolment needs a witness, and
+every attempt is audited. What remains is the MFA tie below, which is
+what would prove two humans rather than two enrolled credentials.
+
 - `scripts/author_partition.py` takes `--by` and `--sealed-by` as free text.
   It refuses The Office's name, non-person strings, and a sealer whose name
   matches the author (ADR-0108 R1, ADR-0113).

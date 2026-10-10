@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionSeal
 from src.services.operation import held_out_partition as hp
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session
 from tests.integration.test_partition_authoring import FORGE, VENTURE, _seed
 
@@ -29,12 +30,14 @@ MIGRATION = REPO / "packages" / "db" / "migrations" / "20260923200000_the_sealer
 
 async def _author(db: AsyncSession, venture: str = VENTURE, by: str = AUTHOR) -> str:
     async with fresh_session(db) as s:
-        return await hp.author_partition(s, venture, FORGE, by)
+        await ensure(s, by)
+        return await hp.author_partition(s, venture, FORGE, by, credential=credential_of(by))
 
 
 async def _seal(db: AsyncSession, pid: str, by: str) -> str:
     async with fresh_session(db) as s:
-        return await hp.seal_partition(s, pid, by)
+        await ensure(s, by)
+        return await hp.seal_partition(s, pid, by, credential=credential_of(by))
 
 
 async def _row(db: AsyncSession, pid: str) -> HeldOutPartition:

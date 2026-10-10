@@ -24,6 +24,7 @@ from src.services.operation.partition_tolerance import (
     slip_count,
 )
 from src.services.operation.partition_verdict import venture_verdict
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_gate_9_5_verdict import T0, _add, _partition, _verdict
 from tests.integration.test_operation_battery_run import (
@@ -141,10 +142,14 @@ async def test_a_tolerated_row_still_says_fail(db_session: AsyncSession) -> None
 async def test_a_new_seal_stamps_rule_2(db_session: AsyncSession) -> None:
     await _seed_live(db_session)
     async with fresh_session(db_session) as s:
-        pid = await hp.author_partition(s, VENTURE, FORGE, "Ivan Green")
+        await ensure(s, "Ivan Green")
+        await ensure(s, "Grace Hopper")
+        pid = await hp.author_partition(
+            s, VENTURE, FORGE, "Ivan Green", credential=credential_of("Ivan Green")
+        )
     async with fresh_session(db_session) as s:
         assert (await s.get(HeldOutPartition, pid)).verdictRule is None  # not while authoring
-        await hp.seal_partition(s, pid, "Grace Hopper")
+        await hp.seal_partition(s, pid, "Grace Hopper", credential=credential_of("Grace Hopper"))
     async with fresh_session(db_session) as s:
         assert (await s.get(HeldOutPartition, pid)).verdictRule == PARTITION_VERDICT_RULE
 

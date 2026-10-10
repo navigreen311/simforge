@@ -22,6 +22,7 @@ from src.services.operation.scenarios import (
     prohibitions_in,
     validate_curriculum_submission,
 )
+from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session
 from tests.integration.test_held_out_isolation import _body
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
@@ -126,7 +127,15 @@ async def test_a_scoped_partition_authors_and_records_only_its_modules(
 ) -> None:
     await _two_modules(db_session)
     async with fresh_session(db_session) as s:
-        pid = await hp.author_partition(s, "v-s", "f-s", "Ivan Green", modules=["in_scope"])
+        await ensure(s, "Ivan Green")
+        pid = await hp.author_partition(
+            s,
+            "v-s",
+            "f-s",
+            "Ivan Green",
+            modules=["in_scope"],
+            credential=credential_of("Ivan Green"),
+        )
     async with fresh_session(db_session) as s:
         part = await s.get(HeldOutPartition, pid)
         modules = set(
@@ -147,9 +156,15 @@ async def test_an_unsubmitted_module_in_scope_is_refused_and_nothing_written(
 ) -> None:
     await _two_modules(db_session)
     async with fresh_session(db_session) as s:
+        await ensure(s, "Ivan Green")
         with pytest.raises(hp.PartitionRefused, match="not_submitted"):
             await hp.author_partition(
-                s, "v-s", "f-s", "Ivan Green", modules=["in_scope", "not_submitted"]
+                s,
+                "v-s",
+                "f-s",
+                "Ivan Green",
+                modules=["in_scope", "not_submitted"],
+                credential=credential_of("Ivan Green"),
             )
     async with fresh_session(db_session) as s:
         assert await s.scalar(select(func.count()).select_from(HeldOutPartition)) == 0
@@ -158,7 +173,10 @@ async def test_an_unsubmitted_module_in_scope_is_refused_and_nothing_written(
 async def test_no_scope_is_the_whole_forge(db_session: AsyncSession) -> None:
     await _two_modules(db_session)
     async with fresh_session(db_session) as s:
-        pid = await hp.author_partition(s, "v-s", "f-s", "Ivan Green")
+        await ensure(s, "Ivan Green")
+        pid = await hp.author_partition(
+            s, "v-s", "f-s", "Ivan Green", credential=credential_of("Ivan Green")
+        )
     async with fresh_session(db_session) as s:
         part = await s.get(HeldOutPartition, pid)
     assert set(part.instructionHashes) == {"in_scope", "out_of_scope"}
