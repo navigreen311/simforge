@@ -375,6 +375,8 @@ def named_human(value: str, role: str) -> str:
 
 #: ADR-0154. A partition authored before authentication names its author by typed name only.
 REFUSED_AUTHOR_UNAUTHENTICATED = "author_did_not_authenticate"
+#: ADR-0154. Only an authoring partition can be sealed; the refusal is audited like the rest.
+REFUSED_NOT_AUTHORING = "partition_not_authoring"
 
 
 async def _operator(
@@ -533,10 +535,18 @@ async def seal_partition(
         venture_id=venture,
     )
     if partition.status != "authoring":
-        raise PartitionRefused(
+        refused = await refuse(
+            session,
             f"partition {partition_id!r} is {partition.status}; only an "
-            "authoring partition can be sealed."
+            "authoring partition can be sealed.",
+            REFUSED_NOT_AUTHORING,
+            act="seal",
+            claimed_name=sealer.name,
+            operator_id=sealer.id,
+            partition_id=partition_id,
+            venture_id=venture,
         )
+        raise PartitionRefused(str(refused))
     if partition.authoredByOperatorId is None:
         refused = await refuse(
             session,

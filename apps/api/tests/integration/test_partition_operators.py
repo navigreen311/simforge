@@ -181,6 +181,32 @@ async def test_a_partition_authored_by_typed_name_cannot_be_sealed(
     assert [e.refusal for e in seal] == [hp.REFUSED_AUTHOR_UNAUTHENTICATED]
 
 
+async def test_sealing_a_sealed_partition_is_refused_and_audited(
+    db_session: AsyncSession,
+) -> None:
+    """A refused seal on a partition that is no longer authoring leaves an audit row,
+    like every other refusal, and changes nothing."""
+    await _seed(db_session)
+    await _enrolled(db_session, AUTHOR, SEALER, "Ada Lovelace")
+    pid = await _author(db_session)
+    digest = await _seal(db_session, pid, SEALER)
+
+    with pytest.raises(hp.PartitionRefused, match="only an authoring partition"):
+        await _seal(db_session, pid, "Ada Lovelace")
+
+    [row] = await _partitions(db_session)
+    assert (row.status, row.sealedBy) == ("sealed", SEALER)
+    async with fresh_session(db_session) as s:
+        seals = (await s.execute(select(HeldOutPartitionSeal))).scalars().all()
+    assert [x.contentDigest for x in seals] == [digest]
+    seal = [e for e in await _events(db_session) if e.act == "seal"]
+    assert [(e.claimedName, e.outcome, e.refusal, e.partitionId) for e in seal] == [
+        (SEALER, "done", None, pid),
+        ("Ada Lovelace", "refused", hp.REFUSED_NOT_AUTHORING, pid),
+    ]
+    assert seal[1].operatorId is not None
+
+
 async def test_the_database_refuses_one_operator_in_both_roles(db_session: AsyncSession) -> None:
     async with fresh_session(db_session) as s:
         s.add(
