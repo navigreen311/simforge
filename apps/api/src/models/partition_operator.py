@@ -2,7 +2,8 @@
 
 `PartitionOperator` is an enrolled person: a name and a hash of a credential
 only that person knows. `PartitionOperatorEvent` is the append-only record of
-every enrolment, authoring and seal, refusals included.
+every enrolment, authoring, seal and credential reset (ADR-0156), refusals
+included.
 
 The credential itself is never stored, logged or accepted on a command line.
 """
@@ -16,8 +17,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
 
-OPERATOR_ACTS: tuple[str, ...] = ("enrol", "author", "seal")
-OPERATOR_OUTCOMES: tuple[str, ...] = ("done", "refused")
+OPERATOR_ACTS: tuple[str, ...] = ("enrol", "author", "seal", "reset")
+#: "witnessed" is a reset's first step: the witness authenticated (ADR-0156).
+OPERATOR_OUTCOMES: tuple[str, ...] = ("done", "refused", "witnessed")
 
 
 class PartitionOperator(Base):
@@ -43,8 +45,12 @@ Index(
 class PartitionOperatorEvent(Base):
     __tablename__ = "PartitionOperatorEvent"
     __table_args__ = (
-        CheckConstraint("act IN ('enrol', 'author', 'seal')", name="partition_operator_event_act"),
-        CheckConstraint("outcome IN ('done', 'refused')", name="partition_operator_event_outcome"),
+        CheckConstraint(
+            "act IN ('enrol', 'author', 'seal', 'reset')", name="partition_operator_event_act"
+        ),
+        CheckConstraint(
+            "outcome IN ('done', 'refused', 'witnessed')", name="partition_operator_event_outcome"
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
@@ -52,7 +58,7 @@ class PartitionOperatorEvent(Base):
     #: The name as typed. The operator id is set only when it authenticated.
     claimedName: Mapped[str] = mapped_column(String)
     operatorId: Mapped[str | None] = mapped_column(String, nullable=True)
-    #: Enrolment only: the operator who witnessed it.
+    #: Enrolment and reset only: the operator who witnessed it.
     witnessOperatorId: Mapped[str | None] = mapped_column(String, nullable=True)
     outcome: Mapped[str] = mapped_column(String)
     #: A code, null when done. Never the credential, never why it was wrong.

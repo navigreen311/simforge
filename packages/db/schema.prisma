@@ -1390,7 +1390,8 @@ model PartitionOperator {
   enrolledAt     DateTime @default(now())
 }
 
-/// Every enrolment, authoring and seal, refusals included (ADR-0154). Append-only.
+/// Every enrolment, authoring, seal and credential reset, refusals included (ADR-0154,
+/// ADR-0156). Append-only.
 model PartitionOperatorEvent {
   id                String   @id @default(cuid())
   act               String

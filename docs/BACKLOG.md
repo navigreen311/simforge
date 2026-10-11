@@ -62,6 +62,11 @@ named person with their own credential, enrolment needs a witness, and
 every attempt is audited. What remains is the MFA tie below, which is
 what would prove two humans rather than two enrolled credentials.
 
+**ADR-0156 (2026-10-11):** a lost credential is reset, witnessed by
+another operator. The witness alone authenticates, so one operator can
+take over the other's identity; only the MFA tie closes that. Recovery
+when every operator is locked out is proposed there, not built.
+
 - `scripts/author_partition.py` takes `--by` and `--sealed-by` as free text.
   It refuses The Office's name, non-person strings, and a sealer whose name
   matches the author (ADR-0108 R1, ADR-0113).

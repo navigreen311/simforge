@@ -18,8 +18,11 @@ WHAT THIS ADDS
     is not the person being enrolled. Only the first enrolment has none, and the
     record says so.
 
-    Every enrolment, authoring and seal writes a `PartitionOperatorEvent`, refusals
-    included. A refusal is committed on its own before it is raised, so a failed
+    A lost credential is replaced, never recovered: another enrolled operator
+    witnesses the reset and the operator keeps their id (ADR-0156).
+
+    Every enrolment, authoring, seal and reset writes a `PartitionOperatorEvent`,
+    refusals included. A refusal is committed on its own before it is raised, so a failed
     attempt leaves a trace even though the act left nothing.
 
 WHAT IT DOES NOT PROVE
@@ -62,6 +65,8 @@ REFUSED_SELF_WITNESS = "witness_is_the_enrollee"
 REFUSED_WITNESS_FAILED = "witness_did_not_authenticate"
 REFUSED_SAME_OPERATOR = "sealer_is_the_author"
 REFUSED_NOT_A_PERSON = "names_no_person"
+REFUSED_SELF_RESET = "witness_is_the_operator"
+REFUSED_ENTRIES_DIFFER = "entries_differ"
 
 
 class OperatorRefused(ValueError):
@@ -287,13 +292,110 @@ async def enrol_operator(
     return operator.id
 
 
+async def reset_credential(
+    session: AsyncSession,
+    name: str,
+    new_credential: str,
+    repeated: str,
+    *,
+    witness_name: str | None,
+    witness_credential: str | None,
+) -> str:
+    """Give the enrolled operator `name` a new credential. Returns the operator id (ADR-0156).
+
+    For a person who lost theirs: they cannot authenticate, so another enrolled operator
+    authenticates as witness. The operator keeps their id, so every partition and event
+    naming them is untouched; only the hash is replaced, and the old credential stops
+    matching.
+
+    Two steps, each audited. The witness authenticating is committed as `witnessed`
+    before the new credential is checked, so a reset refused after it still shows who
+    vouched.
+    """
+    operator = await find_operator(session, name)
+    if operator is None:
+        raise await refuse(
+            session, f"{name!r} is not enrolled.", REFUSED_UNKNOWN, act="reset", claimed_name=name
+        )
+    if not witness_name or witness_credential is None:
+        raise await refuse(
+            session,
+            "an enrolled operator must witness a reset (ADR-0156).",
+            REFUSED_NO_WITNESS,
+            act="reset",
+            claimed_name=name,
+            operator_id=operator.id,
+        )
+    witness = await find_operator(session, witness_name)
+    if _key(witness_name) == _key(name) or (witness is not None and witness.id == operator.id):
+        raise await refuse(
+            session,
+            "a person cannot witness their own reset (ADR-0156).",
+            REFUSED_SELF_RESET,
+            act="reset",
+            claimed_name=name,
+            operator_id=operator.id,
+        )
+    if witness is None or not credential_matches(witness_credential, witness.credentialHash):
+        raise await refuse(
+            session,
+            f"witness {witness_name!r} could not be authenticated (ADR-0156).",
+            REFUSED_WITNESS_FAILED,
+            act="reset",
+            claimed_name=name,
+            operator_id=operator.id,
+            witness_operator_id=witness.id if witness is not None else None,
+        )
+    audit(
+        session,
+        act="reset",
+        claimed_name=name,
+        outcome="witnessed",
+        operator_id=operator.id,
+        witness_operator_id=witness.id,
+    )
+    await session.commit()
+
+    refusal: tuple[str, str] | None = None
+    if new_credential != repeated:
+        refusal = ("the two entries did not match.", REFUSED_ENTRIES_DIFFER)
+    elif len(new_credential) < MIN_CREDENTIAL_LENGTH:
+        refusal = (
+            f"a credential must be at least {MIN_CREDENTIAL_LENGTH} characters.",
+            REFUSED_WEAK,
+        )
+    if refusal is not None:
+        raise await refuse(
+            session,
+            *refusal,
+            act="reset",
+            claimed_name=name,
+            operator_id=operator.id,
+            witness_operator_id=witness.id,
+        )
+
+    operator.credentialHash = hash_credential(new_credential)
+    audit(
+        session,
+        act="reset",
+        claimed_name=name,
+        outcome="done",
+        operator_id=operator.id,
+        witness_operator_id=witness.id,
+    )
+    await session.commit()
+    return operator.id
+
+
 __all__ = [
     "MIN_CREDENTIAL_LENGTH",
     "OperatorRefused",
     "REFUSED_ALREADY",
+    "REFUSED_ENTRIES_DIFFER",
     "REFUSED_NOT_A_PERSON",
     "REFUSED_NO_WITNESS",
     "REFUSED_SAME_OPERATOR",
+    "REFUSED_SELF_RESET",
     "REFUSED_SELF_WITNESS",
     "REFUSED_UNKNOWN",
     "REFUSED_WEAK",
@@ -306,4 +408,5 @@ __all__ = [
     "find_operator",
     "hash_credential",
     "refuse",
+    "reset_credential",
 ]
