@@ -28,6 +28,7 @@ spelling and `authoredByOperatorId`.
 
 **Sealing** authenticates `--sealed-by`, then refuses when:
 
+- the partition is not `authoring` (`partition_not_authoring`);
 - the author never authenticated (a partition from before this ADR);
 - the sealer is the author, by operator id or by name.
 
