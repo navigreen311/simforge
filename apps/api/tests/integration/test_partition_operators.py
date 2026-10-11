@@ -370,3 +370,172 @@ def await_main(cli, argv: list[str], prompt) -> int:  # noqa: ANN001
 
     with concurrent.futures.ThreadPoolExecutor(1) as pool:
         return pool.submit(cli.main, argv, prompt).result()
+
+
+# --- a witnessed reset (ADR-0156) -----------------------------------------------------------
+
+NEW = "a brand new credential for ivan"
+
+
+async def _reset(
+    db: AsyncSession,
+    name: str = AUTHOR,
+    new: str = NEW,
+    repeated: str | None = None,
+    *,
+    witness: str | None = SEALER,
+    witness_credential: str | None = None,
+) -> str:
+    async with fresh_session(db) as s:
+        return await po.reset_credential(
+            s,
+            name,
+            new,
+            new if repeated is None else repeated,
+            witness_name=witness,
+            witness_credential=(
+                witness_credential
+                if witness_credential is not None
+                else (credential_of(witness) if witness else None)
+            ),
+        )
+
+
+async def _hash_of(db: AsyncSession, name: str) -> str:
+    async with fresh_session(db) as s:
+        operator = await po.find_operator(s, name)
+        assert operator is not None
+        return operator.credentialHash
+
+
+async def test_a_witnessed_reset_replaces_the_credential_and_keeps_the_history(
+    db_session: AsyncSession,
+) -> None:
+    await _seed(db_session)
+    await _enrolled(db_session, AUTHOR, SEALER)
+    pid = await _author(db_session)
+    await _seal(db_session, pid, SEALER)
+    [before] = await _partitions(db_session)
+    async with fresh_session(db_session) as s:
+        ivan = await po.find_operator(s, AUTHOR)
+        ira = await po.find_operator(s, SEALER)
+    assert ivan is not None and ira is not None
+
+    assert await _reset(db_session) == ivan.id
+
+    # The old credential stops working; the new one works.
+    stored = await _hash_of(db_session, AUTHOR)
+    assert not po.credential_matches(credential_of(AUTHOR), stored)
+    assert po.credential_matches(NEW, stored)
+    with pytest.raises(hp.PartitionRefused, match="could not be authenticated"):
+        await _author(db_session, credential=credential_of(AUTHOR))
+
+    # The history is untouched: same operator id, same partition, same rows.
+    [after] = await _partitions(db_session)
+    assert (after.id, after.contentDigest) == (before.id, before.contentDigest)
+    assert (after.authoredByOperatorId, after.sealedByOperatorId, after.status) == (
+        ivan.id,
+        ira.id,
+        "sealed",
+    )
+    events = await _events(db_session)
+    assert [(e.act, e.outcome, e.operatorId) for e in events[:2]] == [
+        ("author", "done", ivan.id),
+        ("seal", "done", ira.id),
+    ]
+    resets = [e for e in events if e.act == "reset"]
+    assert [(e.outcome, e.operatorId, e.witnessOperatorId) for e in resets] == [
+        ("witnessed", ivan.id, ira.id),
+        ("done", ivan.id, ira.id),
+    ]
+    _no_credential_in(events, NEW, credential_of(AUTHOR), credential_of(SEALER))
+
+
+@pytest.mark.parametrize(
+    ("witness", "witness_credential", "code"),
+    [
+        (None, None, po.REFUSED_NO_WITNESS),
+        (" ivan GREEN", credential_of(AUTHOR), po.REFUSED_SELF_RESET),
+        (SEALER, WRONG, po.REFUSED_WITNESS_FAILED),
+        ("Nobody Enrolled", WRONG, po.REFUSED_WITNESS_FAILED),
+    ],
+)
+async def test_a_reset_needs_someone_else_to_authenticate_as_witness(
+    db_session: AsyncSession, witness: str | None, witness_credential: str | None, code: str
+) -> None:
+    await _enrolled(db_session, AUTHOR, SEALER)
+    stored = await _hash_of(db_session, AUTHOR)
+
+    with pytest.raises(po.OperatorRefused) as refused:
+        await _reset(db_session, witness=witness, witness_credential=witness_credential)
+
+    assert refused.value.code == code
+    assert await _hash_of(db_session, AUTHOR) == stored
+    [event] = await _events(db_session)
+    assert (event.act, event.outcome, event.refusal) == ("reset", "refused", code)
+    _no_credential_in([event], NEW, WRONG, credential_of(AUTHOR))
+
+
+@pytest.mark.parametrize(
+    ("new", "repeated", "code"),
+    [
+        (NEW, "a different repeat entry", po.REFUSED_ENTRIES_DIFFER),
+        ("x7q", "x7q", po.REFUSED_WEAK),
+    ],
+)
+async def test_a_bad_new_credential_is_refused_after_the_witness_step_is_recorded(
+    db_session: AsyncSession, new: str, repeated: str, code: str
+) -> None:
+    await _enrolled(db_session, AUTHOR, SEALER)
+    stored = await _hash_of(db_session, AUTHOR)
+
+    with pytest.raises(po.OperatorRefused) as refused:
+        await _reset(db_session, new=new, repeated=repeated)
+
+    assert refused.value.code == code
+    assert await _hash_of(db_session, AUTHOR) == stored
+    events = await _events(db_session)
+    assert [(e.act, e.outcome, e.refusal) for e in events] == [
+        ("reset", "witnessed", None),
+        ("reset", "refused", code),
+    ]
+    _no_credential_in(events, new, repeated)
+
+
+async def test_a_reset_of_nobody_enrolled_is_refused(db_session: AsyncSession) -> None:
+    await _enrolled(db_session, SEALER)
+    with pytest.raises(po.OperatorRefused) as refused:
+        await _reset(db_session, "Nobody Enrolled")
+    assert refused.value.code == po.REFUSED_UNKNOWN
+    [event] = await _events(db_session)
+    assert (event.act, event.outcome, event.refusal) == ("reset", "refused", po.REFUSED_UNKNOWN)
+
+
+async def test_the_cli_resets_at_hidden_prompts_witness_first(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    from scripts import author_partition as cli
+    from tests.integration.scheduler_path import _maker
+
+    with pytest.raises(SystemExit):
+        cli.main(["--reset", AUTHOR], prompt=_never)
+
+    await _enrolled(db_session, AUTHOR, SEALER)
+    monkeypatch.setattr(cli, "SessionLocal", _maker(db_session))
+    asked: list[str] = []
+    answers = iter([credential_of(SEALER), NEW, NEW])
+
+    def prompt(question: str) -> str:
+        asked.append(question)
+        return next(answers)
+
+    assert await_main(cli, ["--reset", AUTHOR, "--witness", SEALER], prompt) == 0
+    assert asked == [
+        f"Credential for {SEALER}: ",
+        f"New credential for {AUTHOR}: ",
+        f"Repeat the credential for {AUTHOR}: ",
+    ]
+    out = capsys.readouterr()
+    assert NEW not in out.out + out.err
+    assert credential_of(SEALER) not in out.out + out.err
+    assert po.credential_matches(NEW, await _hash_of(db_session, AUTHOR))
