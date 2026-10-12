@@ -32,7 +32,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
@@ -81,6 +81,7 @@ def record_submitted_answer(
     verdict: str,
     reasons: Sequence[str],
     answer_text: str,
+    sitting: int = 1,
 ) -> None:
     """Add one answer row to the session. The caller's commit makes it permanent.
 
@@ -93,6 +94,7 @@ def record_submitted_answer(
     session.add(
         SubmittedProbeAnswer(
             runRef=run_ref,
+            sitting=sitting,
             forgeId=forge_id,
             moduleId=module_id,
             instructionContentHash=instruction_content_hash,
@@ -148,7 +150,16 @@ async def read_for_office(
             (
                 await session.execute(
                     select(SubmittedProbeAnswer)
-                    .where(SubmittedProbeAnswer.runRef == run_ref)
+                    .where(
+                        SubmittedProbeAnswer.runRef == run_ref,
+                        # ADR-0160. The latest sitting that answered; each sitting is kept.
+                        SubmittedProbeAnswer.sitting
+                        == (
+                            select(func.max(SubmittedProbeAnswer.sitting))
+                            .where(SubmittedProbeAnswer.runRef == run_ref)
+                            .scalar_subquery()
+                        ),
+                    )
                     .order_by(
                         SubmittedProbeAnswer.moduleId,
                         SubmittedProbeAnswer.scenarioClass,

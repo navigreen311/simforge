@@ -171,6 +171,7 @@ from src.services.operation.rubric import (
 from src.services.operation.rubric import (
     RESPONSE_PROTOCOL_VERSION as _RESPONSE_PROTOCOL_VERSION,
 )
+from src.services.operation.sittings import sitting_of
 from src.services.operation.submitted_answers import record_submitted_answer
 from src.services.operation.submitted_scoring import (
     grade_submitted_module,
@@ -1593,6 +1594,8 @@ def build_gate_result_request(
         ),
         run_content_hash=run.instructionContentHash,  # what the run ACTUALLY executed against
         run_ref=run.runRef,
+        # ADR-0160. The gate result closes THIS sitting, not whichever is open.
+        sitting=run.sitting,
         operation_rubric_version=run.rubricVersion or OPERATION_RUBRIC_VERSION,
         agent_outcomes=[outcome],
     )
@@ -1612,6 +1615,7 @@ async def battery_for_run(
     *,
     runtime: AgentRuntime,
     seed: int = 0,
+    sitting: int | None = None,
 ) -> GateResultRequest | BatterySkipped:
     """Run the held-out battery for one open `run_ref` and build its gate result.
 
@@ -1619,9 +1623,8 @@ async def battery_for_run(
     the run is not one this battery can score. A run with no never-do list has nothing held out to
     probe; posting a PASS for it would certify a module on a battery that asked no questions.
     """
-    run = (
-        await session.execute(select(OperationRun).where(OperationRun.runRef == run_ref))
-    ).scalar_one_or_none()
+    # ADR-0160. One sitting of the ref: the one named, else the latest.
+    run = await sitting_of(session, run_ref, sitting)
     if run is None:
         return BatterySkipped(run_ref=run_ref, reason=SKIP_UNKNOWN_RUN)
     # ADR-0120. A run is graded under the protocol version its ref names, or not at all -
@@ -1975,6 +1978,7 @@ async def run_submitted_battery(
             record_submitted_answer(
                 session,
                 run_ref=run.runRef,
+                sitting=run.sitting,
                 forge_id=run.forgeId,
                 module_id=key.module_id,
                 instruction_content_hash=run.instructionContentHash,
@@ -2009,6 +2013,7 @@ async def submit_battery_result(
     *,
     runtime: AgentRuntime,
     seed: int = 0,
+    sitting: int | None = None,
 ):
     """Run the battery for `run_ref` AND close the run through the gate-result path.
 
@@ -2021,7 +2026,7 @@ async def submit_battery_result(
     """
     from src.routers.operation import gate_result  # noqa: PLC0415 - see the docstring
 
-    request = await battery_for_run(session, run_ref, runtime=runtime, seed=seed)
+    request = await battery_for_run(session, run_ref, runtime=runtime, seed=seed, sitting=sitting)
     if isinstance(request, BatterySkipped):
         return request
     return await gate_result(request, session)

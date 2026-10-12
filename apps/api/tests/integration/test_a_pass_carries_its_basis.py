@@ -21,6 +21,7 @@ this side, as somebody else's bug.
 
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +35,9 @@ from src.services.operation.trust_tier import (
     tier_for_state,
     weakest_tier,
 )
+
+#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
+pytestmark = pytest.mark.usefixtures("one_earlier_pass")
 
 REF = {
     "forge_id": "capital-forge",

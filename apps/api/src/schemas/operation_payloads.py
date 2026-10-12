@@ -405,6 +405,8 @@ class GateResultRequest(BaseModel):
     instruction_set_ref: InstructionSetRef  # carries the Office-declared content_hash
     run_content_hash: str  # the hash the run ACTUALLY executed against
     run_ref: str | None = None
+    #: ADR-0160. Which sitting of `run_ref` this result closes. Unnamed: the oldest still open.
+    sitting: int | None = None
     operation_rubric_version: str | None = None  # defaults to the current engine version
     agent_outcomes: list[AgentRunOutcome] = Field(default_factory=list)
     department_outcomes: list[DepartmentRunOutcome] = Field(default_factory=list)
@@ -503,6 +505,22 @@ class OperationRunStarted(BaseModel):
     #: True when this ref was already open — the clock was NOT restarted. A retried
     #: hand-over must not extend the window of a run that is already hanging.
     already_open: bool
+
+
+class OperationRunResitRequest(BaseModel):
+    """ADR-0160. The exam to sit again, by its reference."""
+
+    run_ref: str
+
+
+class OperationRunResat(BaseModel):
+    """ADR-0160. The sitting just opened: the same ref, its own number and clock."""
+
+    run_ref: str
+    sitting: int
+    unit: str
+    started_at: datetime
+    window_minutes: int
 
 
 class TimedOutRun(BaseModel):

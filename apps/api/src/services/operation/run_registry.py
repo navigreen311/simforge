@@ -38,6 +38,7 @@ from src.services.operation.run_window import (
     assess_run_window,
     timed_out_run_filter,
 )
+from src.services.operation.sittings import sitting_for_result, sitting_of
 from src.services.operation.trust_tier import tier_for_state, weakest_tier
 from src.utils.time import utcnow
 
@@ -74,6 +75,9 @@ class UnitOutcome:
     #: The candidate in full (ADR-0060), as `ModelIdentity.as_record()`. Travels with the rest of
     #: the basis for the same reason: a verdict whose candidate is unknown cannot be re-sat.
     model_identity: dict | None = None
+    #: ADR-0160. What the sitting earned on its own, when the re-sit rule moved `state` off it
+    #: (a pass held at provisional, a fail under a certification that still holds). None = `state`.
+    sitting_state: str | None = None
 
 
 async def open_run(
@@ -99,10 +103,11 @@ async def open_run(
     Re-opening an existing ref returns the row untouched rather than restarting its
     clock: a retried hand-over must not extend the window of a run that is already
     hanging, which is exactly the case that would hide the timeout.
+
+    ADR-0160. It returns the LATEST sitting. A re-sit is never opened here by accident; it is
+    `sittings.open_resit`, asked for by name.
     """
-    existing = (
-        await session.execute(select(OperationRun).where(OperationRun.runRef == run_ref))
-    ).scalar_one_or_none()
+    existing = await sitting_of(session, run_ref)
     if existing is not None:
         return existing
 
@@ -166,6 +171,7 @@ async def close_run(
     scenario_count: int | None = None,
     coverage_denominator: int | None = None,
     ended_at: datetime | None = None,
+    sitting: int | None = None,
 ) -> OperationRun | None:
     """Close the run `gate-result` just reported on. Returns None if no run was opened.
 
@@ -188,10 +194,11 @@ async def close_run(
 
     Returns the run unchanged if the report carries no outcome for its unit: an empty
     report closes nothing, and stamping a verdict from zero outcomes would invent one.
+
+    ADR-0160. It closes ONE sitting: the one named, else the oldest still open. `verdict` is the
+    ref's standing after this sitting; `sittingVerdict` is what this sitting earned on its own.
     """
-    run = (
-        await session.execute(select(OperationRun).where(OperationRun.runRef == run_ref))
-    ).scalar_one_or_none()
+    run = await sitting_for_result(session, run_ref, sitting)
     if run is None:
         return None
 
@@ -205,6 +212,8 @@ async def close_run(
 
     run.endedAt = _naive_utc(ended_at)
     run.verdict = verdict_for_finished_state(state)
+    own_state = weakest_state([o.sitting_state or o.state for o in own])
+    run.sittingVerdict = verdict_for_finished_state(own_state or state)
     run.score = min(scores) if scores else None
     run.threshold = max(thresholds) if thresholds else None
     # The collapsed state gates the tier a SECOND time, and the second time is not redundant.
@@ -294,10 +303,11 @@ async def gate_result_for(
     An unknown ref returns None rather than a `NOT_RUN` body, because a NOT_RUN body
     would have to invent a `unit` and a `rubric_version` for a run SimForge never
     received — a shape-valid answer built out of guesses. The caller turns it into a 404.
+
+    ADR-0160. The LATEST sitting answers for the ref: open, it reads IN_PROGRESS or TIMEOUT;
+    closed, its `verdict` is the standing over the last 3 graded sittings.
     """
-    run = (
-        await session.execute(select(OperationRun).where(OperationRun.runRef == run_ref))
-    ).scalar_one_or_none()
+    run = await sitting_of(session, run_ref)
     if run is None:
         return None
 

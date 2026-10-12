@@ -62,6 +62,8 @@ class SubmittedProbeAnswer(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
     runRef: Mapped[str] = mapped_column(String, index=True)
+    #: ADR-0160. The sitting of `runRef` the answer was given in. 1 before re-sits existed.
+    sitting: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     forgeId: Mapped[str] = mapped_column(String)
     moduleId: Mapped[str] = mapped_column(String)
     instructionContentHash: Mapped[str] = mapped_column(String)

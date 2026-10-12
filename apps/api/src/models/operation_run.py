@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, Integer, String
+from sqlalchemy import JSON, DateTime, Float, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -41,12 +41,24 @@ from src.models.base import Base, _new_id, _now
 
 class OperationRun(Base):
     __tablename__ = "OperationRun"
+    #: ADR-0160. A ref is an exam; each row is one SITTING of it. Unique together, never alone.
+    __table_args__ = (
+        UniqueConstraint("runRef", "sitting", name="OperationRun_runRef_sitting_key"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
 
-    #: Correlates to the Office's curriculum submission. The Office reads a verdict BY
-    #: this ref, so it is unique — two runs sharing one ref make the answer ambiguous.
-    runRef: Mapped[str] = mapped_column(String, unique=True, index=True)
+    #: Correlates to the Office's curriculum submission: the EXAM REFERENCE. The Office reads one
+    #: verdict BY this ref. ADR-0160: a re-sit is a new row on the same ref, so the ref is no
+    #: longer unique on its own; `(runRef, sitting)` is.
+    runRef: Mapped[str] = mapped_column(String, index=True)
+    #: ADR-0160. Which sitting of the exam this is, from 1. Every sitting is kept; none replaces
+    #: another. Rows written before re-sits existed are sitting 1.
+    sitting: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    #: ADR-0160. What THIS sitting earned on its own (PASS, FAIL, ...). `verdict` is what The Office
+    #: reads for the ref: the standing after this sitting, 2 passes in the last 3 graded. NULL on
+    #: rows written before the column, whose `verdict` was their own.
+    sittingVerdict: Mapped[str | None] = mapped_column(String, nullable=True)
 
     #: "A" (agent x forge x module) or "B" (department x forge). The Office's manifest
     #: calls this `unit`; the cert table calls the same distinction `unitType`.

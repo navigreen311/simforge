@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 
 from src.services.operation.never_do import (
@@ -12,6 +13,9 @@ from src.services.operation.never_do import (
     never_do_status,
 )
 from src.services.operation.rubric import is_spread_collapsed
+
+#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
+pytestmark = pytest.mark.usefixtures("one_earlier_pass")
 
 REF = {
     "forge_id": "capital-forge",

@@ -27,6 +27,9 @@ from src.services.operation.rubric import (
 )
 from src.services.operation.scenarios import HELD_OUT_CLASSES, is_competence_unexercised
 
+#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
+pytestmark = pytest.mark.usefixtures("one_earlier_pass")
+
 REF = {
     "forge_id": "capital-forge",
     "module_id": "statement_ingest",
