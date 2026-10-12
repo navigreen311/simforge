@@ -94,22 +94,40 @@ async def _issue_active_cert(session: AsyncSession, agent: Agent) -> AgentCert:
     return cert
 
 
-async def test_flip_suspends_cert(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_a_practice_flip_does_not_suspend_the_cert(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """ADR-0157 ruling 1: a practice pass followed by a practice fail used to suspend the covering
+    cert and demote the agent. Practice runs never change certification: the cert stays active,
+    no lifecycle row is written, and the level holds."""
+    from src.models.cert import CertLifecycleEvent
+
     await client.post("/api/packs/", json={"pack_dir": _greenstone()})
     agent, scenario = await _seed_scenario(db_session)
+    agent.currentAutonomyLevel = "L4"
     await _issue_active_cert(db_session, agent)
-    # Prior run passed; the most-recent run failed → a verified flip.
     await _run_with_card(db_session, agent, scenario, passed=True, minutes_ago=60)
     await _run_with_card(db_session, agent, scenario, passed=False, minutes_ago=1)
     await db_session.commit()
 
     report = await find_and_suspend_regressions(db_session)
     assert report.scanned_certs >= 1
-    assert any(f.scenario_id == "scn.reg.001" for f in report.flips)
+    assert report.flips == [] and report.suspended_cert_ids == []
     cert = (
         await db_session.execute(select(AgentCert).where(AgentCert.forgeCap == FORGE_CAP))
     ).scalar_one()
-    assert cert.status == "suspended"
+    assert cert.status == "active"
+    assert agent.currentAutonomyLevel == "L4"
+    events = (
+        (
+            await db_session.execute(
+                select(CertLifecycleEvent).where(CertLifecycleEvent.agentCertId == cert.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert events == []
 
 
 async def test_no_flip_when_still_passing(client: AsyncClient, db_session: AsyncSession) -> None:
@@ -137,7 +155,8 @@ async def test_status_endpoint_is_dry_run(client: AsyncClient, db_session: Async
     await db_session.commit()
 
     status = (await client.get("/api/regression/status")).json()
-    assert len(status["flips"]) >= 1 and status["suspended_cert_ids"] == []
+    # ADR-0157 ruling 1: a practice flip is not reported, dry run or not.
+    assert status["flips"] == [] and status["suspended_cert_ids"] == []
     # Dry run did not suspend.
     cert = (
         await db_session.execute(select(AgentCert).where(AgentCert.forgeCap == FORGE_CAP))

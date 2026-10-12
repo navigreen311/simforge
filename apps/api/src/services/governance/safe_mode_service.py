@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.run import Run
 from src.models.safe_mode import SCOPE_TYPES, SafeModeState
 from src.models.scorecard import Scorecard
+from src.services.practice import is_practice_run
 from src.utils.time import utcnow
 
 
@@ -183,6 +184,8 @@ async def maybe_auto_activate(session: AsyncSession) -> SafeModeState | None:
             .where(Run.startedAt >= since, Scorecard.p2Compliance.is_(False))
         )
     ).all()
+    # Practice runs never raise safe mode (ADR-0157 ruling 1), and every `Run` is a practice run.
+    rows = [row for row in rows if not is_practice_run(row[0])]
     if len(rows) < _AUTO_FAILURE_THRESHOLD:
         return None
     # Attribute failures to a forge (from the run's scenario caps is heavy; use action-agnostic

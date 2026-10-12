@@ -23,6 +23,7 @@ from src.models.pack import Scenario
 from src.models.run import Run
 from src.models.scorecard import Scorecard
 from src.services.cert.autonomy_ladder import LEVELS, demote
+from src.services.practice import is_practice_run
 from src.utils.time import utcnow
 
 
@@ -50,18 +51,22 @@ class RegressionSweepReport:
 
 
 async def _latest_two_runs(session: AsyncSession, agent_id: str, scenario_pk: str) -> list[Run]:
-    return list(
+    """The two most recent runs that may count. Practice runs never do (ADR-0157 ruling 1).
+
+    Filtered BEFORE taking two, not after: a `.limit(2)` first would return two practice runs and
+    hide a counting pair behind them."""
+    runs = (
         (
             await session.execute(
                 select(Run)
                 .where(Run.agentId == agent_id, Run.scenarioId == scenario_pk)
                 .order_by(Run.startedAt.desc())
-                .limit(2)
             )
         )
         .scalars()
         .all()
     )
+    return [run for run in runs if not is_practice_run(run)][:2]
 
 
 async def _passed(session: AsyncSession, run: Run) -> bool | None:

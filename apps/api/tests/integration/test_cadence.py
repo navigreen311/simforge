@@ -39,10 +39,11 @@ async def test_scheduler_status_lists_jobs(client: AsyncClient) -> None:
 # `test_a_job_asserts_its_row.py` - that is the branch `run_timeout_sweep` lost its commit in.
 
 
-async def test_trigger_regression_job_suspends_the_covering_cert(
+async def test_trigger_regression_job_leaves_the_cert_active_on_a_practice_flip(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """A prior-pass/now-fail flip suspends the cert covering the cap."""
+    """A practice prior-pass/now-fail flip used to suspend the covering cert. Practice runs never
+    change certification (ADR-0157 ruling 1), through the manual trigger too."""
     from tests.integration.test_regression_sweep import (
         _greenstone,
         _issue_active_cert,
@@ -61,12 +62,12 @@ async def test_trigger_regression_job_suspends_the_covering_cert(
     result = (await client.post("/api/scheduler/run/daily_regression")).json()
 
     assert result["job"] == "daily_regression"
-    assert cert_id in result["suspended_cert_ids"]
+    assert result["suspended_cert_ids"] == [] and result["flips"] == []
     db_session.expire_all()
     row = (
         await db_session.execute(select(AgentCert).where(AgentCert.id == cert_id))
     ).scalar_one()
-    assert row.status == "suspended"
+    assert row.status == "active"
 
 
 async def test_trigger_cert_lifecycle_job_expires_a_past_due_cert(

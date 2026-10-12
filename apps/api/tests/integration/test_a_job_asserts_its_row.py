@@ -181,23 +181,18 @@ async def _failing_runs(session: AsyncSession, client: AsyncClient, count: int) 
     await session.commit()
 
 
-async def test_the_scheduled_trigger_writes_the_safe_mode_row(
+async def test_the_scheduled_trigger_writes_no_row_for_practice_failures(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """`maybe_auto_activate` is tested; **the job that calls it every fifteen minutes was not.**
-    Five compliance failures inside the hour is the threshold."""
+    """Five compliance failures inside the hour is the threshold, and these five used to raise a
+    global safe mode. They are practice runs (ADR-0157 ruling 1), so the job writes nothing."""
     await _failing_runs(db_session, client, 5)
 
     result = await run_scheduled("safe_mode_auto_trigger", db_session)
 
-    assert result["activated"] is not None
+    assert result["activated"] is None
     async with fresh_session(db_session) as fresh:
-        row = (
-            await fresh.execute(select(SafeModeState).where(SafeModeState.active.is_(True)))
-        ).scalar_one()
-        assert row.autoTriggered is True
-        assert row.scopeType == "global", "a failure spike freezes everything pending review"
-        assert row.id == result["activated"]
+        assert (await fresh.execute(select(SafeModeState))).scalars().all() == []
 
 
 async def test_below_the_threshold_nothing_is_written(
@@ -213,20 +208,18 @@ async def test_below_the_threshold_nothing_is_written(
         assert (await fresh.execute(select(SafeModeState))).scalars().all() == []
 
 
-async def test_two_passes_do_not_raise_two_safe_modes(
+async def test_two_passes_over_practice_failures_write_nothing(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """It runs four times an hour. `activate` dedups, and a duplicate global freeze would be a
-    second row somebody has to deactivate twice."""
+    """It runs four times an hour. Over practice failures every pass is a no-op (ADR-0157)."""
     await _failing_runs(db_session, client, 5)
 
     first = await run_scheduled("safe_mode_auto_trigger", db_session)
     second = await run_scheduled("safe_mode_auto_trigger", db_session)
 
-    assert first["activated"] == second["activated"]
+    assert first["activated"] is None and second["activated"] is None
     async with fresh_session(db_session) as fresh:
-        rows = (await fresh.execute(select(SafeModeState))).scalars().all()
-        assert len(rows) == 1
+        assert (await fresh.execute(select(SafeModeState))).scalars().all() == []
 
 
 # =================================================================================================
@@ -305,10 +298,11 @@ async def test_the_cert_lifecycle_wrapper_leaves_an_expiring_soon_cert_active(
         assert row.status == "active"
 
 
-async def test_the_regression_wrapper_suspends_the_covering_cert(
+async def test_the_regression_wrapper_leaves_the_cert_active_on_a_practice_flip(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """A prior-pass/now-fail flip suspends the cert covering the cap. Asserted on the cert."""
+    """A prior-pass/now-fail flip in practice runs used to suspend the cert covering the cap.
+    Practice runs never change certification (ADR-0157 ruling 1). Asserted on the cert."""
     from tests.integration.test_regression_sweep import (
         _greenstone,
         _issue_active_cert,
@@ -325,12 +319,12 @@ async def test_the_regression_wrapper_suspends_the_covering_cert(
 
     result = await run_scheduled("daily_regression", db_session)
 
-    assert cert.id in result["suspended_cert_ids"]
+    assert result["suspended_cert_ids"] == [] and result["flips"] == []
     async with fresh_session(db_session) as fresh:
         row = (
             await fresh.execute(select(AgentCert).where(AgentCert.id == cert.id))
         ).scalar_one()
-        assert row.status == "suspended"
+        assert row.status == "active"
 
 
 async def test_the_escalation_wrapper_expires_a_stale_approval(

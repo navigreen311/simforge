@@ -73,7 +73,7 @@ async def test_multiple_scopes_active_at_once(client: AsyncClient) -> None:
     assert ("jurisdiction", "US-NV") in scopes and ("forge", "capitalforge") in scopes
 
 
-async def test_auto_trigger_on_compliance_spike(
+async def test_a_practice_compliance_spike_does_not_raise_safe_mode(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await client.post("/api/packs/", json={"pack_dir": _gs()})
@@ -95,7 +95,8 @@ async def test_auto_trigger_on_compliance_spike(
     )
     db_session.add(scenario)
     await db_session.flush()
-    # 5 compliance-failing runs within the hour → auto-trigger fires.
+    # 5 compliance-failing runs within the hour used to fire the auto-trigger. They are practice
+    # runs, and practice runs never raise safe mode (ADR-0157 ruling 1).
     for i in range(5):
         run = Run(
             runId=f"run-sm-{i}",
@@ -114,9 +115,9 @@ async def test_auto_trigger_on_compliance_spike(
     await db_session.commit()
 
     row = await safe_mode_service.maybe_auto_activate(db_session)
-    assert row is not None and row.autoTriggered is True
+    assert row is None
     status = await safe_mode_service.status(db_session)
-    assert status["global_active"] is True
+    assert status["global_active"] is False
 
 
 async def test_auto_trigger_no_op_below_threshold(

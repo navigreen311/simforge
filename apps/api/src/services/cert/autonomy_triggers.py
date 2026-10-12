@@ -24,6 +24,7 @@ from src.models.cert import AgentCert, AutonomyEvent
 from src.models.run import Run
 from src.models.scorecard import Scorecard
 from src.services.cert.autonomy_ladder import LEVELS, demote, record_transition
+from src.services.practice import is_practice_run
 
 # Consecutive clean (gate-passing, no-regression) runs required to advance a rung.
 _PROMOTION_STREAK = 3
@@ -66,7 +67,11 @@ async def on_regression(
 async def apply_run_triggers(session: AsyncSession, run: Run, card: Scorecard) -> list[str]:
     """Post-evaluation hook: fire compliance / cognitive downgrade triggers for the tested agent.
 
-    Returns the trigger names that fired. Called after a run is scored (scenarios router)."""
+    Returns the trigger names that fired. Called after a run is scored (scenarios router).
+
+    A practice run fires nothing (ADR-0157 ruling 1), and every `Run` is a practice run."""
+    if is_practice_run(run):
+        return []
     agent = (
         await session.execute(select(Agent).where(Agent.id == run.agentId))
     ).scalar_one_or_none()
@@ -101,7 +106,9 @@ class PromotionOutcome:
 
 
 async def _clean_streak(session: AsyncSession, agent_id: str) -> int:
-    """Count consecutive most-recent gate-passing runs for the agent."""
+    """Count consecutive most-recent gate-passing runs for the agent.
+
+    Practice runs are not counted (ADR-0157 ruling 1), and every `Run` is a practice run."""
     runs = (
         (
             await session.execute(
@@ -113,6 +120,8 @@ async def _clean_streak(session: AsyncSession, agent_id: str) -> int:
     )
     streak = 0
     for run in runs:
+        if is_practice_run(run):
+            continue
         card = (
             await session.execute(select(Scorecard).where(Scorecard.runId == run.id))
         ).scalar_one_or_none()
@@ -130,6 +139,8 @@ async def _has_advanced_crisis_pass(session: AsyncSession, agent_id: str) -> boo
 
     runs = (await session.execute(select(Run).where(Run.agentId == agent_id))).scalars().all()
     for run in runs:
+        if is_practice_run(run):  # ADR-0157 ruling 1
+            continue
         scenario = (
             await session.execute(select(Scenario).where(Scenario.id == run.scenarioId))
         ).scalar_one_or_none()
