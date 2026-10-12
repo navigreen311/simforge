@@ -13,6 +13,7 @@ from src.config import settings
 from src.models.agent import Agent
 from src.models.cert import AgentCert
 from src.models.pack import Pack
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
@@ -39,18 +40,16 @@ async def test_flag_off_stays_sandbox(client: AsyncClient) -> None:
 async def _issue_cert_and_elevate(client: AsyncClient, db_session: AsyncSession) -> None:
     """Certify david_kim for CERTED_CAP and elevate autonomy to L5 (so the PDP allows it)."""
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
-    issue = await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": CERTED_CAP,
-            "tier": "foundational",
-            "battery_run_ids": [run["run_id"]],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    issue = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap=CERTED_CAP,
+        tier="foundational",
+        battery_run_ids=[run["run_id"]],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
-    assert issue.status_code == 200, issue.text
+    assert issue["cert"]["status"] == "active"
     agent = (
         await db_session.execute(select(Agent).where(Agent.villageAgentId == "david_kim"))
     ).scalar_one()

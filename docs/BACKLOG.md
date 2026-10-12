@@ -5,31 +5,29 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
-## Issuance and reinstatement still accept practice runs
+## Rebase AgentCert issuance on key-graded exams
 
-**Ruled by Ivan Green, 2026-10-12** (ADR-0157 ruling 1). Not built.
+**Ruled by Ivan Green, 2026-10-12** (ADR-0157, ADR-0158). Not built.
 
-- `issue_agent_cert` and `reinstate_agent_cert` take a battery of `Run`
-  ids, and every `Run` is a practice run. Ruling 1 says only key-graded
-  exams change certification.
-- `run_regression_sweep` (nightly worker) re-runs scenarios for fresh
-  evidence that now counts for nothing.
-- **Open:** refuse issuance from `Run` batteries outright, or rebase
-  AgentCert on `OperationCertification`; and whether to retire the
-  nightly re-run.
+- ADR-0158 refuses issuance and reinstatement from `Run` batteries, so
+  no route issues an AgentCert. The machinery is kept as
+  `_issue_from_runs` / `_reinstate_from_runs`.
+- The nightly regression re-run is paused (ADR-0158).
+- **Open:** issue AgentCert from `OperationCertification`, or retire
+  AgentCert for the exam path; then whether the regression re-run
+  comes back as an exam re-sit.
 
 ---
 
-## Apply ruling 2 to existing certificates
+## Record every OperationCertification state change
 
-**Ruled by Ivan Green, 2026-10-12** (ADR-0157 ruling 2). Survey done,
-nothing voided.
+**Ruled by Ivan Green, 2026-10-12** (ADR-0158 built the table).
 
-- `PinnedVersions.agent_model` defaults to `stub-llm` and issuance never
-  sets it, so the label is on every AgentCert. The judge is unrecorded.
-- **Open:** what counts as proof of stub use; then void append-only
-  (proposal in the ADR-0157 PR). Also: record the agent model and judge
-  provider at issuance, so the question can be answered next time.
+- `OperationCertificationEvent` is written by the ADR-0158 void only.
+  The `recert.py` revoke paths still overwrite `state` with no record.
+- **Also open from ADR-0157:** record the agent model and judge
+  provider at issuance. `PinnedVersions.agent_model` defaults to
+  `stub-llm` and issuance never set it.
 
 ---
 

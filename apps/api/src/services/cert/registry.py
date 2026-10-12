@@ -26,6 +26,15 @@ from src.services.cert.snapshot import CertSnapshotPayload, PinnedVersions
 from src.services.evidence import store_evidence_bundle
 from src.utils.time import utcnow
 
+#: ADR-0158. Every battery is a list of `Run` ids, and every `Run` is a practice run (ADR-0157
+#: ruling 1), so issuance and reinstatement from a battery are refused outright, before any lookup.
+#: Certification comes from key-graded exams (`OperationCertification`).
+PRACTICE_BATTERY_REFUSED = (
+    "A certificate cannot be issued or reinstated from a Run battery: every Run is a practice run, "
+    "and a certificate issued from practice runs is not a certification (ADR-0157 ruling 1, "
+    "ADR-0158). Certification comes from key-graded exams."
+)
+
 
 class CertIssuanceError(Exception):
     """Raised when a cert cannot be issued (bad battery, duplicate, missing entities)."""
@@ -186,6 +195,24 @@ async def issue_agent_cert(
     approver_id: str,
     pack_id: str,
 ) -> IssuedCert:
+    """Refused, before any lookup: a battery is practice runs (ADR-0158)."""
+    raise CertIssuanceError(PRACTICE_BATTERY_REFUSED)
+
+
+async def _issue_from_runs(
+    session: AsyncSession,
+    agent_village_id: str,
+    forge_cap: str,
+    tier: str,
+    battery_run_ids: list[str],
+    approver_id: str,
+    pack_id: str,
+) -> IssuedCert:
+    """The issuance machinery, unreachable from any route since ADR-0158.
+
+    Kept, not deleted: rebasing issuance on key-graded exams (BACKLOG) would reuse the snapshot,
+    signing, evidence and lineage below. Tests call it to stand up a cert that already exists, as
+    certs issued before ADR-0158 do."""
     agent = (
         await session.execute(select(Agent).where(Agent.villageAgentId == agent_village_id))
     ).scalar_one_or_none()
@@ -287,8 +314,12 @@ async def issue_agent_cert(
 
 
 async def revoke_agent_cert(
-    session: AsyncSession, cert_id: str, reason: str, actor: str
+    session: AsyncSession, cert_id: str, reason: str, actor: str, *, skip_demotion: bool = False
 ) -> AgentCert:
+    """Revoke: status, a `revoked` lifecycle event, PEP invalidation, the DeptCert cascade.
+
+    `skip_demotion=True` skips the one-level demotion (ADR-0158). A caller voiding several certs
+    sets the agent's level once, explicitly, instead of stacking one demotion per cert."""
     cert = (
         await session.execute(select(AgentCert).where(AgentCert.id == cert_id))
     ).scalar_one_or_none()
@@ -309,7 +340,7 @@ async def revoke_agent_cert(
     agent = (
         await session.execute(select(Agent).where(Agent.id == cert.agentId))
     ).scalar_one_or_none()
-    if agent is not None:
+    if agent is not None and not skip_demotion:
         idx = (
             LEVELS.index(agent.currentAutonomyLevel) if agent.currentAutonomyLevel in LEVELS else 0
         )
@@ -343,7 +374,20 @@ async def reinstate_agent_cert(
     running a fresh passing battery: this pins a new snapshot against the now-current Forge (and
     constitution) versions, flips the cert back to active, and restores one autonomy level. The
     UNIQUE(agentId, forgeCap) constraint is respected — the existing cert row is updated in place
-    (no re-issue), which is why suspended certs can't be re-`issue`d and must be reinstated."""
+    (no re-issue), which is why suspended certs can't be re-`issue`d and must be reinstated.
+
+    Refused, before any lookup: a battery is practice runs (ADR-0158)."""
+    raise CertIssuanceError(PRACTICE_BATTERY_REFUSED)
+
+
+async def _reinstate_from_runs(
+    session: AsyncSession,
+    cert_id: str,
+    battery_run_ids: list[str],
+    approver_id: str,
+) -> IssuedCert:
+    """The reinstatement machinery, unreachable from any route since ADR-0158. Kept for the same
+    reason as `_issue_from_runs`."""
     cert = (
         await session.execute(select(AgentCert).where(AgentCert.id == cert_id))
     ).scalar_one_or_none()

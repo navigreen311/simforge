@@ -7,7 +7,11 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.services.cert.registry import CertIssuanceError, issue_agent_cert
+
+# The parity gate lives in the issuance machinery, which no route reaches since ADR-0158
+# (`issue_agent_cert` refuses every Run battery before any check).
+from src.services.cert.registry import CertIssuanceError
+from src.services.cert.registry import _issue_from_runs as issue_agent_cert
 from src.services.forge.parity import is_unsafe_to_certify
 
 

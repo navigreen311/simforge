@@ -33,7 +33,7 @@ from src.models.held_out_partition import (
 )
 from src.models.meta_eval_intent import MetaEvalIntent
 from src.models.ontology import OntologyEntity, OntologyRelation
-from src.models.operation_cert import OperationCertification
+from src.models.operation_cert import OperationCertification, OperationCertificationEvent
 from src.models.operation_run import OperationRun
 from src.models.operation_scenario import OperationScenarioSubmission
 from src.models.pack import Pack, ReadinessGate, Scenario
@@ -98,6 +98,7 @@ __all__ = [
     "ForgeParity",
     "ForgeInstructionSet",
     "OperationCertification",
+    "OperationCertificationEvent",
     "OperationRun",
     "OperationScenarioSubmission",
     "SubmittedAnswerRead",

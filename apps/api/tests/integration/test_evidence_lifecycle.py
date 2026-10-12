@@ -18,6 +18,7 @@ from src.services.evidence import (
 )
 from src.services.evidence.lifecycle import default_redaction_for
 from src.utils.time import utcnow
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = None
 
@@ -94,19 +95,17 @@ async def test_cert_issuance_records_evidence_and_access_log(
 ) -> None:
     await client.post("/api/packs/", json={"pack_dir": _gs()})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
-    issue = await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": "cre-forge.call_center.outbound_seller_outreach",
-            "tier": "foundational",
-            "battery_run_ids": [run["run_id"]],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    # A cert as issued before ADR-0158 (no route issues one now).
+    issue = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap="cre-forge.call_center.outbound_seller_outreach",
+        tier="foundational",
+        battery_run_ids=[run["run_id"]],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
-    assert issue.status_code == 200, issue.text
-    snapshot_id = issue.json()["snapshot"]["snapshotId"]  # "certsnap:..." = the evidence bundle id
+    snapshot_id = issue["snapshot"]["snapshotId"]  # "certsnap:..." = the evidence bundle id
 
     # An evidence record was created + chained.
     rec = (await client.get(f"/api/evidence/{snapshot_id}")).json()

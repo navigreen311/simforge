@@ -5,28 +5,28 @@ from __future__ import annotations
 from pathlib import Path
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
 FORGE_CAP = "cre-forge.call_center.outbound_seller_outreach"
 
 
-async def _issue_cert(client: AsyncClient) -> str:
+async def _issue_cert(client: AsyncClient, db_session: AsyncSession) -> str:
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
-    issue = await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": FORGE_CAP,
-            "tier": "foundational",
-            "battery_run_ids": [run["run_id"]],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    issue = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap=FORGE_CAP,
+        tier="foundational",
+        battery_run_ids=[run["run_id"]],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
-    assert issue.status_code == 200, issue.text
-    return issue.json()["cert"]["id"]
+    return issue["cert"]["id"]
 
 
 async def test_uncertified_action_denied(client: AsyncClient) -> None:
@@ -40,8 +40,8 @@ async def test_uncertified_action_denied(client: AsyncClient) -> None:
     assert d["fail_policy"] == "fail_closed"
 
 
-async def test_active_cert_at_l2_downgrades(client: AsyncClient) -> None:
-    await _issue_cert(client)  # first cert promotes david_kim L1 → L2
+async def test_active_cert_at_l2_downgrades(client: AsyncClient, db_session: AsyncSession) -> None:
+    await _issue_cert(client, db_session)  # first cert promotes david_kim L1 → L2
     d = (
         await client.post(
             "/api/pdp/decide",
@@ -52,8 +52,10 @@ async def test_active_cert_at_l2_downgrades(client: AsyncClient) -> None:
     assert d["decision"] == "downgrade_and_retry" and d["reason_code"] == "draft_only_l2"
 
 
-async def test_revoked_cert_denies_and_demotes(client: AsyncClient) -> None:
-    cert_id = await _issue_cert(client)
+async def test_revoked_cert_denies_and_demotes(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    cert_id = await _issue_cert(client, db_session)
     await client.post(f"/api/certs/agent/{cert_id}/revoke", json={"reason": "policy"})
     d = (
         await client.post(
@@ -65,8 +67,10 @@ async def test_revoked_cert_denies_and_demotes(client: AsyncClient) -> None:
     assert d["decision"] == "deny" and d["reason_code"] == "cert_revoked"
 
 
-async def test_effective_permissions_lists_decisions(client: AsyncClient) -> None:
-    await _issue_cert(client)
+async def test_effective_permissions_lists_decisions(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _issue_cert(client, db_session)
     body = (await client.get("/api/pdp/agent/david_kim/effective")).json()
     assert body["autonomy_level"] == "L2"
     perms = {p["action"]: p for p in body["permissions"]}

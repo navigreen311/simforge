@@ -5,30 +5,30 @@ from __future__ import annotations
 from pathlib import Path
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.governance.pdp import AuthRequest
 from src.services.pep import HttpDecisionSource, Pep
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
 FORGE_CAP = "cre-forge.call_center.outbound_seller_outreach"
 
 
-async def _issue_cert(client: AsyncClient) -> None:
+async def _issue_cert(client: AsyncClient, db_session: AsyncSession) -> None:
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
-    r = await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": FORGE_CAP,
-            "tier": "foundational",
-            "battery_run_ids": [run["run_id"]],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    r = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap=FORGE_CAP,
+        tier="foundational",
+        battery_run_ids=[run["run_id"]],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
-    assert r.status_code == 200, r.text
+    assert r["cert"]["status"] == "active"
 
 
 def _pep(client: AsyncClient) -> Pep:
@@ -37,8 +37,10 @@ def _pep(client: AsyncClient) -> Pep:
     return Pep(source)
 
 
-async def test_pep_enforces_and_caches_over_http(client: AsyncClient) -> None:
-    await _issue_cert(client)  # david_kim → L2
+async def test_pep_enforces_and_caches_over_http(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _issue_cert(client, db_session)  # david_kim → L2
     pep = _pep(client)
 
     d1 = await pep.authorize(AuthRequest(subject_agent_id="david_kim", action=FORGE_CAP))
@@ -58,8 +60,10 @@ async def test_pep_denies_uncertified_over_http(client: AsyncClient) -> None:
     assert d.fail_policy == "fail_closed"
 
 
-async def test_pep_invalidation_forces_refetch(client: AsyncClient) -> None:
-    await _issue_cert(client)
+async def test_pep_invalidation_forces_refetch(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _issue_cert(client, db_session)
     pep = _pep(client)
     await pep.authorize(AuthRequest(subject_agent_id="david_kim", action=FORGE_CAP))
     # Simulate a revocation event arriving on the channel → drop the cached decision.
