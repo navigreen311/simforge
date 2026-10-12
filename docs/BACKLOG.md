@@ -5,6 +5,37 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## A failed revocation publish is a log line and nothing else
+
+**Noted by Ivan Green, 2026-10-12.** Not built.
+
+- The ADR-0158 void of David Kim's seven AgentCerts (`CertLifecycleEvent`
+  `revoked` x7, 18:36:33-18:36:36 UTC) reported seven publish timeouts.
+- `publish_cert_event` is best-effort by design: a 0.5 s Redis connect and
+  socket timeout, then `log.warning("revocation_publish_failed")` and
+  `False`. The void ran as a script, so the warnings went to its console;
+  no API log on disk carries them and no row records which revocations
+  never reached the PEP.
+- **Open:** record each publish outcome (or queue failed ones for retry),
+  so a revocation the PEP never heard is findable after the terminal
+  closes; and whether 0.5 s is right for a bulk void.
+
+---
+
+## Migration history records only the first migration
+
+**Noted by Ivan Green, 2026-10-12.** Not built.
+
+- `_prisma_migrations` holds one row, `20260721032248_init` (applied
+  2026-07-20). `packages/db/migrations` holds 62, the newest
+  `20261012010000_operator_signs_the_void`.
+- So the database cannot say which migrations it has applied, or when.
+- **Open:** how the other 61 were applied, and whether to baseline the
+  history (`prisma migrate resolve --applied`) or move to a runner that
+  records each one.
+
+---
+
 ## Rebase AgentCert issuance on key-graded exams
 
 **Ruled by Ivan Green, 2026-10-12** (ADR-0157, ADR-0158). Not built.
