@@ -5,6 +5,34 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## Issuance and reinstatement still accept practice runs
+
+**Ruled by Ivan Green, 2026-10-12** (ADR-0157 ruling 1). Not built.
+
+- `issue_agent_cert` and `reinstate_agent_cert` take a battery of `Run`
+  ids, and every `Run` is a practice run. Ruling 1 says only key-graded
+  exams change certification.
+- `run_regression_sweep` (nightly worker) re-runs scenarios for fresh
+  evidence that now counts for nothing.
+- **Open:** refuse issuance from `Run` batteries outright, or rebase
+  AgentCert on `OperationCertification`; and whether to retire the
+  nightly re-run.
+
+---
+
+## Apply ruling 2 to existing certificates
+
+**Ruled by Ivan Green, 2026-10-12** (ADR-0157 ruling 2). Survey done,
+nothing voided.
+
+- `PinnedVersions.agent_model` defaults to `stub-llm` and issuance never
+  sets it, so the label is on every AgentCert. The judge is unrecorded.
+- **Open:** what counts as proof of stub use; then void append-only
+  (proposal in the ADR-0157 PR). Also: record the agent model and judge
+  provider at issuance, so the question can be answered next time.
+
+---
+
 ## A partition roster backed by The Office's live grants
 
 **Ruled by Ivan Green, 2026-10-05.** Not now. ADR-0152 scopes the roster

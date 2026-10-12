@@ -78,33 +78,42 @@ async def test_promotion_blocked_without_streak(
     assert outcome.eligible is False and "streak" in outcome.detail
 
 
-async def test_promotion_l4_to_l5_routes_through_approval(
+async def test_practice_streak_does_not_open_an_l5_approval(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """ADR-0157 ruling 1: three clean practice runs plus a practice crisis pass used to open an
+    L4-to-L5 approval request. Practice runs are not a streak, so nothing opens."""
+    from src.models.approval import ApprovalRequest
+
     await client.post("/api/packs/", json={"pack_dir": _gs()})
     agent = await _agent(db_session, "L4")
     await _issue_cert(db_session, agent)
     await _seed_clean_streak(db_session, agent, advanced_crisis=True)
     outcome = await evaluate_promotion(db_session, agent)
-    assert outcome.action == "approval_requested"
-    assert outcome.next_level == "L5"
-    assert outcome.approval_request_id is not None
-    # The agent did NOT auto-move to L5 (Ivan-gated).
+    assert outcome.action == "none" and outcome.eligible is False
+    assert outcome.detail == "clean streak 0/3"
     assert agent.currentAutonomyLevel == "L4"
-    # The approval request exists.
-    got = await client.get(f"/api/approvals/{outcome.approval_request_id}")
-    assert got.status_code == 200 and got.json()["request"]["kind"] == "autonomy_transition"
+    assert (await db_session.execute(select(ApprovalRequest))).scalars().all() == []
 
 
-async def test_promotion_l3_to_l4_auto_on_streak_and_crisis(
+async def test_practice_streak_does_not_promote_l3_to_l4(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """ADR-0157 ruling 1: the same practice streak used to move L3 to L4 directly."""
+    from src.models.cert import AutonomyEvent
+
     await client.post("/api/packs/", json={"pack_dir": _gs()})
     agent = await _agent(db_session, "L3")
     await _issue_cert(db_session, agent)
     await _seed_clean_streak(db_session, agent, advanced_crisis=True)
     outcome = await evaluate_promotion(db_session, agent)
-    assert outcome.action == "promoted" and agent.currentAutonomyLevel == "L4"
+    assert outcome.action == "none" and agent.currentAutonomyLevel == "L3"
+    events = (
+        (await db_session.execute(select(AutonomyEvent).where(AutonomyEvent.agentId == agent.id)))
+        .scalars()
+        .all()
+    )
+    assert events == []
 
 
 # --- helpers ---
