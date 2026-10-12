@@ -5,6 +5,7 @@
 - An OperationCertification revocation is recorded, append-only.
 - The nightly regression re-run is paused.
 - The void: plan reads only; apply revokes the nine and sets the agent's level once, to L1.
+- The void is signed by an enrolled operator's credential, not a typed name (ADR-0159).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.agent import Agent
 from src.models.cert import AgentCert, AutonomyEvent, CertLifecycleEvent, CertSnapshot
 from src.models.operation_cert import OperationCertification, OperationCertificationEvent
+from src.models.partition_operator import PartitionOperatorEvent
 from src.services.cert import practice_void
 from src.services.cert.registry import (
     PRACTICE_BATTERY_REFUSED,
@@ -27,6 +29,7 @@ from src.services.cert.registry import (
     reinstate_agent_cert,
     revoke_agent_cert,
 )
+from src.services.operation import partition_operators as po
 from src.services.operation.void import revoke_operation_certification
 from src.utils.time import utcnow
 from tests.integration.scheduler_path import fresh_session
@@ -272,7 +275,7 @@ async def test_the_plan_writes_nothing(db_session: AsyncSession) -> None:
 async def test_apply_voids_the_nine_and_sets_the_level_once(db_session: AsyncSession) -> None:
     agent = await _the_nine(db_session)
 
-    await practice_void.apply(db_session, actor="Ivan Green")
+    await practice_void.apply(db_session, **await _signer(db_session))
 
     async with fresh_session(db_session) as fresh:
         certs = (await fresh.execute(select(AgentCert))).scalars().all()
@@ -294,9 +297,9 @@ async def test_apply_voids_the_nine_and_sets_the_level_once(db_session: AsyncSes
 
 async def test_apply_twice_changes_nothing_the_second_time(db_session: AsyncSession) -> None:
     await _the_nine(db_session)
-    await practice_void.apply(db_session, actor="Ivan Green")
+    await practice_void.apply(db_session, **await _signer(db_session))
 
-    second = await practice_void.apply(db_session, actor="Ivan Green")
+    second = await practice_void.apply(db_session, **await _signer(db_session))
 
     assert second.steps == [] and len(second.skipped) == 9
     assert len((await db_session.execute(select(CertLifecycleEvent))).scalars().all()) == 7
@@ -312,7 +315,7 @@ async def test_a_moved_target_refuses_the_whole_void(db_session: AsyncSession) -
     await db_session.commit()
 
     with pytest.raises(practice_void.VoidRefused, match=first_id):
-        await practice_void.apply(db_session, actor="Ivan Green")
+        await practice_void.apply(db_session, **await _signer(db_session))
     assert (await db_session.execute(select(CertLifecycleEvent))).scalars().all() == []
 
 
@@ -324,3 +327,113 @@ async def test_a_surviving_certification_refuses_the_floor(db_session: AsyncSess
 
     with pytest.raises(practice_void.VoidRefused, match="c-survivor"):
         await practice_void.plan(db_session)
+
+
+# --- signed by an enrolled operator (ADR-0159) ---------------------------------------------------
+
+SIGNER = "Ivan Green"
+SIGNER_CREDENTIAL = "a credential only Ivan knows"
+
+
+async def _signer(session: AsyncSession) -> dict:
+    """Enrol the signer once per test database and return apply()'s keyword arguments."""
+    if await po.find_operator(session, SIGNER) is None:
+        await po.enrol_operator(session, SIGNER, SIGNER_CREDENTIAL)
+    return {"operator_name": SIGNER, "credential": SIGNER_CREDENTIAL}
+
+
+async def _void_events(session: AsyncSession) -> list[PartitionOperatorEvent]:
+    return list(
+        (
+            await session.execute(
+                select(PartitionOperatorEvent).where(PartitionOperatorEvent.act == "void")
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def test_the_actor_is_the_authenticated_operator(db_session: AsyncSession) -> None:
+    await _the_nine(db_session)
+    signer = await _signer(db_session)
+    operator = await po.find_operator(db_session, SIGNER)
+    assert operator is not None
+
+    await practice_void.apply(db_session, **signer)
+
+    async with fresh_session(db_session) as fresh:
+        actors = {e.actor for e in (await fresh.execute(select(CertLifecycleEvent))).scalars()}
+        assert actors == {f"{SIGNER} (operator {operator.id})"}
+        op_actors = {
+            e.actor for e in (await fresh.execute(select(OperationCertificationEvent))).scalars()
+        }
+        assert op_actors == actors
+        events = await _void_events(fresh)
+        assert [(e.outcome, e.operatorId) for e in events] == [("done", operator.id)]
+
+
+async def test_a_wrong_credential_writes_nothing_but_the_refusal(db_session: AsyncSession) -> None:
+    await _the_nine(db_session)
+    await _signer(db_session)
+
+    with pytest.raises(po.OperatorRefused):
+        await practice_void.apply(
+            db_session, operator_name=SIGNER, credential="not the credential at all"
+        )
+
+    async with fresh_session(db_session) as fresh:
+        assert (await fresh.execute(select(CertLifecycleEvent))).scalars().all() == []
+        statuses = {c.status for c in (await fresh.execute(select(AgentCert))).scalars().all()}
+        assert statuses == {"active", "suspended"}
+        events = await _void_events(fresh)
+        assert [(e.outcome, e.refusal) for e in events] == [("refused", po.REFUSED_WRONG)]
+
+
+async def test_a_typed_name_that_is_not_enrolled_is_refused(db_session: AsyncSession) -> None:
+    await _the_nine(db_session)
+
+    with pytest.raises(po.OperatorRefused):
+        await practice_void.apply(
+            db_session, operator_name="Somebody Else", credential="any twelve chars"
+        )
+
+    async with fresh_session(db_session) as fresh:
+        assert (await fresh.execute(select(CertLifecycleEvent))).scalars().all() == []
+        events = await _void_events(fresh)
+        assert [(e.outcome, e.refusal) for e in events] == [("refused", po.REFUSED_UNKNOWN)]
+
+
+async def test_a_moved_target_after_signing_is_audited(db_session: AsyncSession) -> None:
+    await _the_nine(db_session)
+    signer = await _signer(db_session)
+    first_id = practice_void.AGENT_CERTS[0][0]
+    moved = (
+        await db_session.execute(select(AgentCert).where(AgentCert.id == first_id))
+    ).scalar_one()
+    moved.status = "suspended"
+    await db_session.commit()
+
+    with pytest.raises(practice_void.VoidRefused):
+        await practice_void.apply(db_session, **signer)
+
+    async with fresh_session(db_session) as fresh:
+        events = await _void_events(fresh)
+        assert [(e.outcome, e.refusal) for e in events] == [("refused", practice_void.REFUSED_PLAN)]
+
+
+def test_the_cli_will_not_apply_without_an_operator() -> None:
+    from scripts import void_practice_certs
+
+    with pytest.raises(SystemExit):
+        void_practice_certs.main(["--apply"], prompt=lambda _: "unused")
+
+
+def test_the_cli_takes_no_credential_on_the_command_line() -> None:
+    """There is no flag for it: the credential is only ever read at the prompt."""
+    from scripts import void_practice_certs
+
+    with pytest.raises(SystemExit):
+        void_practice_certs.main(
+            ["--apply", "--operator", SIGNER, "--credential", "x"], prompt=lambda _: "unused"
+        )
