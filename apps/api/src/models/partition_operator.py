@@ -46,7 +46,8 @@ class PartitionOperatorEvent(Base):
     __tablename__ = "PartitionOperatorEvent"
     __table_args__ = (
         CheckConstraint(
-            "act IN ('enrol', 'author', 'seal', 'reset')", name="partition_operator_event_act"
+            "act IN ('enrol', 'author', 'seal', 'reset', 'void')",
+            name="partition_operator_event_act",
         ),
         CheckConstraint(
             "outcome IN ('done', 'refused', 'witnessed')", name="partition_operator_event_outcome"

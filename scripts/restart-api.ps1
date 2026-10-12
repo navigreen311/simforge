@@ -22,12 +22,20 @@
 [CmdletBinding()]
 param(
     [int]    $Port    = 8110,
-    [string] $ApiDir  = "$PSScriptRoot\..\apps\api",
-    [string] $LogDir  = "$PSScriptRoot\..\..",
+    [string] $ApiDir  = '',
+    [string] $LogDir  = '',
     [switch] $NoStart
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The defaults are computed HERE, not in param(). Launched as `powershell -File` with
+# [CmdletBinding()], Windows PowerShell 5.1 left $PSScriptRoot empty inside the param() defaults,
+# so "$PSScriptRoot\..\apps\api" resolved to C:\apps\api and the restart refused (2026-10-12).
+# In the body it is set; the fallback covers a host that sets neither.
+$here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+if (-not $ApiDir) { $ApiDir = Join-Path $here '..\apps\api' }
+if (-not $LogDir) { $LogDir = Join-Path $here '..\..' }
 $ApiDir  = (Resolve-Path $ApiDir).Path
 $LogDir  = (Resolve-Path $LogDir).Path
 $stamp   = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')

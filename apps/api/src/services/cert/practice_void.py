@@ -14,7 +14,9 @@ explicitly, to the floor (`L1`, Observe only), and only if the agent holds no va
 afterwards. `L1` is where an agent with no certification sits: new agents start there and earn
 higher levels through certification (`autonomy_ladder.FLOOR`).
 
-`plan` only reads. `apply` writes.
+`plan` only reads. `apply` writes, and only for an enrolled operator who authenticates with their
+own credential (ADR-0159, the ADR-0154 operators). A typed name is not enough. Every attempt is a
+`PartitionOperatorEvent` with act `void`: done, or refused with its code.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from src.models.cert import AgentCert
 from src.models.operation_cert import OperationCertification
 from src.services.cert.autonomy_ladder import FLOOR, record_transition
 from src.services.cert.registry import revoke_agent_cert
+from src.services.operation.partition_operators import audit, authenticate, refuse
 from src.services.operation.state_machine import OperationState
 from src.services.operation.void import revoke_operation_certification
 
@@ -59,6 +62,11 @@ OPERATION_CERTS: tuple[tuple[str, str, str], ...] = (
     ("01M128NV2M6CKS5MDA997S1J65", "Unit A sara_lopez x voiceforge/call_flow", "certified"),
     ("01M0KHDK94X4EVD1BCCK63TWS4", "Unit B voiceforge dept (medlink-pro)", "certified"),
 )
+
+
+#: The audit act, and the refusal code when the plan refuses after the operator authenticated.
+ACT = "void"
+REFUSED_PLAN = "void_plan_refused"
 
 
 class VoidRefused(Exception):
@@ -197,11 +205,27 @@ async def plan(session: AsyncSession) -> Plan:
     return out
 
 
-async def apply(session: AsyncSession, *, actor: str) -> Plan:
-    """Write the plan. Re-plans first, so a target that moved since the dry run refuses here."""
-    if not actor.strip():
-        raise VoidRefused("an actor is required")
-    the_plan = await plan(session)
+async def apply(session: AsyncSession, *, operator_name: str, credential: str) -> Plan:
+    """Write the plan, signed by an enrolled operator (ADR-0159).
+
+    Authenticates first: an unknown name or a wrong credential raises `OperatorRefused`, audited,
+    and nothing is read or written. Then re-plans, so a target that moved since the dry run refuses
+    here, also audited. The actor on every event is the operator's name and id, as enrolled.
+    """
+    operator = await authenticate(session, operator_name, credential, act=ACT)
+    actor = f"{operator.name} (operator {operator.id})"
+    try:
+        the_plan = await plan(session)
+    except VoidRefused:
+        await refuse(
+            session,
+            "the void plan was refused",
+            REFUSED_PLAN,
+            act=ACT,
+            claimed_name=operator_name,
+            operator_id=operator.id,
+        )
+        raise
     for step in the_plan.steps:
         if step.kind == "agent_cert":
             # Commits per cert and publishes to the PEP; re-running skips what is revoked.
@@ -219,5 +243,6 @@ async def apply(session: AsyncSession, *, actor: str) -> Plan:
             await record_transition(
                 session, await _david(session), FLOOR, LEVEL_REASON, triggered_by=actor
             )
+    audit(session, act=ACT, claimed_name=operator_name, outcome="done", operator_id=operator.id)
     await session.commit()
     return the_plan
