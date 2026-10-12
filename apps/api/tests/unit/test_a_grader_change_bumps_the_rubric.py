@@ -26,7 +26,10 @@ GRADERS = (grade_scenario, battery_for_run)
 PINNED = {
     "0.12.0": "64fd40cfa63ea443e45903fb4e5b4860746649103e1048ef745676ff37e80fea",
     # ADR-0150 changed the parser, not these two functions.
-    "0.13.0": "64fd40cfa63ea443e45903fb4e5b4860746649103e1048ef745676ff37e80fea",
+    # ADR-0160 changed WHICH ROW `battery_for_run` reads (one sitting of the ref, by number), not
+    # how it grades: no row is decided by a different rule. Re-pinned without a bump, which would
+    # have made every partition sitting due again. Flagged to Ivan.
+    "0.13.0": "fc431c773a79aae4a0ad71bf2be944bfa118eff034b0c522c7a32030a4ac3ad0",
 }
 
 

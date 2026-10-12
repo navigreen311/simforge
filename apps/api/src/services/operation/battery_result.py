@@ -42,7 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_cert import OperationCertification
-from src.models.operation_run import OperationRun
+from src.services.operation.sittings import sitting_of
 from src.services.operation.views import protocol_versions_of
 
 #: Returned when the run exists and nothing has been observed for it. Distinct from a 404: the run
@@ -77,9 +77,8 @@ async def battery_result_for(session: AsyncSession, run_ref: str) -> dict | None
     Deliberately shaped like `gate_result_for` in its failure mode - `None` for an unknown ref
     rather than an invented empty body - so a caller handles the two reads the same way.
     """
-    run = (
-        await session.execute(select(OperationRun).where(OperationRun.runRef == run_ref))
-    ).scalar_one_or_none()
+    # ADR-0160. The latest sitting of the ref.
+    run = await sitting_of(session, run_ref)
     if run is None:
         return None
 

@@ -145,7 +145,7 @@ async def unscored_runs(session: AsyncSession, *, limit: int) -> list[OperationR
                     # a department run selected here only takes a slot. It closes by timeout.
                     OperationRun.unit == "A",
                 )
-                .order_by(OperationRun.startedAt)
+                .order_by(OperationRun.startedAt, OperationRun.sitting)
             )
         )
         .scalars()
@@ -185,14 +185,17 @@ async def sweep_unscored_runs(
     # ORM object in the session, so touching `run.runRef` on the next iteration would emit a lazy
     # refresh - which raises `MissingGreenlet` under the async session and would turn one failed
     # battery into a failed pass. The thing this loop exists to survive.
-    refs = [run.runRef for run in runs]
+    # ADR-0160. Two sittings of one ref are two runs to score; the sitting says which.
+    refs = [(run.runRef, run.sitting) for run in runs]
     scored = 0
     skipped: list[tuple[str, str]] = []
     failed: list[tuple[str, str]] = []
 
-    for run_ref in refs:
+    for run_ref, sitting in refs:
         try:
-            result = await submit_battery_result(session, run_ref, runtime=runtime, seed=seed)
+            result = await submit_battery_result(
+                session, run_ref, runtime=runtime, seed=seed, sitting=sitting
+            )
         except Exception as exc:  # noqa: BLE001 - one bad run must not end the pass
             await session.rollback()
             failed.append((run_ref, f"{type(exc).__name__}: {exc}"))

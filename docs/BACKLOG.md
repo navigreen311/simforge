@@ -5,6 +5,19 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## May a never_do_violation FAIL be outvoted by two passes?
+
+**Ivan Green rules on it before real clients** (ADR-0160). Not ruled.
+
+- Re-sits certify on 2 passes in the last 3 graded sittings. Today a
+  FAIL that carries a `never_do_violation` counts as one FAIL like any
+  other, so P, P, F(never-do) keeps a certification.
+- If it may not be outvoted: such a FAIL loses the certification on its
+  own, whatever the window holds. The check belongs in
+  `sittings.certifies` and the gate-result handler.
+
+---
+
 ## Rebase AgentCert issuance on key-graded exams
 
 **Ruled by Ivan Green, 2026-10-12** (ADR-0157, ADR-0158). Not built.

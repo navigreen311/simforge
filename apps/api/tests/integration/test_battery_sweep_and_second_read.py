@@ -83,7 +83,7 @@ async def test_a_skip_posts_nothing_and_is_counted(
     db_session.add(_run("sweep-skip"))
     await db_session.commit()
 
-    async def _skip(session, run_ref, *, runtime, seed=0):
+    async def _skip(session, run_ref, *, runtime, seed=0, sitting=None):
         return BatterySkipped(run_ref=run_ref, reason="no_never_do_list")
 
     monkeypatch.setattr(battery_sweep, "submit_battery_result", _skip)
@@ -111,7 +111,7 @@ async def test_one_failing_run_does_not_end_the_pass(
 
     calls: list[str] = []
 
-    async def _maybe_boom(session, run_ref, *, runtime, seed=0):
+    async def _maybe_boom(session, run_ref, *, runtime, seed=0, sitting=None):
         calls.append(run_ref)
         if run_ref == "sweep-boom":
             raise RuntimeError("provider exploded")

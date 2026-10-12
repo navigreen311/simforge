@@ -47,13 +47,20 @@ def _migration_checks() -> set[str]:
     return live
 
 
+#: ADR-0160. A unique index dropped by a later migration is no longer enforced either.
+_DROPPED_INDEX = re.compile(r'DROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?', re.I)
+
+
 def _migration_uniques() -> set[tuple[str, tuple[str, ...], bool]]:
-    out = set()
+    live: dict[str, tuple[str, tuple[str, ...], bool]] = {}
     for text in _sql():
-        for _, table, cols, where in _UNIQUE.findall(text):
-            names = tuple(sorted(c.strip().strip('"') for c in cols.split(",")))
-            out.add((table, names, bool(where)))
-    return out
+        for m in re.finditer(f"{_UNIQUE.pattern}|{_DROPPED_INDEX.pattern}", text, re.I):
+            if m.group(1):
+                names = tuple(sorted(c.strip().strip('"') for c in m.group(3).split(",")))
+                live[m.group(1)] = (m.group(2), names, bool(m.group(4)))
+            elif m.group(5):
+                live.pop(m.group(5), None)
+    return set(live.values())
 
 
 def _mirror_checks() -> set[str]:

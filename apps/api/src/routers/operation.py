@@ -14,6 +14,8 @@ result, and the domain cert tables are never touched.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,16 +24,18 @@ from src.db import get_session
 from src.deps import Principal, get_current_principal, require_role
 from src.models.forge_instruction_set import ForgeInstructionSet
 from src.models.operation_cert import OperationCertification
-from src.models.operation_run import OperationRun
 from src.models.operation_scenario import OperationScenarioSubmission
 from src.schemas.operation_payloads import (
     AgentOperationCertResult,
+    AgentRunOutcome,
     DepartmentContextCertResult,
     ForgeOperationCurriculum,
     ForgeOperationResults,
     GateResultRequest,
     HeldOutInventoryResponse,
     OperationRubricResultItem,
+    OperationRunResat,
+    OperationRunResitRequest,
     OperationRunStarted,
     OperationRunStartRequest,
     TimedOutRun,
@@ -39,6 +43,7 @@ from src.schemas.operation_payloads import (
 )
 from src.services.agent_runtime.model_identity import ModelIdentity, identity_is_complete
 from src.services.operation.battery_result import battery_result_for
+from src.services.operation.gate_verdict import verdict_for_finished_state
 from src.services.operation.gating import (
     agent_module_assignability,
     agent_operation_states,
@@ -86,6 +91,15 @@ from src.services.operation.scenarios import (
     GATE_9_5_FLAG,
     is_competence_unexercised,
     validate_curriculum_submission,
+)
+from src.services.operation.sittings import (
+    WITHHOLD_SITTINGS,
+    UnknownExam,
+    certifies,
+    earlier_verdicts,
+    open_resit,
+    sitting_for_result,
+    sitting_of,
 )
 from src.services.operation.state_machine import OperationState, is_assignable
 from src.services.operation.trust_tier import tier_for_state
@@ -318,6 +332,71 @@ def _out_dim(item: OperationRubricResultItem) -> dict:
     return d
 
 
+#: ADR-0160. Copied when a certification the window still holds is restated after a failed
+#: sitting. Everything but the row's own id and time: the evidence is the passing sitting's.
+_RESTATED_FIELDS = tuple(
+    c.key for c in OperationCertification.__table__.columns if c.key not in ("id", "createdAt")
+)
+
+
+async def _held_certification(
+    session: AsyncSession,
+    *,
+    outcome: AgentRunOutcome,
+    run_content_hash: str,
+    rubric_version: str,
+) -> OperationCertification | None:
+    """The certification a failed sitting leaves standing, or None (ADR-0160).
+
+    It must be the unit's CURRENT row - the one gating reads - and certified, and earned on the
+    same exam: same forge, instructions, answer keys and rubric. A certification revoked, voided
+    or gone stale since is not held up by an older pass; the window counts sittings, it does not
+    resurrect a certificate.
+    """
+    current = (
+        await session.execute(
+            select(OperationCertification)
+            .where(
+                OperationCertification.unitType == "agent_operation",
+                OperationCertification.agentId == outcome.agent_id,
+                OperationCertification.moduleId == outcome.module_id,
+            )
+            .order_by(OperationCertification.createdAt.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if (
+        current is None
+        or current.state != OperationState.CERTIFIED.value
+        or current.forgeId != outcome.forge_id
+        or current.instructionContentHash != run_content_hash
+        or current.scenarioSetHash != outcome.scenario_set_hash
+        or current.operationRubricVersion != rubric_version
+    ):
+        return None
+    return current
+
+
+async def _earlier_sittings(session: AsyncSession, body: GateResultRequest) -> list[str | None]:
+    """ADR-0160. The own verdicts of the sittings this exam already had, newest first.
+
+    A result with no ref, or for a ref never opened, has no earlier sitting: it is a first
+    sitting, and one pass is not two.
+    """
+    if not body.run_ref:
+        return []
+    this_sitting = await sitting_for_result(session, body.run_ref, body.sitting)
+    if this_sitting is None:
+        return []
+    return await earlier_verdicts(session, this_sitting.runRef, this_sitting.sitting)
+
+
+def _restated(held: OperationCertification, *, after: datetime) -> OperationCertification:
+    row = OperationCertification(**{k: getattr(held, k) for k in _RESTATED_FIELDS})
+    row.createdAt = after + timedelta(milliseconds=1)
+    return row
+
+
 @router.post("/gate-result", dependencies=[Depends(require_role("compliance_analyst"))])
 async def gate_result(
     body: GateResultRequest, session: AsyncSession = Depends(get_session)
@@ -360,6 +439,8 @@ async def gate_result(
             ),
             run_ref=run_ref,
         )
+
+    earlier = await _earlier_sittings(session, body)
 
     agent_results: list[AgentOperationCertResult] = []
     #: What the RUN is closed with, kept beside the outbound results because the two carry
@@ -600,6 +681,40 @@ async def gate_result(
                     ),
                 )
 
+        # ADR-0160. RE-SITS: CERTIFICATION IS 2 PASSES IN THE LAST 3 GRADED SITTINGS OF THIS EXAM.
+        #
+        # Everything above decided what THIS sitting earned; that is `sitting_state`, and it is
+        # what the run records as the sitting's own verdict. The certification is the window's:
+        #   a pass without a second in the window is held at provisional, and says why;
+        #   a fail under a certification the window still holds keeps that certification, and
+        #   the sitting's own failed row is written beside it all the same.
+        # Only PASS and FAIL are graded sittings. A void, a withhold or a timeout is not counted.
+        sitting_state = state
+        held: OperationCertification | None = None
+        if state in (OperationState.CERTIFIED.value, OperationState.FAILED.value):
+            window = [verdict_for_finished_state(state), *earlier]
+            if certifies(window):
+                if state == OperationState.FAILED.value:
+                    held = await _held_certification(
+                        session,
+                        outcome=outcome,
+                        run_content_hash=body.run_content_hash,
+                        rubric_version=op_rubric_version,
+                    )
+            elif state == OperationState.CERTIFIED.value:
+                state = OperationState.PROVISIONAL.value
+                withheld.append(WITHHOLD_SITTINGS)
+                tier = tier_for_state(state, channel_tier)
+            log.info(
+                "gate_result_sittings",
+                run_ref=run_ref,
+                agent=outcome.agent_id,
+                module=outcome.module_id,
+                sitting=sitting_state,
+                window=window[:3],
+                certified=state == OperationState.CERTIFIED.value or held is not None,
+            )
+
         cert = OperationCertification(
             unitType="agent_operation",
             state=state,
@@ -660,6 +775,13 @@ async def gate_result(
             expiresAt=outcome.expires_at,
         )
         session.add(cert)
+        if held is not None:
+            # The certification the window still holds, restated AFTER the sitting's own row so it
+            # is the latest a reader finds. Its evidence is the passing sitting's, verbatim.
+            cert.createdAt = utcnow()
+            session.add(_restated(held, after=cert.createdAt))
+            state = OperationState.CERTIFIED.value
+            tier = held.maxCertifiedTrustTier
         agent_results.append(
             AgentOperationCertResult(
                 agent_id=outcome.agent_id,
@@ -677,16 +799,31 @@ async def gate_result(
                 expires_at=outcome.expires_at,
             )
         )
-        agent_units.append(
-            UnitOutcome(
-                state=state,
-                score=outcome.score,
-                threshold=outcome.threshold,
-                certified_tier=tier,
-                agent_model=outcome.agent_model,
-                model_identity=identity.as_record() if identity else None,
+        if held is not None:
+            # ADR-0160. The ref reports the certification the window holds, on ITS basis.
+            agent_units.append(
+                UnitOutcome(
+                    state=state,
+                    score=held.score,
+                    threshold=outcome.threshold,
+                    certified_tier=tier,
+                    agent_model=held.agentModel,
+                    model_identity=held.agentModelIdentity,
+                    sitting_state=sitting_state,
+                )
             )
-        )
+        else:
+            agent_units.append(
+                UnitOutcome(
+                    state=state,
+                    score=outcome.score,
+                    threshold=outcome.threshold,
+                    certified_tier=tier,
+                    agent_model=outcome.agent_model,
+                    model_identity=identity.as_record() if identity else None,
+                    sitting_state=sitting_state,
+                )
+            )
 
     dept_results: list[DepartmentContextCertResult] = []
     dept_units: list[UnitOutcome] = []
@@ -754,6 +891,7 @@ async def gate_result(
             run_ref=body.run_ref,
             agent_outcomes=agent_units,
             department_outcomes=dept_units,
+            sitting=body.sitting,
         )
 
     await session.commit()
@@ -804,9 +942,7 @@ async def start_operation_run(
             },
         )
 
-    existing = (
-        await session.execute(select(OperationRun).where(OperationRun.runRef == body.run_ref))
-    ).scalar_one_or_none()
+    existing = await sitting_of(session, body.run_ref)
 
     run = await open_run(
         session,
@@ -832,6 +968,39 @@ async def start_operation_run(
         started_at=run.startedAt,
         window_minutes=run.windowMinutes,
         already_open=existing is not None,
+    )
+
+
+@router.post("/run/resit", dependencies=[Depends(require_role("compliance_analyst"))])
+async def resit_operation_run(
+    body: OperationRunResitRequest, session: AsyncSession = Depends(get_session)
+) -> OperationRunResat:
+    """Open the next sitting of an exam (ADR-0160). Not idempotent: each call is a sitting.
+
+    The same ref, the same exam, a new row with its own clock. Every earlier sitting is kept as it
+    is. The battery sweep scores it like any open run, and the gate result that closes it is
+    decided over the last 3 graded sittings: 2 passes certify, 2 fails lose a certification.
+    """
+    try:
+        run = await open_resit(session, body.run_ref)
+    except UnknownExam:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "unknown_run_ref",
+                "detail": (
+                    f"SimForge has no exam on run_ref {body.run_ref!r}. A re-sit is a further "
+                    "sitting of an exam that was opened; open it with POST /operation/run/start."
+                ),
+            },
+        ) from None
+    await session.commit()
+    return OperationRunResat(
+        run_ref=run.runRef,
+        sitting=run.sitting,
+        unit=run.unit,
+        started_at=run.startedAt,
+        window_minutes=run.windowMinutes,
     )
 
 

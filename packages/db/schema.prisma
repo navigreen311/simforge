@@ -1053,9 +1053,13 @@ model OperationScenarioSubmission {
 model OperationRun {
   id String @id @default(cuid())
 
-  /// Correlates to the Office curriculum submission. Unique: the Office reads a verdict
-  /// BY this ref, and two runs sharing one ref make the answer ambiguous.
-  runRef String @unique
+  /// Correlates to the Office curriculum submission: the exam reference. ADR-0160: each row
+  /// is one sitting of it, so the ref is unique only with `sitting`.
+  runRef String
+  /// ADR-0160. Which sitting of the exam, from 1. Every sitting is kept.
+  sitting Int @default(1)
+  /// ADR-0160. What this sitting earned on its own. `verdict` is the ref's standing.
+  sittingVerdict String?
   unit   String // "A" (agent x forge x module) | "B" (department x forge)
 
   forgeId      String
@@ -1105,6 +1109,8 @@ model OperationRun {
   @@index([departmentId])
   @@index([endedAt])
   @@index([verdict])
+  @@unique([runRef, sitting])
+  @@index([runRef])
 }
 
 model OperationCertification {
@@ -1346,6 +1352,8 @@ model HeldOutPartitionOutcome {
 model SubmittedProbeAnswer {
   id                     String   @id @default(cuid())
   runRef                 String
+  /// ADR-0160. The sitting of runRef the answer was given in.
+  sitting                Int      @default(1)
   forgeId                String
   moduleId               String
   instructionContentHash String

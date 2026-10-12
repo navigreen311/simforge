@@ -23,7 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.operation.submitted_scoring import SubmittedKey, scenario_set_hash
 
-pytestmark = pytest.mark.asyncio
+#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
+pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("one_earlier_pass")]
 
 FORGE = "cre-forge"
 MODULE = "buyer_match"
