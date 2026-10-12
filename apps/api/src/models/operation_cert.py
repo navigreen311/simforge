@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, Integer, String
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.build_info import process_identity
@@ -193,3 +193,28 @@ class OperationCertification(Base):
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     reviewedBy: Mapped[str | None] = mapped_column(String, nullable=True)
     reviewedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OperationCertificationEvent(Base):
+    """ADR-0158: the append-only record of a change to an `OperationCertification`'s state.
+
+    `state` on the certification is a current value and is overwritten. This row is never updated:
+    it keeps the state the certification had before, who changed it, and why. Today only a
+    revocation writes one (`services/operation/void.py`); the older revoke paths in `recert.py`
+    still overwrite without a record."""
+
+    __tablename__ = "OperationCertificationEvent"
+    __table_args__ = (
+        CheckConstraint("event IN ('revoked')", name="operation_certification_event_event"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
+    operationCertificationId: Mapped[str] = mapped_column(
+        String, ForeignKey("OperationCertification.id"), index=True
+    )
+    event: Mapped[str] = mapped_column(String)
+    fromState: Mapped[str] = mapped_column(String)
+    toState: Mapped[str] = mapped_column(String)
+    actor: Mapped[str] = mapped_column(String)
+    reason: Mapped[str] = mapped_column(String)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

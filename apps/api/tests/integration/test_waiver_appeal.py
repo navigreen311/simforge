@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.waiver import Appeal, Waiver
 from src.services.governance.waiver import expire_waivers
 from src.utils.time import utcnow
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
@@ -62,27 +63,26 @@ async def test_expire_waivers_sweep(client: AsyncClient, db_session: AsyncSessio
     # `run_timeout_sweep` lost its commit in. Covered in `test_a_job_asserts_its_row.py`.
 
 
-async def _issue_and_revoke_cert(client: AsyncClient) -> str:
+async def _issue_and_revoke_cert(client: AsyncClient, db_session: AsyncSession) -> str:
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
-    issue = await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": FORGE_CAP,
-            "tier": "foundational",
-            "battery_run_ids": [run["run_id"]],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    # A cert as issued before ADR-0158 (no route issues one now).
+    issue = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap=FORGE_CAP,
+        tier="foundational",
+        battery_run_ids=[run["run_id"]],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
-    cert_id = issue.json()["cert"]["id"]
+    cert_id = issue["cert"]["id"]
     await client.post(f"/api/certs/agent/{cert_id}/revoke", json={"reason": "disputed"})
     return cert_id
 
 
-async def test_appeal_full_flow(client: AsyncClient) -> None:
-    cert_id = await _issue_and_revoke_cert(client)
+async def test_appeal_full_flow(client: AsyncClient, db_session: AsyncSession) -> None:
+    cert_id = await _issue_and_revoke_cert(client, db_session)
     appeal = (
         await client.post(
             "/api/appeals/",
@@ -119,7 +119,7 @@ async def test_appeal_full_flow(client: AsyncClient) -> None:
 async def test_appeal_window_closed(client: AsyncClient, db_session: AsyncSession) -> None:
     from src.models.cert import CertLifecycleEvent
 
-    cert_id = await _issue_and_revoke_cert(client)
+    cert_id = await _issue_and_revoke_cert(client, db_session)
     # Backdate the decision beyond the 7-day appeal window.
     for ev in (await db_session.execute(select(CertLifecycleEvent))).scalars().all():
         ev.timestamp = utcnow() - timedelta(days=10)
@@ -134,7 +134,7 @@ async def test_appeal_window_closed(client: AsyncClient, db_session: AsyncSessio
 async def test_resolve_requires_reviewer_or_escalation(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    cert_id = await _issue_and_revoke_cert(client)
+    cert_id = await _issue_and_revoke_cert(client, db_session)
     appeal = (
         await client.post(
             "/api/appeals/",
@@ -155,7 +155,7 @@ async def test_resolve_requires_reviewer_or_escalation(
 
 
 async def test_appeals_list(client: AsyncClient, db_session: AsyncSession) -> None:
-    cert_id = await _issue_and_revoke_cert(client)
+    cert_id = await _issue_and_revoke_cert(client, db_session)
     await client.post(
         "/api/appeals/",
         json={"target_id": cert_id, "appellant": "david_kim", "grounds": "x"},

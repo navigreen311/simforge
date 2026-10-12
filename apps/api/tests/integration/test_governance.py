@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.governance import get_current_constitution, ratify_constitution
 from src.services.governance.amendment import propose_amendment, ratify_amendment
+from tests.integration.cert_fixtures import stand_up_cert
 
 
 async def test_constitution_ratify_and_current(db_session: AsyncSession) -> None:
@@ -41,25 +42,22 @@ async def test_constitution_endpoints(client: AsyncClient) -> None:
     assert off.json()["active"] is False
 
 
-async def test_cert_issuance_creates_lineage(client: AsyncClient) -> None:
+async def test_cert_issuance_creates_lineage(client: AsyncClient, db_session: AsyncSession) -> None:
+    """A cert as issued before ADR-0158 carries its lineage edges."""
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[4]
     await client.post("/api/packs/", json={"pack_dir": str(repo / "packs" / "greenstone" / "v1")})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
-    issue = (
-        await client.post(
-            "/api/certs/agent/issue",
-            json={
-                "agent_village_id": "david_kim",
-                "forge_cap": "cre-forge.call_center.outbound_seller_outreach",
-                "tier": "foundational",
-                "battery_run_ids": [run["run_id"]],
-                "approver_id": "ivan",
-                "pack_id": "pack.greenstone.v1",
-            },
-        )
-    ).json()
+    issue = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap="cre-forge.call_center.outbound_seller_outreach",
+        tier="foundational",
+        battery_run_ids=[run["run_id"]],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
+    )
     cert_urn = f"urn:gc:village:cert:{issue['cert']['id']}"
     edges = (await client.get(f"/api/lineage/from/{cert_urn}")).json()["edges"]
     relations = {e["relation"] for e in edges}

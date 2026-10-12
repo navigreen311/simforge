@@ -1185,6 +1185,8 @@ model OperationCertification {
   @@index([agentId])
   @@index([moduleId])
   @@index([departmentId])
+
+  events OperationCertificationEvent[] // ADR-0158
 }
 
 // ─── Gate 9.5 held-out adversarial partition (ADR-0108) ────────────────────────
@@ -1405,4 +1407,19 @@ model PartitionOperatorEvent {
   at                DateTime @default(now())
 
   @@index([partitionId])
+}
+
+// ADR-0158: append-only record of an OperationCertification state change. Never updated.
+model OperationCertificationEvent {
+  id                       String   @id @default(cuid())
+  operationCertificationId String
+  operationCertification   OperationCertification @relation(fields: [operationCertificationId], references: [id], onDelete: Restrict)
+  event                    String // "revoked"
+  fromState                String
+  toState                  String
+  actor                    String
+  reason                   String
+  at                       DateTime @default(now())
+
+  @@index([operationCertificationId])
 }

@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.models.run import Run
+from src.services.cert.registry import CertIssuanceError
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
@@ -42,8 +44,9 @@ async def test_blind_run_redacts_scenario_title_from_transcript(
 
 
 async def test_cert_blind_floor_enforced_only_when_flag_on(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The blind floor in the issuance machinery, standing up certs as issued before ADR-0158."""
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()  # non-blind
     payload = {
@@ -56,11 +59,11 @@ async def test_cert_blind_floor_enforced_only_when_flag_on(
     }
     # Flag on → a 0%-blind battery is rejected by the blind floor.
     monkeypatch.setattr(settings, "cert_enforce_blind_mode", True)
-    blocked = await client.post("/api/certs/agent/issue", json=payload)
-    assert blocked.status_code == 400 and "blind" in blocked.json()["detail"].lower()
+    with pytest.raises(CertIssuanceError, match="(?i)blind"):
+        await stand_up_cert(db_session, **payload)
 
     # A blind run in the battery satisfies the floor.
     blind = (await client.post("/api/scenarios/scn.gs.src.001/run", params={"blind": True})).json()
     payload["battery_run_ids"] = [blind["run_id"]]
-    ok = await client.post("/api/certs/agent/issue", json=payload)
-    assert ok.status_code == 200, ok.text
+    ok = await stand_up_cert(db_session, **payload)
+    assert ok["cert"]["status"] == "active"

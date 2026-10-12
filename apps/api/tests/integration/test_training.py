@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.run import Run
 from src.models.scorecard import Scorecard
 from src.services.training.proposals import _bump_version
+from tests.integration.cert_fixtures import stand_up_cert
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 GREENSTONE = str(REPO_ROOT / "packs" / "greenstone" / "v1")
@@ -47,19 +48,16 @@ async def test_weak_run_proposes_and_approval_suspends_cert(
     rid = run["run_id"]
 
     # Issue a cert (pins agent_prompt_version=prompt.v1) BEFORE weakening the (already-gated) card.
-    issue = await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": FORGE_CAP,
-            "tier": "foundational",
-            "battery_run_ids": [rid],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    issue = await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap=FORGE_CAP,
+        tier="foundational",
+        battery_run_ids=[rid],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
-    assert issue.status_code == 200, issue.text
-    cert_id = issue.json()["cert"]["id"]
+    cert_id = issue["cert"]["id"]
 
     await _weaken_p7(db_session, rid)
 
@@ -102,16 +100,14 @@ async def test_enriched_shows_blast_radius_preview_then_applied(
     await client.post("/api/packs/", json={"pack_dir": GREENSTONE})
     run = (await client.post("/api/scenarios/scn.gs.src.001/run")).json()
     rid = run["run_id"]
-    await client.post(
-        "/api/certs/agent/issue",
-        json={
-            "agent_village_id": "david_kim",
-            "forge_cap": FORGE_CAP,
-            "tier": "foundational",
-            "battery_run_ids": [rid],
-            "approver_id": "ivan",
-            "pack_id": "pack.greenstone.v1",
-        },
+    await stand_up_cert(
+        db_session,
+        agent_village_id="david_kim",
+        forge_cap=FORGE_CAP,
+        tier="foundational",
+        battery_run_ids=[rid],
+        approver_id="ivan",
+        pack_id="pack.greenstone.v1",
     )
     await _weaken_p7(db_session, rid)
     proposal = (await client.post(f"/api/training/proposals/from-run/{rid}")).json()["proposal"]

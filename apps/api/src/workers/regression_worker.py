@@ -25,6 +25,13 @@ from src.telemetry.logging import get_logger
 
 log = get_logger("regression_worker")
 
+#: ADR-0158: paused. The re-run step writes practice runs, which count for nothing (ADR-0157
+#: ruling 1), and the sweep over them is inert. Un-pausing is a ruling, not a config change.
+PAUSED_BECAUSE = (
+    "paused by ADR-0158: re-running scenarios produces practice runs, which never change "
+    "certification (ADR-0157 ruling 1)"
+)
+
 
 async def _rerun_certifying_scenarios(session: AsyncSession, reader: VillageReader) -> int:
     """Re-run each scenario that covers an active cert's cap, for that cert's agent. Best-effort:
@@ -63,6 +70,8 @@ async def _rerun_certifying_scenarios(session: AsyncSession, reader: VillageRead
 
 
 async def _run(rerun: bool) -> dict:
+    log.info("regression_sweep_paused", reason=PAUSED_BECAUSE)
+    return {"paused": True, "reason": PAUSED_BECAUSE, "reran": 0}
     async with SessionLocal() as session:
         reran = 0
         if rerun:
@@ -85,5 +94,5 @@ async def _run(rerun: bool) -> dict:
 
 
 def run_regression_sweep_job(rerun: bool = True) -> dict:
-    """Synchronous entrypoint for the scheduler/RQ."""
+    """Synchronous entrypoint for the scheduler/RQ. Paused (ADR-0158): returns without running."""
     return asyncio.run(_run(rerun))
