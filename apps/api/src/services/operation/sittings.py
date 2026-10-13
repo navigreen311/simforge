@@ -1,4 +1,4 @@
-"""Re-sits: every sitting of an exam is kept; certification is 2 passes in the last 3 (ADR-0160).
+"""Re-sits: every sitting is kept; certification is a majority of the last 3 graded (ADR-0160).
 
 Ivan's ruling, 2026-10-12:
 
@@ -9,11 +9,15 @@ Ivan's ruling, 2026-10-12:
     one sitting.
   * A certification is lost the same way: 2 fails in the last 3.
 
+Ivan's rulings on it, same day (Option B): certification is a MAJORITY of up to the last 3 graded
+sittings. One sitting, a PASS: certified. F,P: not certified. F,P,P: certified. Applied to every
+existing certification the same way; every existing ref had one sitting, so none changed state.
+
 WHICH SITTINGS COUNT. A sitting that reached PASS or FAIL. A sitting that timed out, was not run,
 or was held at PROVISIONAL for another reason (no model file, rubric did not discriminate) graded
 nothing, so it is not a pass and not a fail, and it is not in the window. This is what keeps the
-two halves of the ruling one rule: among the last 3 GRADED sittings, 2 passes and 2 fails cannot
-both hold, and a hung run never costs an agent a certification (the run window's own doctrine).
+two halves of the ruling one rule, and a hung run never costs an agent a certification (the run
+window's own doctrine). Ruled by Ivan: only PASS/FAIL sittings count; timeouts are skipped.
 
 NOT YET RULED. Whether a FAIL that carries a never-do violation may be outvoted by two passes.
 Ivan rules on it before real clients; until then it counts as one FAIL like any other. ADR-0160.
@@ -29,13 +33,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.operation_run import OperationRun
 from src.services.operation.gate_verdict import GateVerdict
 
-#: How many of the latest graded sittings are read, and how many passes among them certify.
+#: How many of the latest graded sittings are read. A strict majority of them must be PASS.
 WINDOW = 3
-PASSES_REQUIRED = 2
 GRADED = (GateVerdict.PASS.value, GateVerdict.FAIL.value)
 
-#: The withhold on a sitting that passed while the window does not yet hold 2 passes.
-WITHHOLD_SITTINGS = "fewer_than_two_passes_in_the_last_three_sittings"
+#: The withhold on a sitting that passed while the window holds no majority of passes (F,P).
+WITHHOLD_SITTINGS = "no_majority_of_passes_in_the_last_three_sittings"
 
 #: Named in the ADR and here so a reader of the rule finds the open question beside it.
 NEVER_DO_OUTVOTE_UNRULED = (
@@ -54,9 +57,13 @@ def own_verdict(run: OperationRun) -> str | None:
 
 
 def certifies(verdicts_newest_first: Sequence[str | None]) -> bool:
-    """2 passes among the last 3 graded sittings. Ungraded sittings are skipped, not counted."""
+    """A strict majority of PASS among up to the last 3 graded sittings (Option B).
+
+    P: certified. F,P: not (a tie is not a majority). F,P,P: certified. Ungraded sittings are
+    skipped, not counted. No graded sitting: not certified.
+    """
     graded = [v for v in verdicts_newest_first if v in GRADED][:WINDOW]
-    return graded.count(GateVerdict.PASS.value) >= PASSES_REQUIRED
+    return 2 * graded.count(GateVerdict.PASS.value) > len(graded)
 
 
 async def sittings_of(session: AsyncSession, run_ref: str) -> list[OperationRun]:
@@ -158,7 +165,6 @@ async def open_resit(session: AsyncSession, run_ref: str) -> OperationRun:
 __all__ = [
     "GRADED",
     "NEVER_DO_OUTVOTE_UNRULED",
-    "PASSES_REQUIRED",
     "WINDOW",
     "WITHHOLD_SITTINGS",
     "UnknownExam",

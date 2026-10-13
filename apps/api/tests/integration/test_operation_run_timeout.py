@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +18,6 @@ from src.models.operation_run import OperationRun
 from src.services.operation.gate_verdict import GateVerdict
 from src.services.operation.run_registry import gate_result_for, open_run, sweep_timed_out_runs
 from src.utils.time import utcnow
-
-#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
-pytestmark = pytest.mark.usefixtures("one_earlier_pass")
 
 REF = {
     "forge_id": "capital-forge",

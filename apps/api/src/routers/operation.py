@@ -681,11 +681,11 @@ async def gate_result(
                     ),
                 )
 
-        # ADR-0160. RE-SITS: CERTIFICATION IS 2 PASSES IN THE LAST 3 GRADED SITTINGS OF THIS EXAM.
+        # ADR-0160. RE-SITS: CERTIFICATION IS A MAJORITY OF UP TO THE LAST 3 GRADED SITTINGS.
         #
         # Everything above decided what THIS sitting earned; that is `sitting_state`, and it is
         # what the run records as the sitting's own verdict. The certification is the window's:
-        #   a pass without a second in the window is held at provisional, and says why;
+        #   a pass with no majority in the window (F,P) is held at provisional, and says why;
         #   a fail under a certification the window still holds keeps that certification, and
         #   the sitting's own failed row is written beside it all the same.
         # Only PASS and FAIL are graded sittings. A void, a withhold or a timeout is not counted.

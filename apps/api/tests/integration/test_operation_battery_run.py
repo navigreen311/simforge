@@ -58,9 +58,6 @@ from src.services.village.reader import VillageReader
 from tests.unit.test_held_out_authoring import PORTFOLIO_HEALTH_NEVER_DO
 from tests.unit.test_operation_battery import ScriptedProvider, _compliant, _violating
 
-#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
-pytestmark = pytest.mark.usefixtures("one_earlier_pass")
-
 FORGE = "capitalforge"
 MODULE = "portfolio_health"
 AGENT = "taylor_zhang"

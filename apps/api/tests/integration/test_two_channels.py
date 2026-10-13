@@ -47,8 +47,7 @@ from src.services.operation.submitted_scoring import (
     grade_submitted,
 )
 
-#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
-pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("one_earlier_pass")]
+pytestmark = pytest.mark.asyncio
 
 
 class _Answer:

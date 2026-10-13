@@ -82,17 +82,21 @@ async def _current(db: AsyncSession) -> OperationCertification:
 # --- the rule ------------------------------------------------------------------------------------
 
 
-def test_two_passes_in_the_last_three_graded_sittings_certify() -> None:
+def test_a_majority_of_up_to_the_last_three_graded_sittings_certifies() -> None:
+    """Ivan's Option B, his three examples first (lists are newest first)."""
+    assert certifies(["PASS"])  # one sitting, a PASS
+    assert not certifies(["PASS", "FAIL"])  # F,P
+    assert certifies(["PASS", "PASS", "FAIL"])  # F,P,P
     assert not certifies([])
-    assert not certifies(["PASS"])
+    assert not certifies(["FAIL"])
+    assert not certifies(["FAIL", "PASS"])  # P,F: a tie is not a majority
     assert certifies(["PASS", "PASS"])
-    assert certifies(["PASS", "FAIL", "PASS"])
     assert not certifies(["FAIL", "PASS", "FAIL"])
     # Only the last three graded count: two old passes behind two fails do not certify.
     assert not certifies(["FAIL", "FAIL", "PASS", "PASS"])
     # An ungraded sitting is skipped, not counted as a fail.
-    assert certifies(["TIMEOUT", "PASS", "NOT_RUN", "PASS"])
-    assert certifies(["PROVISIONAL", "PASS", "PASS"])
+    assert certifies(["TIMEOUT", "PASS", "NOT_RUN"])
+    assert not certifies(["TIMEOUT", "NOT_RUN", "PROVISIONAL"])
 
 
 # --- a re-sit is a new sitting on the same reference ---------------------------------------------
@@ -131,23 +135,47 @@ async def test_a_resit_of_an_exam_never_opened_is_a_404(client: AsyncClient) -> 
     assert res.json()["detail"]["error"] == "unknown_run_ref"
 
 
-# --- certification needs two passes --------------------------------------------------------------
+# --- certification is a majority -----------------------------------------------------------------
 
 
-async def test_one_pass_is_held_at_provisional_and_says_why(
+async def test_one_sitting_a_pass_is_certified(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await _start(client)
+    assert await _close(client, passed=True) == "certified"
+    assert await _standing(client) == "PASS"
+    run = (await _runs(db_session))[0]
+    assert (run.sittingVerdict, run.verdict) == ("PASS", "PASS")
+
+
+async def test_a_pass_after_a_fail_is_held_at_provisional_and_says_why(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """F,P: no majority."""
+    await _start(client)
+    await _close(client, passed=False)
+    await _resit(client)
     assert await _close(client, passed=True) == "provisional"
     cert = await _current(db_session)
     assert cert.state == "provisional"
     assert WITHHOLD_SITTINGS in (cert.withheldBecause or [])
     assert cert.maxCertifiedTrustTier is None
-    run = (await _runs(db_session))[0]
-    # The sitting passed; the ref does not yet stand certified.
+    run = (await _runs(db_session))[1]
+    # The sitting passed; the ref does not stand certified.
     assert run.sittingVerdict == "PASS"
     assert run.verdict == "PROVISIONAL"
     assert await _standing(client) == "PROVISIONAL"
+
+
+async def test_a_fail_after_a_single_pass_loses_it(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """P,F: a tie is not a majority."""
+    await _start(client)
+    assert await _close(client, passed=True) == "certified"
+    await _resit(client)
+    assert await _close(client, passed=False) == "failed"
+    assert (await _current(db_session)).state == "failed"
 
 
 async def test_victors_case_a_fail_then_two_passes_certifies(
@@ -184,7 +212,7 @@ async def test_one_fail_under_two_passes_keeps_the_certification_and_keeps_the_f
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await _start(client)
-    await _close(client, passed=True)
+    assert await _close(client, passed=True) == "certified"
     await _resit(client)
     assert await _close(client, passed=True) == "certified"
     await _resit(client)
@@ -206,7 +234,7 @@ async def test_one_fail_under_two_passes_keeps_the_certification_and_keeps_the_f
         .scalars()
         .all()
     ]
-    assert states == ["provisional", "certified", "failed", "certified"]
+    assert states == ["certified", "certified", "failed", "certified"]
 
 
 async def test_two_fails_in_the_last_three_lose_the_certification(
@@ -241,6 +269,7 @@ async def test_a_certification_revoked_since_is_not_held_up_by_older_passes(
 
 
 async def test_a_gate_result_with_no_ref_is_a_first_sitting(client: AsyncClient) -> None:
+    """One sitting, a PASS: certified."""
     res = await client.post(
         "/api/operation/gate-result",
         json={
@@ -250,4 +279,4 @@ async def test_a_gate_result_with_no_ref_is_a_first_sitting(client: AsyncClient)
         },
     )
     assert res.status_code == 200, res.text
-    assert res.json()["agent_operation_certs"][0]["state"] == "provisional"
+    assert res.json()["agent_operation_certs"][0]["state"] == "certified"
