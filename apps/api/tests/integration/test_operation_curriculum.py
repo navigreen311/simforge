@@ -14,7 +14,6 @@ is speaking, and this file is the submitter's side.
 
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
 
 from src.services.operation.scenarios import (
@@ -25,9 +24,6 @@ from src.services.operation.scenarios import (
     ScenarioClass,
     validate_curriculum_submission,
 )
-
-#: ADR-0160. These tests are about something else; see the `one_earlier_pass` fixture.
-pytestmark = pytest.mark.usefixtures("one_earlier_pass")
 
 
 def _scn(scenario_class: str, module_id: str = "statement_ingest", **over) -> dict:

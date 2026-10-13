@@ -115,19 +115,3 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def one_earlier_pass(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ADR-0160. Every gate result is read as the SECOND sitting, after one pass.
-
-    For tests about something other than re-sits (the basis, breadth, channels, the run window):
-    one more pass makes 2 of 2, so a passing result certifies as it did before the rule and a
-    failing one fails. The rule itself is tested in test_re_sits.py.
-    """
-    from src.routers import operation
-
-    async def _one_pass(session, body):  # noqa: ANN001, ANN202
-        return ["PASS"]
-
-    monkeypatch.setattr(operation, "_earlier_sittings", _one_pass)

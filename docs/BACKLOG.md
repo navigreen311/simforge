@@ -9,7 +9,7 @@ and what it would take. Move an item to an ADR when it is built.
 
 **Ivan Green rules on it before real clients** (ADR-0160). Not ruled.
 
-- Re-sits certify on 2 passes in the last 3 graded sittings. Today a
+- Re-sits certify on a majority of the last 3 graded sittings. Today a
   FAIL that carries a `never_do_violation` counts as one FAIL like any
   other, so P, P, F(never-do) keeps a certification.
 - If it may not be outvoted: such a FAIL loses the certification on its
