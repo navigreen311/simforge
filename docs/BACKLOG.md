@@ -5,6 +5,23 @@ and what it would take. Move an item to an ADR when it is built.
 
 ---
 
+## A refused operator act records whose credential was entered
+
+**Ruled by Ivan Green, 2026-10-12.** Not built.
+
+- At 17:05 and 17:07 PDT (00:05:39Z and 00:07:01Z, 2026-10-13), two seals of
+  partition `01M4S930` were typed at Ira Green's prompt with Ivan Green's
+  credential. Both were correctly refused (`credential_did_not_match`).
+  The `PartitionOperatorEvent` rows say only that: the claimed name, Ira's
+  operator id, the refusal. They cannot say whose credential it was.
+- To build: on `credential_did_not_match`, check the entered credential
+  against every other enrolled operator's scrypt hash. Record the match on
+  the refusal (a new nullable column, e.g. `credentialOf` = operator id), or
+  record that it matched no one. Never record the credential itself.
+- Cost: one scrypt verify per enrolled operator, on refusals only.
+
+---
+
 ## May a never_do_violation FAIL be outvoted by two passes?
 
 **Ivan Green rules on it before real clients** (ADR-0160). Not ruled.
