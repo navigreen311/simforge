@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,11 +184,22 @@ async def test_battery_sweep_hourly_fits_inside_the_run_window() -> None:
     assert 60 < DEFAULT_RUN_WINDOW_MINUTES, "hourly must leave headroom inside the window"
 
 
-async def test_battery_sweep_job_degrades_without_village_data() -> None:
-    """No Village reader → skip, never a 500. Same contract as daily_snapshot."""
-    from src.services.cadence import jobs
+async def test_battery_sweep_job_degrades_without_village_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No Village reader → skip, never a 500. Same contract as daily_snapshot.
 
+    The reader is made to fail HERE rather than left to the environment. Left to it, this test was
+    a no-op only where Village data was absent (CI): on a machine whose .env reaches it, it ran the
+    real sweep on the dev database with the real examiner, and graded two live exam sittings
+    (2026-10-13 00:05Z, Victor Serath, comp_analysis). It now asserts the skip, every time.
+    """
+    from src.services.cadence import jobs
+    from src.services.village.reader import VillageReaderError
+
+    def _absent() -> None:
+        raise VillageReaderError("no Village data in this test")
+
+    monkeypatch.setattr(jobs.VillageReader, "from_settings", staticmethod(_absent))
     result = await jobs.battery_sweep()
-    assert result["job"] == "battery_sweep"
-    if "skipped" not in result:
-        assert {"examiner", "considered", "scored"} <= set(result)
+    assert result == {"job": "battery_sweep", "skipped": "village_data_unavailable"}
