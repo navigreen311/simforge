@@ -26,6 +26,36 @@ from src.services.village.reader import VillageReader
 VILLAGE_FIXTURE = Path(__file__).parent / "fixtures" / "village" / "VillageData"
 
 
+class DevDatabaseRefused(RuntimeError):
+    """A test reached for the application's own database."""
+
+
+@pytest.fixture(autouse=True)
+def _no_test_opens_the_dev_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test runs on its own SQLite; none may open `src.db.SessionLocal`.
+
+    `SessionLocal` is bound to DATABASE_URL, which on a developer's machine is the LIVE dev
+    database. A cadence job called with no session opens it, and on 2026-10-13 one test did: it
+    ran the real battery sweep and graded two live exam sittings. Every module holding the
+    factory gets one that refuses, before any connection is made.
+    """
+    import sys
+
+    from src import db
+
+    def _refuse(*_a: object, **_k: object) -> None:
+        raise DevDatabaseRefused(
+            "a test opened src.db.SessionLocal - the application's own database. Pass the "
+            "test's session (db_session) instead."
+        )
+
+    real = db.SessionLocal
+    for name, module in list(sys.modules.items()):
+        ours = name == "src" or name.startswith("src.")
+        if ours and getattr(module, "SessionLocal", None) is real:
+            monkeypatch.setattr(module, "SessionLocal", _refuse)
+
+
 @pytest.fixture
 def village_reader() -> VillageReader:
     return VillageReader(village_data_path=VILLAGE_FIXTURE)
