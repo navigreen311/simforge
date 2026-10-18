@@ -104,5 +104,5 @@ def test_the_protocol_version_lives_where_a_router_may_reach_it() -> None:
     publish this string, so the string could not stay beside the probes. `battery` re-exports it
     and still owns the TEXT."""
     assert RESPONSE_PROTOCOL_VERSION == FROM_BATTERY
-    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
+    assert RESPONSE_PROTOCOL_VERSION == "15.0.0"  # B130: a NONE key names no subject
     assert OPERATION_RUBRIC_VERSION == "0.13.0"  # ADR-0150: restatements

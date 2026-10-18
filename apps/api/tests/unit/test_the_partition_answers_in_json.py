@@ -43,7 +43,7 @@ PINNED = {
 
 
 def test_the_versions_split() -> None:
-    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"
+    assert RESPONSE_PROTOCOL_VERSION == "15.0.0"  # B130
     assert PARTITION_PROTOCOL_VERSION == "14.0.0"
 
 

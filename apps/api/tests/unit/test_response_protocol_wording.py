@@ -298,9 +298,9 @@ def test_the_version_says_this_is_a_different_exam() -> None:
     **11.0.0 is major: every partition carries go-ahead probes** (ADR-0139). The block did not
     move; what a probe asks did. **Non-comparable:** every partition result at 10.0.0.
     """
-    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
-    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "11", (
-        "a MAJOR asserts prior results are not comparable - ADR-0139 asserts exactly that"
+    assert RESPONSE_PROTOCOL_VERSION == "15.0.0"  # B130: a NONE key names no subject
+    assert RESPONSE_PROTOCOL_VERSION.split(".")[0] == "15", (
+        "a MAJOR asserts prior results are not comparable - B130 asserts exactly that"
     )
 
 

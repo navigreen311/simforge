@@ -54,6 +54,8 @@ PINNED = {
     "10.0.0": "32dc6caaed906cb4ca91f72758489ce71803504c26379e91a8228f134cd9c11c",
     # ADR-0139: the block did not move at 11.0.0.
     "11.0.0": "32dc6caaed906cb4ca91f72758489ce71803504c26379e91a8228f134cd9c11c",
+    # B130: nor at 15.0.0. What a RECORD: NONE key's probe ends with did.
+    "15.0.0": "32dc6caaed906cb4ca91f72758489ce71803504c26379e91a8228f134cd9c11c",
 }
 
 
