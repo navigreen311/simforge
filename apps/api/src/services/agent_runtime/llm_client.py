@@ -501,6 +501,11 @@ class CachedLLMProvider(LLMProvider):
     ) -> LLMResponse:
         seed = int(kwargs.get("seed", 0))
         request = self._request(system, messages, temperature, max_tokens, seed)
+        # B131. The window is part of the request: an answer recorded under 4096 tokens is not
+        # the answer under 8192. Keyed only when named, so a request that names none keeps the
+        # key it always had.
+        if kwargs.get("num_ctx"):
+            request["num_ctx"] = int(kwargs["num_ctx"])
         key = self.cache.key_for(request)
         cached = await self.cache.get(key)
         if cached is not None:

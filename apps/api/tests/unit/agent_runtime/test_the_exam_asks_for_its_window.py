@@ -16,7 +16,8 @@ import pytest
 
 from src.config import settings
 from src.models.submitted_answer import SubmittedProbeAnswer
-from src.services.agent_runtime.llm_client import LLMResponse, OllamaProvider
+from src.services.agent_runtime.cache import LLMResponseCache
+from src.services.agent_runtime.llm_client import CachedLLMProvider, LLMResponse, OllamaProvider
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.submitted_answers import record_submitted_answer
 
@@ -132,3 +133,16 @@ def test_a_stored_answer_carries_its_token_counts_and_window() -> None:
 def test_llm_response_reports_prompt_eval_count_as_its_input() -> None:
     """The name the battery reads. Ollama's `prompt_eval_count` is `tokens_input`."""
     assert LLMResponse(content="", tokens_input=7).tokens_input == 7
+
+
+async def test_a_cached_answer_is_keyed_by_its_window(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """An answer recorded at one window is never replayed as the answer at another."""
+    seen: list = []
+    _ollama(monkeypatch, seen)
+    cache = LLMResponseCache(cache_dir=str(tmp_path), mode="record")
+    p = CachedLLMProvider(OllamaProvider("http://localhost:11434", "phi4:latest"), cache)
+    for window in (4096, 8192, 8192):
+        await p.complete(system="s", messages=[], temperature=0.7, seed=1, num_ctx=window)
+    assert [s["options"]["num_ctx"] for s in seen] == [4096, 8192]
