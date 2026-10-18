@@ -732,7 +732,8 @@ async def test_a_merged_clean_run_reaches_certified(
     # is `DEFAULT_TEMPERATURE` and `DEFAULT_MAX_TOKENS` exactly - so it passed whether the values
     # travelled or the runtime fell back. These can only have come from the runtime's generation
     # block, which is the thing under test.
-    assert identity_read["settings"] == EXAM_SETTINGS
+    # B131: and the context window, which no Village declaration names, from EXAM_NUM_CTX.
+    assert identity_read["settings"] == {**EXAM_SETTINGS, "num_ctx": settings.exam_num_ctx}
     assert EXAM_SETTINGS["temperature"] != DEFAULT_TEMPERATURE
     assert EXAM_SETTINGS["max_tokens"] != DEFAULT_MAX_TOKENS
     assert identity_read["fingerprint"] == identity.fingerprint

@@ -162,11 +162,14 @@ async def test_the_model_identity_records_no_seed() -> None:
     runtime, _ = _runtime(lambda system, prompt: "ACT: DECLINE\nRECORD: NONE")
     runtime = replace(runtime, generation={"temperature": 0.7, "max_tokens": 4000})
 
-    assert runtime.exam_settings() == {"temperature": 0.7, "max_tokens": 4000}
+    # B131: the context window is a property of the exam, so it is here and in the identity.
+    window = runtime.exam_settings()["num_ctx"]
+    assert runtime.exam_settings() == {"temperature": 0.7, "max_tokens": 4000, "num_ctx": window}
     # The CALL still carries one, per attempt, and that is where it belongs.
     assert runtime.generation_settings(2) == {
         "temperature": 0.7,
         "max_tokens": 4000,
+        "num_ctx": window,
         "seed": 2,
     }
 

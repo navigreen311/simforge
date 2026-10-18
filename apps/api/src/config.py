@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     # `GET {OLLAMA_BASE_URL}/api/tags` and put it here.
     exam_model_tag: str = Field(default="phi4:latest", alias="EXAM_MODEL_TAG")
     exam_model_digest: str = Field(default="", alias="EXAM_MODEL_DIGEST")
+    # B131 (Ivan Green, 17 October 2026). The context window every exam call asks Ollama for, as
+    # `num_ctx`. Unset, Ollama serves phi4 at 4096 tokens, and the CRE Forge's comp_analysis 1.11.7
+    # prompt is 4,307-4,415 phi4 tokens: past 4096 the runner discards half the prompt mid-answer
+    # and the exam grades an agent that never read its manual. It must equal the Village
+    # operator's AGENT_NUM_CTX - the exam and production read the same window or the exam is
+    # not of production - and Ollama reloads the model whenever two callers ask for different
+    # windows, so one value is also the cheap one.
+    exam_num_ctx: int = Field(default=8192, alias="EXAM_NUM_CTX")
     # The Village's own `config.yaml` - where its agents' model is declared. Read-only, and read
     # at check time rather than cached, so a change in production is seen on the next battery.
     # Empty means SimForge cannot see what production runs, and the battery refuses to claim it

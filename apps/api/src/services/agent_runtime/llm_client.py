@@ -260,6 +260,10 @@ class OllamaProvider(LLMProvider):
                 "num_predict": max_tokens,
             },
         }
+        # B131. The context window, when the caller names one. Unset, Ollama serves the model at
+        # its server default (4096 for phi4 here) and cuts any prompt past it without an error.
+        if kwargs.get("num_ctx"):
+            payload["options"]["num_ctx"] = int(kwargs["num_ctx"])
         # ADR-0140. Ollama structured output: decoding held to the exam's answer schema.
         if kwargs.get("response_schema"):
             payload["format"] = kwargs["response_schema"]
