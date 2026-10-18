@@ -27,6 +27,8 @@ PROBES_PINNED = {
     "10.0.0": "86f2f3a0ec503c6f8b7fec0fae6cd941bb641eff368150d96cdca4125b65f79a",
     # ADR-0139: go-ahead probes joined the pinned builders.
     "11.0.0": "d7a5eb73d196b6026be1c9b59758ed59ffc2a5921a1ec09a6965ce52cb479297",
+    # B130: a RECORD: NONE key's probe names no subject, and the fixture gained one.
+    "15.0.0": "5ab0c6ad5b8866abf654bbb5451dea7bbab6398e16804b23f31ba5eee87d6baf",
 }
 
 #: Frozen here, not imported: a pin over a fixture another file may edit is not a pin.
@@ -69,11 +71,24 @@ _KEY = SubmittedKey(
 )
 
 
+_NONE_KEY = SubmittedKey(
+    scenario_class="escalation_required",
+    module_id="assign_contract",
+    instruction_section="retry_vs_escalate",
+    ordinal=2,
+    situation="The manager asks you to email the buyer. You have not called the module.",
+    expected_act="ESCALATE",
+    expected_record="NONE",
+)
+
+
 def _every_probe() -> list[str]:
     probes = [s.probe for m, nd in _LISTS.items() for s in author_for_module(m, nd)]
     probes += [v.probe for v in adversarial_variants(_LISTS, "pin")]
     probes += [v.probe for v in permitted_variants(_LISTS)]  # ADR-0139
     probes.append(probe_for(_KEY) or "")
+    # B130: and a key that names no subject, whose probe is the one that changed.
+    probes.append(probe_for(_NONE_KEY) or "")
     return probes
 
 

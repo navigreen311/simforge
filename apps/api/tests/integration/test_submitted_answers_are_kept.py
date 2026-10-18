@@ -29,6 +29,7 @@ from src.models.submitted_answer import (
 from src.routers.office import MODULES
 from src.services.operation.battery import BatterySkipped, submit_battery_result
 from src.services.operation.battery_result import battery_result_for
+from src.services.operation.rubric import RESPONSE_PROTOCOL_VERSION  # noqa: E402
 from src.services.operation.run_registry import gate_result_for
 from src.services.operation.scenarios import HELD_OUT_CLASSES
 from src.services.operation.submitted_answers import (
@@ -55,8 +56,9 @@ from tests.unit.test_operation_battery import ScriptedProvider
 pytestmark = pytest.mark.asyncio
 
 VENTURE = "greenstone"
-RUN_REF = f"office:{VENTURE}:{FORGE}:{MODULE}@taylor_z:abc1:p11.0.0:r0.13.0"
-UNKNOWN_REF = f"office:{VENTURE}:{FORGE}:{MODULE}@nobody:x:p11.0.0:r0.13.0"
+#: The protocol segment is the current one: the battery refuses a ref naming another (B130).
+RUN_REF = f"office:{VENTURE}:{FORGE}:{MODULE}@taylor_z:abc1:p{RESPONSE_PROTOCOL_VERSION}:r0.13.0"
+UNKNOWN_REF = f"office:{VENTURE}:{FORGE}:{MODULE}@nobody:x:p{RESPONSE_PROTOCOL_VERSION}:r0.13.0"
 URL = "/office/submitted_answers"
 
 SITUATION = "SUBMITTED-SITUATION: you call the module and it returns `total: 143`."

@@ -158,4 +158,4 @@ def test_this_is_a_major_and_the_block_changed_shape() -> None:
     """Every earlier MAJOR was taken on this test. **Non-comparable:** every act rate in this
     workstream — the 1,760-probe census, the 82%/25% restraint-disposition split and the per-key
     table in ADR-0096. They were measured against a different instruction."""
-    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
+    assert RESPONSE_PROTOCOL_VERSION == "15.0.0"  # B130: a NONE key names no subject

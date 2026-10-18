@@ -23,7 +23,7 @@ import pytest
 
 from src.services.operation.battery import RESPONSE_PROTOCOL_VERSION
 from src.services.operation.held_out import author_for_module, name_the_record
-from src.services.operation.submitted_scoring import SubmittedKey, probe_for
+from src.services.operation.submitted_scoring import NO_SUBJECT_NAMING, SubmittedKey, probe_for
 
 pytestmark = pytest.mark.asyncio
 
@@ -102,6 +102,25 @@ def test_a_key_expecting_NONE_still_carries_both_sentences() -> None:
 
     assert "If you put something on the record" in probe
     assert "record it under the subject" in probe
+    # B130: and the subject it names is none the request did not name.
+    assert "`the request`" not in probe
+    assert probe.count("If you ") == 2, "still two sentences"
+
+
+def test_a_key_that_names_a_subject_is_unchanged_by_b130() -> None:
+    probe = probe_for(_key())
+    assert "record it under the subject `total`" in probe
+    assert NO_SUBJECT_NAMING not in probe
+
+
+def test_a_none_key_ends_with_the_no_subject_sentences() -> None:
+    """B130 (Ivan Green, 17 October 2026): agents wrote `RECORD: the request = ...` on NONE keys."""
+    probe = probe_for(
+        _key(
+            expected_act="ESCALATE", expected_record="NONE", record_subject=None, record_claim=None
+        )
+    )
+    assert probe.endswith(NO_SUBJECT_NAMING)
 
 
 def test_the_second_sentence_is_present_whether_or_not_a_key_names_options() -> None:
@@ -168,7 +187,7 @@ def test_a_held_out_and_a_submitted_probe_are_indistinguishable_by_their_sentenc
 def test_this_is_a_major_and_the_probes_are_why() -> None:
     """ADR-0094 took the block to 5.0.0 because the PROBES changed. ADR-0097 took it to 6.0.0
     because the act block did. Both are majors and this asserts the current one."""
-    assert RESPONSE_PROTOCOL_VERSION == "11.0.0"  # ADR-0139: go-ahead probes
+    assert RESPONSE_PROTOCOL_VERSION == "15.0.0"  # B130: a NONE key names no subject
 
 
 def test_the_protocol_sentence_matches_what_the_probes_now_do() -> None:

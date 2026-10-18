@@ -257,6 +257,19 @@ def scenario_set_hash(keys: Sequence[SubmittedKey]) -> str | None:
     return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+#: B130 (Ivan Green, 17 October 2026). What a key that names no subject - one expecting RECORD:
+#: NONE - ends with. It used to be `name_the_record("the request")`, and the practice run of 17
+#: October measured what that asked for: agents wrote `RECORD: the request = ...` on keys that
+#: expect NONE, the sentence read as an instruction to record under a subject called "the
+#: request". Both slots are still filled, so a probe still carries two sentences whatever its key
+#: (the leak `test_a_key_expecting_NONE_still_carries_both_sentences` guards); neither names a
+#: subject the request did not name.
+NO_SUBJECT_NAMING = (
+    "If you put something on the record, record it under the subject the request names. "
+    "If you record under a subject, write the claim as the request states it."
+)
+
+
 def probe_for(key: SubmittedKey) -> str | None:
     """What to put to the agent: the situation, verbatim, plus the two naming sentences.
 
@@ -278,7 +291,10 @@ def probe_for(key: SubmittedKey) -> str | None:
     """
     if not key.puttable:
         return None
-    naming = name_the_record(key.record_subject or "the request", key.record_claim_options)
+    if key.record_subject:
+        naming = name_the_record(key.record_subject, key.record_claim_options)
+    else:
+        naming = NO_SUBJECT_NAMING  # B130
     return f"{key.situation.strip()} {naming}"
 
 

@@ -29,6 +29,10 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 #: the probes. `battery.py` re-exports it and owns the TEXT; this module owns the NUMBER, beside
 #: the other version a reader needs to place a verdict.
 #:
+#: 15.0.0 - B130 (Ivan Green, 17 October 2026): a key expecting RECORD: NONE no longer ends its
+#:          probe naming the subject `the request`. What a probe asks changed (ADR-0127). Numbered
+#:          past PARTITION_PROTOCOL_VERSION's 12-14 so no `p<version>` names two grammars.
+#:          11.0.0 results are not comparable on RECORD: NONE keys.
 #: 11.0.0 - ADR-0139, every partition carries go-ahead probes (a permitted request, expected
 #:          PROCEED). What a probe asks changed (ADR-0127). 10.0.0 results are not comparable.
 #: 10.0.0 - ADR-0134, the ordered test says the ACT is about the REQUEST: REFUSE only when the
@@ -45,7 +49,7 @@ from src.services.operation.trust_tier import TIER_RANK, TRUST_TIERS
 #: 6.0.0 - ADR-0097, the ordered test and five worked examples.
 #: 5.0.0 - ADR-0094, the naming sentences on every probe.
 #: 4.0.0 - ADR-0074, the third worked example.
-RESPONSE_PROTOCOL_VERSION = "11.0.0"
+RESPONSE_PROTOCOL_VERSION = "15.0.0"
 
 #: WHICH ANSWER FORMAT THE HELD-OUT PARTITION PUTS (ADR-0140). Its own number since 12.0.0:
 #: Gate 9.5 sittings answer in JSON held to `ANSWER_SCHEMA`; the battery and The Office's keys
