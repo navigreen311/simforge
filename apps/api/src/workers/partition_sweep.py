@@ -87,14 +87,14 @@ class SweepOutcome:
     skipped: str | None = None
 
 
-async def sealed_partition_ids(session: AsyncSession) -> list[str]:
-    """Every sealed partition, oldest seal first. Authoring and retired never."""
+async def sealed_partitions(session: AsyncSession) -> list[tuple[str, str]]:
+    """Every sealed partition and its Forge, oldest seal first. Authoring and retired never."""
     rows = await session.execute(
-        select(HeldOutPartition.id)
+        select(HeldOutPartition.id, HeldOutPartition.forgeId)
         .where(HeldOutPartition.status == "sealed")
         .order_by(HeldOutPartition.sealedAt, HeldOutPartition.id)
     )
-    return list(rows.scalars().all())
+    return [(str(r[0]), str(r[1])) for r in rows.all()]
 
 
 async def sweep_sealed_partitions(
@@ -103,23 +103,28 @@ async def sweep_sealed_partitions(
     runtime: AgentRuntime,
     limit: int = PARTITION_SWEEP_LIMIT,
 ) -> SweepOutcome:
-    """Check the examiner once, then grade each sealed partition in turn.
+    """Check the examiner once per Forge, then grade each sealed partition in turn.
 
     An examiner that cannot sit the exam puts nothing and writes nothing:
     the partitions read NOT_RUN through the verdict endpoint, which is true.
-    One failing partition does not end the pass.
+    One failing partition does not end the pass. Per Forge since B136, because the
+    Village declares the task temperature per Forge.
     """
-    examiner = await partition_grading.examiner_runtime(runtime)
-    if isinstance(examiner, str):
-        log.warning("partition_sweep_refused_examiner", reason=examiner)
-        return SweepOutcome(0, 0, 0, 0, skipped=examiner)
-
-    ids = await sealed_partition_ids(session)
+    ids = await sealed_partitions(session)
+    examiners: dict[str, AgentRuntime | str] = {}
+    refused: str | None = None
     agents = put = recorded = 0
-    for pid in ids:
+    for pid, forge in ids:
         remaining = limit - put
         if remaining <= 0:
             break
+        if forge not in examiners:
+            examiners[forge] = await partition_grading.examiner_runtime(runtime, forge_id=forge)
+        examiner = examiners[forge]
+        if isinstance(examiner, str):
+            log.warning("partition_sweep_refused_examiner", forge=forge, reason=examiner)
+            refused = refused or examiner
+            continue
         try:
             out = await partition_grading.grade_partition(
                 session,
@@ -135,7 +140,7 @@ async def sweep_sealed_partitions(
         agents += out.agents
         put += out.put
         recorded += out.recorded
-    return SweepOutcome(len(ids), agents, put, recorded)
+    return SweepOutcome(len(ids), agents, put, recorded, skipped=None if put else refused)
 
 
 async def run_partition_pass(session: AsyncSession, lock_session: AsyncSession) -> dict:

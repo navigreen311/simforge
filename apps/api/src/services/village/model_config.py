@@ -34,21 +34,27 @@ matching `model_id` against the resolved tag, and the route form does not change
 
 They are REPORTED and not enforced — see `VillageAgentModel.settings`.
 
-THE TEMPERATURE HAS ITS OWN KEY NOW (B136)
-==========================================
+THE TEMPERATURE HAS ITS OWN KEY NOW, PER FORGE (B136)
+=====================================================
 
-Ivan's ruling, 18 October 2026: production agents and the exam at temperature 0.0, Village speech
+Ivan's rulings, 18 and 19 October 2026: the agents' task calls and their exam at temperature 0.0
+for cre-forge; every other Forge stays at 0.7 until it is re-certified on its own; Village speech
 unchanged. `mate.models.default_llm` is MATE's own block, so moving its temperature could move
 whatever MATE serves from it, and the operator never read it anyway: its task calls read
 `AGENT_TEMPERATURE`, which app.py's chat and the agent orchestrator share. So the Village declares
-the task temperature once, top level, outside `mate`:
+the task temperature once, top level, outside `mate`, per Forge:
 
     agent_tasks:
-      temperature: 0.0      <- the Office operator reads this; so does this module.
+      default_temperature: 0.7      <- any Forge not listed
+      temperature_by_forge:
+        cre-forge: 0.0              <- the Office operator reads these; so does this module.
 
-When that key is there it wins over the tag-matched block's temperature. `max_tokens` still comes
-from the block. With no key, both sides fall back to what they read before (0.7), so an old config
-keeps them in step instead of splitting them.
+So every read names the Forge being examined (`forge_id`, keyword-only and required). A Forge in
+the map gets its own value; any other gets `default_temperature`; with neither, the tag-matched
+block's temperature, which is what both sides read before the key existed (0.7). Either key wins
+over the block. `max_tokens` still comes from the block. A single `agent_tasks.temperature` - the
+first shape of B136, never deployed - is refused rather than read: it would examine every Forge
+at one value, which is what the second ruling undid.
 
 A TAG IS NOT A PIN, AND THIS FILE CANNOT FIX THAT
 =================================================
@@ -97,13 +103,19 @@ class VillageAgentModel:
     #: certification. That difference is a real one and it is ADR-0061's open question, not a
     #: silent divergence — `examiner.py` surfaces it and does not refuse on it.
     settings: dict = field(default_factory=dict)
-    #: B136. The key the temperature in `settings` was read from: `agent_tasks.temperature`, or
-    #: the matched block's `mate.models.<type>.temperature`, or "" when none was declared.
+    #: B136. The key the temperature in `settings` was read from:
+    #: `agent_tasks.temperature_by_forge.<forge>`, `agent_tasks.default_temperature`, the matched
+    #: block's `mate.models.<type>.temperature`, or "" when none was declared.
     temperature_from: str = ""
+    #: B136. The Forge the declaration was read for.
+    forge_id: str = ""
 
 
-def read_village_agent_model(path: str | Path | None = None) -> VillageAgentModel:
-    """The model the Village declares for `agent`-mode calls. Raises rather than defaulting.
+def read_village_agent_model(
+    path: str | Path | None = None, *, forge_id: str
+) -> VillageAgentModel:
+    """The model the Village declares for `agent`-mode calls on `forge_id`. Raises rather than
+    defaulting.
 
     Every failure here is a refusal to guess: an unreadable config, a missing route, a route
     pointing at a model block that is not there. A default would make SimForge assert a match
@@ -160,15 +172,11 @@ def read_village_agent_model(path: str | Path | None = None) -> VillageAgentMode
     temperature_from = (
         _block_named(models, str(tag), preferred=block) if "temperature" in declared else ""
     )
-    task_temperature = (raw.get("agent_tasks") or {}).get("temperature")
-    if task_temperature is not None:
-        # B136. The task temperature, declared once for the operator and the exam.
-        if isinstance(task_temperature, bool) or not isinstance(task_temperature, int | float):
-            raise VillageConfigError(
-                f"{config_path}: `agent_tasks.temperature` is {task_temperature!r}, not a number."
-            )
-        declared = {**declared, "temperature": float(task_temperature)}
-        temperature_from = "agent_tasks.temperature"
+    found = _task_temperature(raw.get("agent_tasks"), forge_id, config_path)
+    if found is not None:
+        # B136. The task temperature for this Forge, declared once for the operator and the exam.
+        declared = {**declared, "temperature": found[0]}
+        temperature_from = found[1]
 
     return VillageAgentModel(
         tag=str(tag),
@@ -176,7 +184,43 @@ def read_village_agent_model(path: str | Path | None = None) -> VillageAgentMode
         source_path=str(config_path),
         settings=declared,
         temperature_from=temperature_from,
+        forge_id=forge_id,
     )
+
+
+def _task_temperature(
+    tasks: object, forge_id: str, config_path: Path
+) -> tuple[float, str] | None:
+    """`agent_tasks`' temperature for `forge_id` and the key it came from, or None if neither
+    key is declared."""
+    if not forge_id:
+        raise VillageConfigError(
+            "the Village's task temperature is declared per Forge, and this read names no Forge."
+        )
+    if tasks is None:
+        return None
+    if not isinstance(tasks, dict):
+        raise VillageConfigError(f"{config_path}: `agent_tasks` is {tasks!r}, not a mapping.")
+    if "temperature" in tasks:
+        raise VillageConfigError(
+            f"{config_path}: `agent_tasks.temperature` sets one temperature for every Forge. "
+            "B136 declares it per Forge: `agent_tasks.temperature_by_forge` and "
+            "`agent_tasks.default_temperature`."
+        )
+    by_forge = tasks.get("temperature_by_forge") or {}
+    if not isinstance(by_forge, dict):
+        raise VillageConfigError(
+            f"{config_path}: `agent_tasks.temperature_by_forge` is {by_forge!r}, not a mapping."
+        )
+    if forge_id in by_forge:
+        key, value = f"agent_tasks.temperature_by_forge.{forge_id}", by_forge[forge_id]
+    elif tasks.get("default_temperature") is not None:
+        key, value = "agent_tasks.default_temperature", tasks["default_temperature"]
+    else:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise VillageConfigError(f"{config_path}: `{key}` is {value!r}, not a number.")
+    return float(value), key
 
 
 def _block_named(models: dict, tag: str, *, preferred: dict | None) -> str:

@@ -644,19 +644,19 @@ class _Ledger:
 # =========================================================================
 
 
-async def examiner_runtime(runtime: AgentRuntime) -> AgentRuntime | str:
-    """The runtime at the Village's declared settings, or the examiner's refusal.
+async def examiner_runtime(runtime: AgentRuntime, *, forge_id: str) -> AgentRuntime | str:
+    """The runtime at the Village's declared settings for `forge_id`, or the examiner's refusal.
 
     The same two steps `battery_for_run` takes (ADR-0061, ADR-0062): read the
     declared settings first, then check the pinned model. A refusal is a named
-    string and the pass puts nothing.
+    string and the pass puts nothing. Per Forge since B136: the task temperature is.
     """
     try:
-        declared = read_village_agent_model().settings
+        declared = read_village_agent_model(forge_id=forge_id).settings
     except VillageConfigError:
         declared = {}
     at_production = replace(runtime, generation=dict(declared)) if declared else runtime
-    check = check_examiner(await at_production.model_identity())
+    check = check_examiner(await at_production.model_identity(), forge_id=forge_id)
     if not check.ok:
         return check.reason or "examiner_refused"
     return at_production
@@ -674,6 +674,9 @@ class PartitionOutcome:
 
 
 SKIP_NOT_SEALED = "the_partition_is_not_sealed"
+#: B136. The runtime handed in is not at the temperature the Village declares for this
+#: partition's Forge - built by `examiner_runtime` for another Forge, or not by it at all.
+SKIP_NOT_AT_THIS_FORGE = "the_examiner_is_not_at_this_forges_declared_temperature"
 #: ADR-0125. A live instruction set is not the one the partition was authored from. Its
 #: scenarios carry positional refs into the old never-do lists; grading them against the
 #: new ones would match a correct refusal against the wrong rule.
@@ -820,6 +823,15 @@ async def grade_partition(
     for row in scenario_rows:
         by_module.setdefault(row.moduleId, []).append(scenario_from_body(row.body))
         ids_by_module.setdefault(row.moduleId, []).append(row.id)
+
+    # B136. Before the first model call: the runtime must be at this Forge's temperature.
+    try:
+        wanted = read_village_agent_model(forge_id=forge).settings.get("temperature")
+    except VillageConfigError:
+        wanted = None
+    if wanted is None or runtime.exam_settings().get("temperature") != wanted:
+        log.warning("partition_examiner_not_at_this_forge", partition=pid, forge=forge)
+        return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_NOT_AT_THIS_FORGE)
 
     agents = await agents_for_partition(session, partition)
 

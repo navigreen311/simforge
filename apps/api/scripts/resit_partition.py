@@ -48,7 +48,7 @@ async def resit(
         built = runtime or build_runtime()
     except VillageReaderError as exc:
         raise ResitRefused(f"the Village cannot be read: {exc}") from exc
-    examiner = await partition_grading.examiner_runtime(built)
+    examiner = await partition_grading.examiner_runtime(built, forge_id=partition.forgeId)
     if isinstance(examiner, str):
         raise ResitRefused(f"the examiner cannot sit: {examiner}")
     async with partition_sweep_lock(lock_session) as acquired:
