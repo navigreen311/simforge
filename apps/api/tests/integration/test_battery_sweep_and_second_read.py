@@ -326,3 +326,30 @@ def test_the_lock_does_not_reach_for_the_raw_driver_cursor() -> None:
     }
     assert "exec_driver_sql" not in called
     assert "text" in called, "the statement goes through SQLAlchemy so the dialect renders it"
+
+
+async def test_an_exam_with_no_clean_cache_stops_the_pass_and_posts_nothing(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B135. Unlike a provider blip, every later run would meet the same Ollama."""
+    from src.services.agent_runtime.llm_client import ColdStartFailed
+
+    base = datetime.now(UTC).replace(tzinfo=None)
+    db_session.add_all(
+        [_run("sweep-cold", started=base - timedelta(hours=1)), _run("sweep-next", started=base)]
+    )
+    await db_session.commit()
+
+    calls: list[str] = []
+
+    async def _refuse(session, run_ref, *, runtime, seed=0, sitting=None):
+        calls.append(run_ref)
+        raise ColdStartFailed("/api/ps still lists phi4:latest 30 s after unloading phi4:latest")
+
+    monkeypatch.setattr(battery_sweep, "submit_battery_result", _refuse)
+    out = await battery_sweep.sweep_unscored_runs(db_session, runtime=object(), limit=10)
+
+    assert calls == ["sweep-cold"], "the pass stops at the refusal"
+    assert out.scored == 0
+    assert out.failed == (("sweep-cold", out.failed[0][1]),)
+    assert out.failed[0][1].startswith("ColdStartFailed: ")

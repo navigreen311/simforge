@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base, _new_id, _now
@@ -84,6 +84,10 @@ class SubmittedProbeAnswer(Base):
     promptEvalCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     evalCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     numCtx: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: B135. Whether the call started from a clean cache - the model unloaded first and loaded by
+    #: this call - and Ollama's `load_duration` in milliseconds. Null before they were recorded.
+    coldStart: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    loadMs: Mapped[int | None] = mapped_column(Integer, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

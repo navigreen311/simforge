@@ -35,6 +35,11 @@ class LLMResponse:
     finish_reason: str = "stop"
     latency_ms: int = 0
     cached: bool = False
+    #: B135. Ollama's `load_duration` for this call, in milliseconds, and whether the call was
+    #: made from a clean cache: the model unloaded first and loaded by this call. None from a
+    #: provider that does not start cold, and from a cached answer, which made no call.
+    load_ms: int | None = None
+    cold_start: bool | None = None
 
     @property
     def tokens(self) -> int:  # backward-compatible total (used by the runner)
@@ -225,6 +230,37 @@ async def _with_retries(fn, *, max_retries: int, retry_on):
 
 
 # ═══════════════════════════════════════════════════════════════
+# B135 - the exam starts every call from a clean cache
+# ═══════════════════════════════════════════════════════════════
+#
+# Ivan Green's ruling, 18 October 2026. Measured that day: one prompt at one seed gave a different
+# answer depending on what Ollama's prompt cache held - three different answers at temperature
+# 0.0 for straight-after-itself, after-another-probe and cold. Each state repeats exactly, and only
+# a cold load gives an answer that does not depend on what ran before. Ollama 0.40.3 has no option
+# that turns the cache off, so the exam unloads the model before every call and waits for
+# `/api/ps` to be empty.
+
+#: A call whose `load_duration` is at least this long loaded the model. Measured 18 October on phi4
+#: at 8192: every call after an unload 2,750-3,180 ms; every warm call 0-10 ms.
+COLD_LOAD_MIN_MS = 1000
+#: How long `/api/ps` may take to empty after the unload before the exam refuses.
+COLD_UNLOAD_TIMEOUT_SECONDS = 30.0
+COLD_UNLOAD_POLL_SECONDS = 0.25
+#: How many times a call is made when it comes back warm - another caller (Village speech) loaded
+#: the model between the unload and the call. Then the exam refuses.
+COLD_START_ATTEMPTS = 3
+
+
+class ColdStartFailed(RuntimeError):
+    """The exam could not make a call from a clean cache. Never the agent's failure: nothing it
+    answered would be a measurement of it, so the exam refuses rather than grading NOT_RUN."""
+
+
+def _load_ms(data: dict) -> int:
+    return int(data.get("load_duration") or 0) // 1_000_000
+
+
+# ═══════════════════════════════════════════════════════════════
 # OllamaProvider
 # ═══════════════════════════════════════════════════════════════
 
@@ -232,11 +268,22 @@ async def _with_retries(fn, *, max_retries: int, retry_on):
 class OllamaProvider(LLMProvider):
     name = "ollama"
 
-    def __init__(self, base_url: str, model: str, timeout: float = 60.0, max_retries: int = 3):
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout: float = 60.0,
+        max_retries: int = 3,
+        *,
+        cold_start: bool = False,
+    ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
+        #: B135. Unload the model and wait for `/api/ps` to be empty before every call. The exam's
+        #: provider only (`get_exam_llm`).
+        self.cold_start = cold_start
 
     async def complete(
         self,
@@ -277,11 +324,19 @@ class OllamaProvider(LLMProvider):
                 resp.raise_for_status()
                 return resp.json()
 
-        data = await _with_retries(
-            _call,
-            max_retries=self.max_retries,
-            retry_on=(httpx.TransportError, httpx.HTTPStatusError),
-        )
+        async def _answered() -> dict:
+            return await _with_retries(
+                _call,
+                max_retries=self.max_retries,
+                retry_on=(httpx.TransportError, httpx.HTTPStatusError),
+            )
+
+        cold: bool | None = None
+        if self.cold_start:
+            data = await self._cold_call(_answered)
+            cold = True
+        else:
+            data = await _answered()
         content = (data.get("message") or {}).get("content", "").strip()
         return LLMResponse(
             content=content,
@@ -293,7 +348,56 @@ class OllamaProvider(LLMProvider):
             provider=self.name,
             finish_reason=data.get("done_reason", "stop"),
             latency_ms=int((time.perf_counter() - started) * 1000),
+            load_ms=_load_ms(data) if self.cold_start else None,
+            cold_start=cold,
         )
+
+    async def _cold_call(self, answered) -> dict:  # noqa: ANN001 - the call, as a coroutine fn
+        """B135. Unload, wait for `/api/ps` to be empty, call; again if the call came back warm."""
+        for attempt in range(1, COLD_START_ATTEMPTS + 1):
+            await self._unload()
+            data = await answered()
+            load_ms = _load_ms(data)
+            if load_ms >= COLD_LOAD_MIN_MS:
+                return data
+            # Someone loaded the model between the unload and this call, so this answer read
+            # their cache. It is discarded, never graded.
+            log.warning("exam_call_was_warm", model=self.model, attempt=attempt, load_ms=load_ms)
+        raise ColdStartFailed(
+            f"{COLD_START_ATTEMPTS} calls after an unload of {self.model} all found it already "
+            f"loaded (load_duration under {COLD_LOAD_MIN_MS} ms): another caller keeps loading it"
+        )
+
+    async def _unload(self) -> None:
+        """POST keep_alive 0, then wait until `/api/ps` lists no model. Refuses on anything else."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}/api/generate", json={"model": self.model, "keep_alive": 0}
+                )
+                resp.raise_for_status()
+                deadline = time.monotonic() + COLD_UNLOAD_TIMEOUT_SECONDS
+                while True:
+                    ps = await client.get(f"{self.base_url}/api/ps")
+                    ps.raise_for_status()
+                    loaded = sorted(
+                        str(m.get("name") or m.get("model"))
+                        for m in (ps.json() or {}).get("models") or []
+                    )
+                    if not loaded:
+                        return
+                    if time.monotonic() >= deadline:
+                        raise ColdStartFailed(
+                            f"/api/ps still lists {', '.join(loaded)} "
+                            f"{COLD_UNLOAD_TIMEOUT_SECONDS:g} s after unloading {self.model}"
+                        )
+                    await asyncio.sleep(COLD_UNLOAD_POLL_SECONDS)
+        except httpx.HTTPError as exc:
+            raise ColdStartFailed(
+                f"could not unload {self.model}: {type(exc).__name__}: {exc}"
+            ) from exc
 
     async def identity(self, settings_sent: dict) -> ModelIdentity | None:
         """Ask the server what it is serving. Two calls, because neither answers the whole thing.
@@ -662,6 +766,9 @@ def get_exam_llm() -> LLMProvider:
         settings.exam_model_tag,
         settings.llm_request_timeout_seconds,
         settings.llm_max_retries,
+        # B135. Every exam call from a clean cache, held-out and submitted alike. No setting turns
+        # it off: an exam whose answers depend on what ran before it is not reproducible.
+        cold_start=True,
     )
     return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
 

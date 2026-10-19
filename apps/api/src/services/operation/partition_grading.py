@@ -61,7 +61,7 @@ from src.models.held_out_partition import (
 )
 from src.services.agent_runtime.agent_identity import check_agent_identity
 from src.services.agent_runtime.examiner import check_examiner
-from src.services.agent_runtime.llm_client import LLMResponse
+from src.services.agent_runtime.llm_client import ColdStartFailed, LLMResponse
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
     _ACT_RE,
@@ -350,6 +350,8 @@ async def put_partition(
                     extra_system=context,
                     response_schema=ANSWER_SCHEMA,
                 )
+            except ColdStartFailed:
+                raise  # B135: the exam cannot run; `grade_partition` stops the pass.
             except Exception:  # noqa: BLE001 - never put is NOT_RUN, never FAIL
                 verdict = grade_scenario(scenario, None)
                 graded.append(verdict)
@@ -685,6 +687,9 @@ SKIP_INSTRUCTIONS_UNRECORDED = "the_partition_does_not_record_its_instructions"
 SKIP_PROTOCOL_MOVED = "the_partition_was_built_under_another_protocol"
 SKIP_PROTOCOL_UNRECORDED = "the_partition_does_not_record_its_protocol"
 SKIP_BOOTSTRAP = "this_forge_is_certified_by_a_human_bootstrap"
+#: B135. Ollama would not give the exam a clean cache: the unload did not empty `/api/ps`, or every
+#: call after it found the model loaded. The seed in progress is NOT_RUN and the pass stops.
+SKIP_NO_CLEAN_CACHE = "the_exam_could_not_start_from_a_clean_cache"
 
 
 async def _plans_for(
@@ -927,6 +932,22 @@ async def grade_partition(
             except TimeoutError:
                 # The probes graded before the budget ran out are kept (ADR-0114).
                 verdict = TIMEOUT
+            except ColdStartFailed as exc:
+                # B135. Nothing this seed answered is a measurement of the agent. NOT_RUN, so the
+                # agent is due again, and the pass stops: every later call meets the same Ollama.
+                await session.rollback()
+                log.warning("partition_refused_no_clean_cache", partition=pid, error=str(exc))
+                await ledger.append(
+                    agent.agent_id,
+                    NOT_RUN,
+                    last_at,
+                    instruction_hash,
+                    seed=seed,
+                    sitting_id=sitting_id,
+                )
+                return PartitionOutcome(
+                    pid, len(agents), put, ledger.recorded, skipped=SKIP_NO_CLEAN_CACHE
+                )
             except Exception as exc:  # noqa: BLE001 - one agent must not end the pass
                 await session.rollback()
                 log.warning("partition_agent_not_graded", error=type(exc).__name__)
@@ -974,6 +995,7 @@ __all__ = [
     "PARTITION_AGENT_BUDGET_SECONDS",
     "SITTING_SEEDS",
     "SKIP_INSTRUCTIONS_MOVED",
+    "SKIP_NO_CLEAN_CACHE",
     "SKIP_INSTRUCTIONS_UNRECORDED",
     "SKIP_PROTOCOL_MOVED",
     "SKIP_PROTOCOL_UNRECORDED",
