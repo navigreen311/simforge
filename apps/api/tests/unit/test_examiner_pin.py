@@ -115,6 +115,58 @@ def test_the_live_shape_names_the_tag_in_the_route_and_still_finds_its_settings(
     assert declared.settings == {"temperature": 0.7, "max_tokens": 4000}
 
 
+_LIVE_WITH_TASKS = (
+    "agent_tasks:\n"
+    "  temperature: 0.0\n"
+    "mate:\n"
+    "  ollama_model_routes:\n"
+    "    agent: phi4:latest\n"
+    "  models:\n"
+    "    default_llm:\n"
+    "      model_id: phi4:latest\n"
+    "      max_tokens: 4000\n"
+    "      temperature: 0.7\n"
+    "    reasoning_llm:\n"
+    "      model_id: deepseek-r1:32b\n"
+    "      temperature: 0.3\n"
+)
+
+
+def test_the_task_temperature_key_wins_over_the_mate_block(tmp_path: Path) -> None:
+    """B136 (Ivan Green, 18 October 2026): the exam at the task calls' 0.0, max_tokens kept."""
+    path = tmp_path / "config.yaml"
+    path.write_text(_LIVE_WITH_TASKS, encoding="utf-8")
+
+    declared = read_village_agent_model(path)
+
+    assert declared.settings == {"temperature": 0.0, "max_tokens": 4000}
+    assert declared.temperature_from == "agent_tasks.temperature"
+
+
+def test_no_task_temperature_key_reads_the_mate_block_as_before(tmp_path: Path) -> None:
+    """The fallback the operator shares: no key, and both sides read 0.7."""
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        _LIVE_WITH_TASKS.replace("agent_tasks:\n  temperature: 0.0\n", ""), encoding="utf-8"
+    )
+
+    declared = read_village_agent_model(path)
+
+    assert declared.settings == {"temperature": 0.7, "max_tokens": 4000}
+    assert declared.temperature_from == "mate.models.default_llm.temperature"
+
+
+@pytest.mark.parametrize("value", ["'0.0'", "true", "[0.0]"])
+def test_a_task_temperature_that_is_not_a_number_raises(tmp_path: Path, value: str) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        _LIVE_WITH_TASKS.replace("temperature: 0.0", f"temperature: {value}"), encoding="utf-8"
+    )
+
+    with pytest.raises(VillageConfigError, match="agent_tasks.temperature"):
+        read_village_agent_model(path)
+
+
 def test_an_ambiguous_tag_reports_no_settings_rather_than_the_wrong_ones(
     tmp_path: Path,
 ) -> None:

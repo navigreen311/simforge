@@ -34,6 +34,22 @@ matching `model_id` against the resolved tag, and the route form does not change
 
 They are REPORTED and not enforced — see `VillageAgentModel.settings`.
 
+THE TEMPERATURE HAS ITS OWN KEY NOW (B136)
+==========================================
+
+Ivan's ruling, 18 October 2026: production agents and the exam at temperature 0.0, Village speech
+unchanged. `mate.models.default_llm` is MATE's own block, so moving its temperature could move
+whatever MATE serves from it, and the operator never read it anyway: its task calls read
+`AGENT_TEMPERATURE`, which app.py's chat and the agent orchestrator share. So the Village declares
+the task temperature once, top level, outside `mate`:
+
+    agent_tasks:
+      temperature: 0.0      <- the Office operator reads this; so does this module.
+
+When that key is there it wins over the tag-matched block's temperature. `max_tokens` still comes
+from the block. With no key, both sides fall back to what they read before (0.7), so an old config
+keeps them in step instead of splitting them.
+
 A TAG IS NOT A PIN, AND THIS FILE CANNOT FIX THAT
 =================================================
 
@@ -81,6 +97,9 @@ class VillageAgentModel:
     #: certification. That difference is a real one and it is ADR-0061's open question, not a
     #: silent divergence — `examiner.py` surfaces it and does not refuse on it.
     settings: dict = field(default_factory=dict)
+    #: B136. The key the temperature in `settings` was read from: `agent_tasks.temperature`, or
+    #: the matched block's `mate.models.<type>.temperature`, or "" when none was declared.
+    temperature_from: str = ""
 
 
 def read_village_agent_model(path: str | Path | None = None) -> VillageAgentModel:
@@ -137,12 +156,37 @@ def read_village_agent_model(path: str | Path | None = None) -> VillageAgentMode
             f"`mate.models.{route}` does not exist. The route resolves to nothing."
         )
 
+    declared = _settings_for_tag(models, str(tag), preferred=block)
+    temperature_from = (
+        _block_named(models, str(tag), preferred=block) if "temperature" in declared else ""
+    )
+    task_temperature = (raw.get("agent_tasks") or {}).get("temperature")
+    if task_temperature is not None:
+        # B136. The task temperature, declared once for the operator and the exam.
+        if isinstance(task_temperature, bool) or not isinstance(task_temperature, int | float):
+            raise VillageConfigError(
+                f"{config_path}: `agent_tasks.temperature` is {task_temperature!r}, not a number."
+            )
+        declared = {**declared, "temperature": float(task_temperature)}
+        temperature_from = "agent_tasks.temperature"
+
     return VillageAgentModel(
         tag=str(tag),
         route=resolved_via,
         source_path=str(config_path),
-        settings=_settings_for_tag(models, str(tag), preferred=block),
+        settings=declared,
+        temperature_from=temperature_from,
     )
+
+
+def _block_named(models: dict, tag: str, *, preferred: dict | None) -> str:
+    """The `mate.models.<type>.temperature` path `_settings_for_tag` read, for the record."""
+    for name, block in models.items():
+        if block is preferred or (
+            preferred is None and isinstance(block, dict) and block.get("model_id") == tag
+        ):
+            return f"mate.models.{name}.temperature"
+    return ""
 
 
 def _settings_for_tag(models: dict, tag: str, *, preferred: dict | None) -> dict:
