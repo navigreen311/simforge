@@ -101,9 +101,12 @@ def test_a_runtime_with_no_declared_settings_still_has_some() -> None:
     EXAM, and widening it to every caller would change what a demo does for no stated reason."""
     plain = AgentRuntime(village_reader=VillageReader(VILLAGE_FIXTURE), provider=None)  # type: ignore[arg-type]
 
+    # B131: the window is the one setting every caller shares - Ollama reloads the model whenever
+    # two callers ask for different ones - so a demo gets EXAM_NUM_CTX too.
     assert plain.generation_settings(0) == {
         "temperature": DEFAULT_TEMPERATURE,
         "max_tokens": DEFAULT_MAX_TOKENS,
+        "num_ctx": settings.exam_num_ctx,
         "seed": 0,
     }
 
@@ -120,6 +123,7 @@ def test_a_partial_declaration_is_filled_in_rather_than_refused() -> None:
     assert runtime.generation_settings(2) == {
         "temperature": 0.7,
         "max_tokens": DEFAULT_MAX_TOKENS,
+        "num_ctx": settings.exam_num_ctx,
         "seed": 2,
     }
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.config import settings
 from src.services.agent_runtime.llm_client import (
     LLMProvider,
     LLMResponse,
@@ -17,6 +18,9 @@ from src.services.agent_runtime.llm_client import (
 )
 from src.services.agent_runtime.model_identity import ModelIdentity
 from src.services.village.reader import VillageReader, VillageReaderError
+from src.telemetry.logging import get_logger
+
+log = get_logger("agent_runtime")
 
 #: The settings a turn runs under when the CALLER supplies none. Scenario runs, demos and the
 #: scenario bank use these; **an exam does not** (ADR-0062).
@@ -159,7 +163,7 @@ class AgentRuntime:
         system_prompt = self.assemble_system_prompt(agent_village_id, fallback_name, fallback_role)
         if extra_system:
             system_prompt = f"{system_prompt}\n\n{extra_system}"
-        return await self.provider.complete(
+        response = await self.provider.complete(
             system=system_prompt,
             messages=conversation_history,
             # Passed explicitly rather than left to the provider's defaults, so the values
@@ -167,10 +171,25 @@ class AgentRuntime:
             # that agree today.
             temperature=sent["temperature"],
             max_tokens=sent["max_tokens"],
+            num_ctx=sent["num_ctx"],
             seed=seed,
             # ADR-0140. An answer schema; a provider that can hold decoding to it does.
             response_schema=response_schema,
         )
+        # B131. Every turn's token counts, held-out probes included (counts, never text), so a
+        # prompt that stops fitting shows as a number rather than as a worse answer. Ollama
+        # reports `prompt_eval_count` AFTER any truncation: a drop between two calls on the same
+        # manual is the window cutting it, and prompt + answer at the window is a context shift.
+        log.info(
+            "exam_turn_tokens",
+            agent=agent_village_id,
+            seed=seed,
+            prompt_eval_count=response.tokens_input,
+            eval_count=response.tokens_output,
+            num_ctx=sent["num_ctx"],
+            at_window=response.tokens_input + response.tokens_output >= sent["num_ctx"],
+        )
+        return response
 
     def exam_settings(self) -> dict:
         """The settings that describe the EXAM - what every attempt of it runs under.
@@ -187,6 +206,10 @@ class AgentRuntime:
         return {
             "temperature": supplied.get("temperature", DEFAULT_TEMPERATURE),
             "max_tokens": supplied.get("max_tokens", DEFAULT_MAX_TOKENS),
+            # B131. The window is part of what the exam ran under, so it is recorded with the
+            # rest of the settings in the model identity. A Village declaration wins, as for
+            # the other two; today the Village declares none and EXAM_NUM_CTX supplies it.
+            "num_ctx": int(supplied.get("num_ctx", settings.exam_num_ctx)),
         }
 
     def generation_settings(self, seed: int) -> dict:

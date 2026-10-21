@@ -82,6 +82,9 @@ def record_submitted_answer(
     reasons: Sequence[str],
     answer_text: str,
     sitting: int = 1,
+    prompt_eval_count: int | None = None,
+    eval_count: int | None = None,
+    num_ctx: int | None = None,
 ) -> None:
     """Add one answer row to the session. The caller's commit makes it permanent.
 
@@ -106,6 +109,9 @@ def record_submitted_answer(
             verdict=verdict,
             reasons=list(reasons),
             answerText=answer_text,
+            promptEvalCount=prompt_eval_count,
+            evalCount=eval_count,
+            numCtx=num_ctx,
         )
     )
 

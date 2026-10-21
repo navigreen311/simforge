@@ -260,6 +260,10 @@ class OllamaProvider(LLMProvider):
                 "num_predict": max_tokens,
             },
         }
+        # B131. The context window, when the caller names one. Unset, Ollama serves the model at
+        # its server default (4096 for phi4 here) and cuts any prompt past it without an error.
+        if kwargs.get("num_ctx"):
+            payload["options"]["num_ctx"] = int(kwargs["num_ctx"])
         # ADR-0140. Ollama structured output: decoding held to the exam's answer schema.
         if kwargs.get("response_schema"):
             payload["format"] = kwargs["response_schema"]
@@ -497,6 +501,11 @@ class CachedLLMProvider(LLMProvider):
     ) -> LLMResponse:
         seed = int(kwargs.get("seed", 0))
         request = self._request(system, messages, temperature, max_tokens, seed)
+        # B131. The window is part of the request: an answer recorded under 4096 tokens is not
+        # the answer under 8192. Keyed only when named, so a request that names none keeps the
+        # key it always had.
+        if kwargs.get("num_ctx"):
+            request["num_ctx"] = int(kwargs["num_ctx"])
         key = self.cache.key_for(request)
         cached = await self.cache.get(key)
         if cached is not None:

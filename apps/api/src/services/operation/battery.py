@@ -1951,6 +1951,8 @@ async def run_submitted_battery(
         answers: dict[str, object | None] = {}
         #: ADR-0153. The answer as the provider returned it, per submitted key.
         texts: dict[str, str] = {}
+        #: B131. Its token counts, stored beside it.
+        counts: dict[str, tuple[int, int]] = {}
         for key in keys:
             probe = probe_for(key)
             if probe is None:
@@ -1966,6 +1968,7 @@ async def run_submitted_battery(
             )
             answers[key.ref] = parse_answer(response.content)
             texts[key.ref] = response.content
+            counts[key.ref] = (response.tokens_input, response.tokens_output)
         graded = grade_submitted_module(keys, answers)
         # ADR-0153. THE ONE PLACE an answer's text is stored, and these are The Office's own
         # keys: the held-out half never passes through here. Added to the session, so they are
@@ -1990,6 +1993,9 @@ async def run_submitted_battery(
                 verdict=verdict.verdict,
                 reasons=verdict.reasons,
                 answer_text=texts[key.ref],
+                prompt_eval_count=counts[key.ref][0],
+                eval_count=counts[key.ref][1],
+                num_ctx=runtime.exam_settings()["num_ctx"],
             )
         attempts.append(graded)
     if attempts_out is not None:

@@ -79,6 +79,11 @@ class SubmittedProbeAnswer(Base):
     reasons: Mapped[list] = mapped_column(JSON, default=list)
     #: The agent's answer, as the provider returned it. Never parsed, never trimmed.
     answerText: Mapped[str] = mapped_column(Text)
+    #: B131. Ollama's `prompt_eval_count` and `eval_count` for this answer's call, and the window
+    #: it was asked under. Null on rows written before they were recorded.
+    promptEvalCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    evalCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    numCtx: Mapped[int | None] = mapped_column(Integer, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

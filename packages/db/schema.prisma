@@ -1366,6 +1366,10 @@ model SubmittedProbeAnswer {
   verdict                String
   reasons                Json     @default("[]")
   answerText             String
+  /// B131. Ollama's token counts for this answer's call, and the window it was asked under.
+  promptEvalCount        Int?
+  evalCount              Int?
+  numCtx                 Int?
   createdAt              DateTime @default(now())
 
   @@index([runRef])
