@@ -7,11 +7,13 @@ same answer, so it never resolved: 42 sittings against everyone else's 3.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.held_out_partition import HeldOutPartitionVerdict
+from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
 from src.services.operation import partition_grading as pg
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
@@ -62,7 +64,8 @@ async def test_the_operator_can_still_re_sit_it(
     put_once = len(provider.prompts)
 
     async with fresh_session(db_session) as s:
-        runtime = await pg.examiner_runtime(pg_runtime())
+        forge = (await s.get(HeldOutPartition, pid)).forgeId
+        runtime = await pg.examiner_runtime(pg_runtime(), forge_id=forge)
         await pg.grade_partition(s, pid, runtime=runtime, resit=True)
 
     assert len(provider.prompts) > put_once
@@ -72,3 +75,21 @@ def pg_runtime():  # noqa: ANN201 - the sweep's own runtime builder, as `_serve`
     from src.workers import partition_sweep
 
     return partition_sweep.build_runtime()
+
+
+async def test_a_runtime_not_at_the_forges_temperature_puts_nothing(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B136. A runtime `examiner_runtime` did not build for this partition's Forge is refused
+    before the first model call."""
+    pid = await _seed(db_session)
+    provider = ScriptedProvider(_unreadable)
+    _serve(monkeypatch, provider)
+
+    async with fresh_session(db_session) as s:
+        # A temperature no Forge here declares: a runtime built for some other Forge.
+        wrong = replace(pg_runtime(), generation={"temperature": 0.123})
+        out = await pg.grade_partition(s, pid, runtime=wrong, resit=True)
+
+    assert out.skipped == pg.SKIP_NOT_AT_THIS_FORGE
+    assert provider.prompts == []

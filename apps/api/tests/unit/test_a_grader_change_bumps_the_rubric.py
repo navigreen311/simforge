@@ -29,7 +29,10 @@ PINNED = {
     # ADR-0160 changed WHICH ROW `battery_for_run` reads (one sitting of the ref, by number), not
     # how it grades: no row is decided by a different rule. Re-pinned without a bump, which would
     # have made every partition sitting due again. Flagged to Ivan.
-    "0.13.0": "fc431c773a79aae4a0ad71bf2be944bfa118eff034b0c522c7a32030a4ac3ad0",
+    # B136 changed WHICH FORGE'S declared temperature `battery_for_run` examines at (the run's
+    # own `forgeId`, passed to the Village read and the examiner check), not how it grades: no row
+    # is decided by a different rule. Re-pinned without a bump, as ADR-0160. Flagged to Ivan.
+    "0.13.0": "6542b88d72c094c5a80bbca7438fc13726589f7db8e9e2502c8053c721a9bc79",
 }
 
 

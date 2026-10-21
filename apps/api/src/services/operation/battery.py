@@ -1705,7 +1705,8 @@ async def battery_for_run(
     # setting nobody works at, which is the exact thing ADR-0062 refuses. `check_examiner` turns
     # every such failure into a named refusal.
     try:
-        declared = read_village_agent_model().settings
+        # B136: at the declared settings for the Forge this run examines.
+        declared = read_village_agent_model(forge_id=run.forgeId).settings
     except VillageConfigError:
         declared = {}
     at_production = replace(runtime, generation=dict(declared)) if declared else runtime
@@ -1713,7 +1714,7 @@ async def battery_for_run(
     # Asked before the battery rather than after, so a wrong or unpinned examiner costs one HTTP
     # call instead of three dozen model calls and a discarded result.
     examiner = await at_production.model_identity()
-    verdict = check_examiner(examiner)
+    verdict = check_examiner(examiner, forge_id=run.forgeId)
     if not verdict.ok:
         log.warning(
             "battery_refused_examiner",

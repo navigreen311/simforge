@@ -108,8 +108,11 @@ def _settings_divergence(village_settings: dict, exam_settings: dict) -> dict | 
     return out or None
 
 
-def check_examiner(identity: ModelIdentity | None) -> ExaminerCheck:
-    """Whether `identity` may sit an exam. One reason at a time, most specific first.
+def check_examiner(identity: ModelIdentity | None, *, forge_id: str) -> ExaminerCheck:
+    """Whether `identity` may sit an exam on `forge_id`. One reason at a time, most specific first.
+
+    The Forge is required because the Village declares the task temperature per Forge (B136): an
+    examiner at cre-forge's 0.0 is at production for cre-forge and not for a Forge left at 0.7.
 
     Ordered so the message names the thing to fix rather than the first thing that happened to be
     wrong: an unpinned digest is a configuration gap, an unreachable model is a deployment fact,
@@ -148,7 +151,7 @@ def check_examiner(identity: ModelIdentity | None) -> ExaminerCheck:
 
     # Only now is it worth reading another system's file: the local pin holds.
     try:
-        village = read_village_agent_model()
+        village = read_village_agent_model(forge_id=forge_id)
     except VillageConfigError as exc:
         return ExaminerCheck(
             EXAMINER_PRODUCTION_UNKNOWN,
@@ -192,7 +195,8 @@ def check_examiner(identity: ModelIdentity | None) -> ExaminerCheck:
     return ExaminerCheck(
         None,
         f"examiner {identity.model} pinned at {pinned_digest[:19]}..., matching the Village's "
-        f"declared agent model in {village.source_path}, at its declared {village.settings}",
+        f"declared agent model in {village.source_path}, at its declared {village.settings} for "
+        f"{forge_id} (temperature from {village.temperature_from or 'nowhere'})",
         village_tag=village.tag,
         village_settings=dict(village.settings),
     )
