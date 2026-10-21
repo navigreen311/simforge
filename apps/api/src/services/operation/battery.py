@@ -113,7 +113,7 @@ from src.services.agent_runtime.agent_identity import (
     check_agent_identity,
 )
 from src.services.agent_runtime.examiner import check_examiner
-from src.services.agent_runtime.llm_client import provider_label
+from src.services.agent_runtime.llm_client import ColdStartFailed, provider_label
 from src.services.agent_runtime.runtime import PROMPT_VERSION, AgentRuntime
 from src.services.operation.exam_tolerance import (
     HALF_HELD_OUT,
@@ -1352,6 +1352,10 @@ async def run_module_battery(
                 seed,
                 extra_system=context,
             )
+        except ColdStartFailed:
+            # B135. Not a probe that went unput: the exam itself cannot run. Raised to the caller,
+            # which posts nothing and rolls back.
+            raise
         except Exception as exc:  # noqa: BLE001 - a provider failure is NOT_RUN, never a FAIL
             log.warning("battery_probe_not_put", module=module_id, agent=agent_id, error=str(exc))
             return None
@@ -1953,6 +1957,8 @@ async def run_submitted_battery(
         texts: dict[str, str] = {}
         #: B131. Its token counts, stored beside it.
         counts: dict[str, tuple[int, int]] = {}
+        #: B135. Whether its call started from a clean cache, and the load it cost.
+        cold: dict[str, tuple[bool | None, int | None]] = {}
         for key in keys:
             probe = probe_for(key)
             if probe is None:
@@ -1969,6 +1975,7 @@ async def run_submitted_battery(
             answers[key.ref] = parse_answer(response.content)
             texts[key.ref] = response.content
             counts[key.ref] = (response.tokens_input, response.tokens_output)
+            cold[key.ref] = (response.cold_start, response.load_ms)
         graded = grade_submitted_module(keys, answers)
         # ADR-0153. THE ONE PLACE an answer's text is stored, and these are The Office's own
         # keys: the held-out half never passes through here. Added to the session, so they are
@@ -1996,6 +2003,8 @@ async def run_submitted_battery(
                 prompt_eval_count=counts[key.ref][0],
                 eval_count=counts[key.ref][1],
                 num_ctx=runtime.exam_settings()["num_ctx"],
+                cold_start=cold[key.ref][0],
+                load_ms=cold[key.ref][1],
             )
         attempts.append(graded)
     if attempts_out is not None:

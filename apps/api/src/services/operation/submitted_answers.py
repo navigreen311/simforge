@@ -85,6 +85,8 @@ def record_submitted_answer(
     prompt_eval_count: int | None = None,
     eval_count: int | None = None,
     num_ctx: int | None = None,
+    cold_start: bool | None = None,
+    load_ms: int | None = None,
 ) -> None:
     """Add one answer row to the session. The caller's commit makes it permanent.
 
@@ -112,6 +114,8 @@ def record_submitted_answer(
             promptEvalCount=prompt_eval_count,
             evalCount=eval_count,
             numCtx=num_ctx,
+            coldStart=cold_start,
+            loadMs=load_ms,
         )
     )
 

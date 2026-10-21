@@ -188,6 +188,9 @@ class AgentRuntime:
             eval_count=response.tokens_output,
             num_ctx=sent["num_ctx"],
             at_window=response.tokens_input + response.tokens_output >= sent["num_ctx"],
+            # B135. Whether the call started from a clean cache, and what loading cost.
+            cold_start=response.cold_start,
+            load_ms=response.load_ms,
         )
         return response
 

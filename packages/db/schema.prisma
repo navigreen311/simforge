@@ -1370,6 +1370,9 @@ model SubmittedProbeAnswer {
   promptEvalCount        Int?
   evalCount              Int?
   numCtx                 Int?
+  /// B135. Whether the call started from a clean cache, and Ollama's load_duration in ms.
+  coldStart              Boolean?
+  loadMs                 Int?
   createdAt              DateTime @default(now())
 
   @@index([runRef])

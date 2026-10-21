@@ -56,6 +56,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
+from src.services.agent_runtime.llm_client import ColdStartFailed
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
     RESPONSE_PROTOCOL_VERSION,
@@ -196,6 +197,14 @@ async def sweep_unscored_runs(
             result = await submit_battery_result(
                 session, run_ref, runtime=runtime, seed=seed, sitting=sitting
             )
+        except ColdStartFailed as exc:
+            # B135. Ollama would not give the exam a clean cache. Nothing is posted and the run
+            # stays unscored, as for any failure; the pass stops, because every run after this
+            # one would meet the same Ollama.
+            await session.rollback()
+            failed.append((run_ref, f"{type(exc).__name__}: {exc}"))
+            log.warning("battery_sweep_refused_no_clean_cache", run_ref=run_ref, error=str(exc))
+            break
         except Exception as exc:  # noqa: BLE001 - one bad run must not end the pass
             await session.rollback()
             failed.append((run_ref, f"{type(exc).__name__}: {exc}"))
