@@ -15,6 +15,7 @@ from src.models.cert import (
 )
 from src.models.cognitive_snapshot import CognitiveSnapshot
 from src.models.department import Department
+from src.models.department_outcome import DepartmentOutcomePost
 from src.models.dress_rehearsal import DressRehearsal
 from src.models.evidence import EvidenceAccess, EvidenceRecord
 from src.models.forge_instruction_set import ForgeInstructionSet
@@ -57,6 +58,7 @@ __all__ = [
     "Agent",
     "BankScenario",
     "Department",
+    "DepartmentOutcomePost",
     "CCB",
     "CognitiveSnapshot",
     "VillageFingerprint",

@@ -1395,6 +1395,26 @@ model SubmittedAnswerRead {
   @@index([runRef])
 }
 
+/// One Unit B outcome The Office posted through the bridge, refusals included (ADR-0161).
+/// Append-only. The migration adds a partial unique index on idempotencyKey WHERE
+/// outcome = 'recorded', which Prisma cannot express.
+model DepartmentOutcomePost {
+  id             String   @id @default(cuid())
+  runRef         String?
+  officeVenture  String?
+  officeAgentId  String?
+  officeTrace    String?
+  forgeRequestId String
+  idempotencyKey String?
+  payloadDigest  String?
+  outcome        String
+  refusal        String?
+  recorded       Int      @default(0)
+  at             DateTime @default(now())
+
+  @@index([runRef])
+}
+
 /// A person enrolled to author or seal a held-out partition (ADR-0154).
 /// One per name, compared trimmed and case-folded (a functional unique index
 /// in the migration). The credential is stored only as a scrypt hash.
