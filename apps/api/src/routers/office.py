@@ -107,6 +107,7 @@ from src.schemas.operation_payloads import (
     Gate95VerdictResponse,
     OperationRunStartRequest,
 )
+from src.services.operation.department_outcome import NOT_FOUND_REFUSALS, post_for_office
 from src.services.operation.partition_verdict import venture_verdict
 from src.services.operation.run_registry import gate_result_for
 from src.services.operation.submitted_answers import read_for_office
@@ -321,12 +322,46 @@ async def _submitted_answers(
     return {"run_ref": read.run_ref, "answers": read.answers}
 
 
+async def _department_outcome(
+    session: AsyncSession, payload: dict[str, Any], origin: dict[str, Any]
+) -> dict[str, Any]:
+    """A Unit B outcome The Office posts from a named human's attestation (ADR-0161).
+
+    The first write The Office makes through this bridge. Department outcomes only, for a Unit B
+    run The Office minted, under that run's venture, with an `Idempotency-Key`. The state is
+    decided by the gate-result writer every gate result goes through. Every call is audited.
+    The reply is the four keys of `docs/contracts/department-outcome.md` and nothing else.
+    """
+    result = await post_for_office(session, payload, origin)
+    if result.reply is not None:
+        return result.reply
+    if result.refusal in NOT_FOUND_REFUSALS:
+        # One message whatever the cause, so the call cannot probe which runs exist.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SimForge holds no department run The Office may post an outcome for",
+        )
+    detail: dict[str, Any] = {"error": result.refusal}
+    if result.violations is not None:
+        detail["violations"] = result.violations
+    raise HTTPException(status_code=result.status_code, detail=detail)
+
+
 #: module_id -> spec. A dict rather than a chain of ifs because The Office's registry is
 #: also a table: a module SimForge does not implement should 404 with the module named,
 #: not fall through to something that half works.
 #:
 #: `run_scenario_pack` is deliberately absent. See the module docstring.
 MODULES: dict[str, ModuleSpec] = {
+    "department_outcome": ModuleSpec(
+        _department_outcome,
+        # Writes: the `department_context` certification, the run's close, and its audit row.
+        is_mutating=True,
+        # `key`, the only one on the adapter. A second post of the same attestation must not
+        # write a second certification, and nothing in the payload makes two posts the same post
+        # by construction. The key does: a retry is answered from the row the first call wrote.
+        idempotency_support="key",
+    ),
     "gate_result": ModuleSpec(
         _gate_result,
         # A read. The run row is written by `POST /api/operation/run/start` and closed by
