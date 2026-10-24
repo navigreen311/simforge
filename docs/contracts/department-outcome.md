@@ -37,6 +37,10 @@ Any other key is refused (`extra: forbid`). The forge, department and
 content hash are the run's own: the run that Gate 8 opened holds them, and
 an outcome naming a different department or forge is refused.
 
+`instruction_version` may name several modules as `module@version`, sorted,
+comma-joined (The Office's format for a department with mixed versions);
+SimForge stores it as given.
+
 ## What the state is
 
 Decided by the gate-result writer, as for every gate result (ADR-0062
