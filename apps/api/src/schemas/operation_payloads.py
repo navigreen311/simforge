@@ -412,6 +412,52 @@ class GateResultRequest(BaseModel):
     department_outcomes: list[DepartmentRunOutcome] = Field(default_factory=list)
 
 
+class DepartmentOutcomeRequest(BaseModel):
+    """ADR-0161. The `department_outcome` bridge payload: a Unit B result from an attestation.
+
+    The run supplies the forge, the department and the content hash; The Office supplies only what
+    the run does not hold. `agent_outcomes` is accepted so that a non-empty one is refused by name
+    rather than dropped: a Unit A verdict is earned by a battery, never posted through the bridge.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_ref: str = Field(min_length=1)
+    #: Stored on the certification, which requires both. A department has no single module, so
+    #: The Office names the versions the department's instruction set was handed over under.
+    instruction_version: str = Field(min_length=1)
+    forge_api_version: str = Field(min_length=1)
+    department_outcomes: list[DepartmentRunOutcome] = Field(min_length=1)
+    agent_outcomes: list[dict] = Field(default_factory=list)
+
+    @field_validator("agent_outcomes")
+    @classmethod
+    def _no_agent_outcomes(cls, value: list[dict]) -> list[dict]:
+        if value:
+            raise ValueError(
+                "department_outcome carries department outcomes only; a Unit A verdict is "
+                "earned by SimForge's battery and is never posted through the bridge"
+            )
+        return value
+
+
+class DepartmentOutcomeReply(BaseModel):
+    """ADR-0161. The whole reply, and these four keys are all of it.
+
+    The Office's manifest declares exactly these for `post_gate_result`. The verdict is never
+    here: it is read back through `gate_result`, the path every other verdict travels.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_ref: str
+    accepted: bool
+    #: How many department outcomes were written. A count, never content.
+    recorded: int
+    #: `recorded` on the first call, `replayed` on a retry with the same idempotency key.
+    status: Literal["recorded", "replayed"]
+
+
 # =================================================================================================
 # Outbound — gate result callback (SimForge → Office), Rev 2 shape
 # =================================================================================================

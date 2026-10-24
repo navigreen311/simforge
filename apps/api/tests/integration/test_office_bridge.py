@@ -75,7 +75,7 @@ async def bridged(
 # --- the manifest ---------------------------------------------------------------------------
 
 
-async def test_the_manifest_lists_five_modules(bridged: AsyncClient) -> None:
+async def test_the_manifest_lists_six_modules(bridged: AsyncClient) -> None:
     res = await bridged.get("/office/_modules", headers=AUTH)
     assert res.status_code == 200
     body = res.json()
@@ -83,6 +83,7 @@ async def test_the_manifest_lists_five_modules(bridged: AsyncClient) -> None:
     assert body["forge"] == "simforge"
     shapes = {m["module_id"]: m for m in body["modules"]}
     assert sorted(shapes) == [
+        "department_outcome",
         "gate_9_5_verdict",
         "gate_result",
         "run_start",
@@ -98,8 +99,13 @@ async def test_the_manifest_lists_five_modules(bridged: AsyncClient) -> None:
     assert shapes["run_start"]["is_mutating"] is True
     # ADR-0153. A read that writes its own audit row is declared a writer.
     assert shapes["submitted_answers"]["is_mutating"] is True
-    # All five retry onto the same state without a key.
-    assert {m["idempotency_support"] for m in body["modules"]} == {"natural"}
+    # ADR-0161. The first write The Office makes through the bridge, and the only keyed one.
+    assert shapes["department_outcome"]["is_mutating"] is True
+    assert shapes["department_outcome"]["idempotency_support"] == "key"
+    # The other five retry onto the same state without a key.
+    assert {
+        m["idempotency_support"] for m in body["modules"] if m["module_id"] != "department_outcome"
+    } == {"natural"}
 
 
 async def test_run_scenario_pack_is_not_dispatched(bridged: AsyncClient) -> None:
