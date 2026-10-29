@@ -1,7 +1,11 @@
 """Gate 9.5's answer to The Office: whether, never why (ADR-0111).
 
-The shape is fixed by `docs/contracts/gate-9-5-verdict.md`. Four keys, always:
-`venture_id`, `partition_exists`, `verdict`, `decided_at`. Nothing else.
+The shape is fixed by `docs/contracts/gate-9-5-verdict.md`. Asked for a venture, four keys,
+always: `venture_id`, `partition_exists`, `verdict`, `decided_at`. Nothing else.
+
+ADR-0163 (contract v2). Asked for a venture and a forge, six: those four plus `forge_id` and
+`partition_id`, identifiers only. The extra keys appear only when `forge_id` was sent, so a v1
+caller, whose manifest refuses a fifth key, reads exactly what it always read.
 
 WHAT THIS READS, AND WHAT IT MAY NEVER READ
 ===========================================
@@ -20,7 +24,11 @@ WHAT THIS READS, AND WHAT IT MAY NEVER READ
 THE RULES, FROM THE CONTRACT TABLE
 ==================================
 
-    - Only the currently sealed partition counts.
+    - Only a currently sealed partition counts. ADR-0163: one per venture and
+      forge. Asked for a forge, that forge's. Asked for the venture alone, the
+      weakest answer across every forge's sealed partition, by the same order:
+      never more lenient than any one of them, and exactly today's answer
+      wherever a venture holds one.
     - Per agent, only the latest verdict whose `partitionDigest` equals
       that partition's `contentDigest`. A stale digest is ignored.
     - Weakest wins: FAIL < TIMEOUT < IN_PROGRESS < NOT_RUN < PASS.
@@ -50,7 +58,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
@@ -65,6 +73,15 @@ _RANK = {v: i for i, v in enumerate(WEAKNESS_ORDER)}
 
 #: The four keys, in contract order. The response model enforces the same set.
 RESPONSE_KEYS: tuple[str, ...] = ("venture_id", "partition_exists", "verdict", "decided_at")
+#: ADR-0163, contract v2: asked for a forge. Identifiers only, never content.
+FORGE_RESPONSE_KEYS: tuple[str, ...] = (
+    "venture_id",
+    "forge_id",
+    "partition_exists",
+    "partition_id",
+    "verdict",
+    "decided_at",
+)
 
 
 def _iso_utc(dt: datetime) -> str:
@@ -80,48 +97,75 @@ def _answer(
     return dict(zip(RESPONSE_KEYS, (venture_id, exists, verdict, decided_at), strict=True))
 
 
-async def _sealed_partition(session: AsyncSession, venture_id: str):
-    # Only these are selected. Nothing else about it leaves here, and none of it is scenario
+async def _sealed_partitions(
+    session: AsyncSession, venture_id: str, forge_id: str | None = None
+) -> list[Row[Any]]:
+    # Only these are selected. Nothing else about them leaves here, and none of it is scenario
     # content: the hashes are the instruction sets' own identities (ADR-0125).
-    row = (
-        await session.execute(
-            select(
-                HeldOutPartition.id,
-                HeldOutPartition.contentDigest,
-                HeldOutPartition.verdictRule,
-                HeldOutPartition.forgeId,
-                HeldOutPartition.instructionHashes,
-                # ADR-0162. Who sits it, when The Office stated it, and the digest beside it.
-                HeldOutPartition.roster,
-                HeldOutPartition.rosterDigest,
-            )
-            .where(HeldOutPartition.ventureId == venture_id)
-            .where(HeldOutPartition.status == "sealed")
-            .order_by(HeldOutPartition.sealedAt.desc(), HeldOutPartition.id.desc())
-            .limit(1)
+    query = (
+        select(
+            HeldOutPartition.id,
+            HeldOutPartition.contentDigest,
+            HeldOutPartition.verdictRule,
+            HeldOutPartition.forgeId,
+            HeldOutPartition.instructionHashes,
+            # ADR-0162. Who sits it, when The Office stated it, and the digest beside it.
+            HeldOutPartition.roster,
+            HeldOutPartition.rosterDigest,
         )
-    ).first()
-    return row
+        .where(HeldOutPartition.ventureId == venture_id)
+        .where(HeldOutPartition.status == "sealed")
+    )
+    if forge_id is not None:
+        query = query.where(HeldOutPartition.forgeId == forge_id)
+    # ADR-0163: the index holds one per venture and forge. Newest first all the same, so a
+    # database not yet migrated reads its newest seal for a forge as it always read the newest.
+    query = query.order_by(HeldOutPartition.sealedAt.desc(), HeldOutPartition.id.desc())
+    return list((await session.execute(query)).all())
 
 
-async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, Any]:
-    """The contract's four keys for one venture. See the module docstring."""
-    partition = await _sealed_partition(session, venture_id)
-    if partition is None:
+async def venture_verdict(
+    session: AsyncSession, venture_id: str, forge_id: str | None = None
+) -> dict[str, Any]:
+    """The contract's answer for one venture, or one venture and forge. See the docstring."""
+    if forge_id is not None:
+        found = await _sealed_partitions(session, venture_id, forge_id)
+        partition = found[0] if found else None
+        if partition is None:
+            values: tuple[Any, ...] = (venture_id, forge_id, False, None, None, None)
+        else:
+            verdict, decided_at = await _partition_verdict(session, venture_id, partition)
+            values = (venture_id, forge_id, True, partition[0], verdict, decided_at)
+        return dict(zip(FORGE_RESPONSE_KEYS, values, strict=True))
+
+    # v1. ADR-0163: a venture may hold one sealed partition per forge. Asked without a forge,
+    # the weakest across them, so another forge's FAIL is never hidden behind this one's PASS.
+    answers = [
+        await _partition_verdict(session, venture_id, p)
+        for p in await _sealed_partitions(session, venture_id)
+    ]
+    if not answers:
         return _answer(venture_id, False, None, None)
+    verdict, decided_at = min(answers, key=lambda a: (_RANK.get(a[0], -1), -_iso_ts(a[1])))
+    return _answer(venture_id, True, verdict, decided_at)
 
+
+async def _partition_verdict(
+    session: AsyncSession, venture_id: str, partition: Row[Any]
+) -> tuple[str, str | None]:
+    """One sealed partition's verdict and `decided_at`, by the rules in the docstring."""
     partition_id, digest, rule, forge_id, authored_from, roster, roster_at_seal = partition
     # ADR-0162. A recorded roster that no longer reads as recorded names nobody it was sealed
     # for, so no sitting answers for the venture. The scenarios are not read here; the grader,
     # which reads them, checks the whole seal and puts nothing when it does not hold.
     if not roster_holds(roster, roster_at_seal):
-        return _answer(venture_id, True, "NOT_RUN", None)
+        return ("NOT_RUN", None)
     # ADR-0148. Before any verdict is read: a partition authored from instructions that are no
     # longer live answers nothing about the agents operating the live ones. Null hashes predate
     # ADR-0125; such a partition is never graded and its sittings are not current, so it already
     # reads NOT_RUN below.
     if authored_from and await _instructions_moved(session, forge_id, authored_from):
-        return _answer(venture_id, True, "NOT_RUN", None)
+        return ("NOT_RUN", None)
     rows = (
         await session.execute(
             select(
@@ -178,7 +222,7 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
         latest[agent_id] = min(effective, key=lambda it: (_RANK.get(it[0], -1), -_as_ts(it[1])))
 
     if not latest:
-        return _answer(venture_id, True, "NOT_RUN", None)
+        return ("NOT_RUN", None)
 
     # Weakest verdict; among equals, the most recent decision. An unknown
     # verdict string ranks weakest of all and is reported as FAIL: a value
@@ -190,7 +234,7 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     verdict, decided_at = min(latest.values(), key=key)
     if verdict not in _RANK:
         verdict = "FAIL"
-    return _answer(venture_id, True, verdict, _iso_utc(decided_at))
+    return (verdict, _iso_utc(decided_at))
 
 
 async def _instructions_moved(
@@ -199,6 +243,11 @@ async def _instructions_moved(
     """Any module whose live instruction set is not the one the partition was authored from."""
     live = await live_sets(session, forge_id)
     return any(m not in live or live[m].contentHash != h for m, h in authored_from.items())
+
+
+def _iso_ts(iso: str | None) -> float:
+    # A null decided_at (NOT_RUN) ranks as the oldest among equals.
+    return datetime.fromisoformat(iso).timestamp() if iso is not None else 0.0
 
 
 def _as_ts(dt: datetime) -> float:
