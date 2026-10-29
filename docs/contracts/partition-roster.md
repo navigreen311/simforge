@@ -33,9 +33,13 @@ The CLI prints `rostered_agents`, a count. It never prints the roster.
       ]
     }
 
-- **Live grants only:** rows with `revoked_at IS NULL` for this venture and
-  forge. SimForge holds no grants and cannot tell a retired one from a live
-  one, so a grant listed here is a sitter.
+- **Live grants only,** as The Office states it (`broker/revocation.py`,
+  `live_grant`): grants for this venture and forge that are **not superseded**
+  (`superseded_at IS NULL`) and **not covered by a live revocation** (no
+  `revocation` row whose agent, forge, module or venture scope covers the
+  grant). `agent_forge_grant` has no `revoked_at`; The Office dropped it in
+  its migration 0036. SimForge holds no grants and cannot tell a retired one
+  from a live one, so a grant listed here is a sitter.
 - **A grant created but not yet activated counts.** Gate 9.5 runs before
   Gate 11 activates grants, so at authoring the agents about to operate the
   modules hold grants that are not yet active. List them.

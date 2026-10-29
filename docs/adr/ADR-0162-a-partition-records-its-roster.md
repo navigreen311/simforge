@@ -76,9 +76,10 @@ lives in the grader, which already reads them.
 
 ## What The Office must do
 
-At authoring, export its live grants (`agent_forge_grant`, `revoked_at IS
-NULL`) for the venture and forge, as the contract's JSON, with `agent_id` set
-to the Village ref. The operator passes the file with `--roster`.
+At authoring, export its live grants for the venture and forge, as the
+contract's JSON, with `agent_id` set to the Village ref. Live is as The Office
+states it: not superseded and not covered by a live revocation
+(`revocation.live_grant`). The operator passes the file with `--roster`.
 
 ## Versions
 
