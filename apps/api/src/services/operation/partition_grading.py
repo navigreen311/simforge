@@ -99,6 +99,7 @@ from src.services.operation.look_alike_groups import in_same_group
 from src.services.operation.partition_roster import (
     PartitionAgent,
     partition_roster,
+    roster_holds,
     venture_of_run_ref,
 )
 from src.services.operation.partition_tolerance import (
@@ -173,13 +174,17 @@ def scenario_from_body(body: Mapping[str, object]) -> HeldOutScenario:
 async def agents_for_partition(
     session: AsyncSession, partition: HeldOutPartition
 ) -> list[PartitionAgent]:
-    """Who sits the partition: the shared roster (ADR-0152), scoped to its modules."""
+    """Who sits the partition: the shared roster (ADR-0152), scoped to its modules.
+
+    ADR-0162. The recorded roster, when the partition carries one.
+    """
     scope = partition.instructionHashes
     return await partition_roster(
         session,
         venture_id=partition.ventureId,
         forge_id=partition.forgeId,
         scope=set(scope) if scope is not None else None,
+        recorded=partition.roster,
     )
 
 
@@ -693,6 +698,9 @@ SKIP_BOOTSTRAP = "this_forge_is_certified_by_a_human_bootstrap"
 #: B135. Ollama would not give the exam a clean cache: the unload did not empty `/api/ps`, or every
 #: call after it found the model loaded. The seed in progress is NOT_RUN and the pass stops.
 SKIP_NO_CLEAN_CACHE = "the_exam_could_not_start_from_a_clean_cache"
+#: ADR-0162. A partition with a recorded roster whose scenarios or roster no longer give the
+#: digest it was sealed with. Nothing is put: who sits, or what is put, is not what was sealed.
+SKIP_SEAL_BROKEN = "the_partition_no_longer_matches_its_seal"
 
 
 async def _plans_for(
@@ -790,6 +798,7 @@ async def grade_partition(
     # ADR-0143. The rule stamped at seal; null is rule 1, zero tolerance.
     verdict_rule = partition.verdictRule
     built_under = partition.protocolVersion
+    roster, roster_at_seal = partition.roster, partition.rosterDigest
     # ADR-0128. Before anything else is read or put, and nothing is written.
     if built_under is None:
         log.warning("partition_protocol_unrecorded", partition=pid)
@@ -823,6 +832,15 @@ async def grade_partition(
         .scalars()
         .all()
     )
+    # ADR-0162. A rostered partition is graded only while its roster and scenarios still give
+    # the digest it was sealed with. A partition without one is checked as it always was.
+    if roster_at_seal is not None:
+        from src.services.operation.held_out_partition import content_digest
+
+        resealed = content_digest((r.digest for r in scenario_rows), roster_at_seal)
+        if not roster_holds(roster, roster_at_seal) or resealed != digest:
+            log.warning("partition_seal_broken", partition=pid)
+            return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_SEAL_BROKEN)
     by_module: dict[str, list[HeldOutScenario]] = {}
     ids_by_module: dict[str, list[str]] = {}
     for row in scenario_rows:

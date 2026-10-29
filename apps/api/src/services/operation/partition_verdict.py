@@ -38,6 +38,9 @@ THE RULES, FROM THE CONTRACT TABLE
     - ADR-0152: only agents on the partition's roster count - those whose runs
       touch a module it covers (`partition_roster`, the grader's own list). A
       row for anyone else stays in the table and is not read.
+    - ADR-0162: a partition that recorded The Office's roster counts only
+      the agents it names. One whose roster no longer matches its recorded
+      digest answers NOT_RUN, `decided_at` null.
 
 Pure read. No flush, no cache: every call asks the database.
 """
@@ -52,7 +55,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
 from src.services.operation.live_instructions import live_sets
-from src.services.operation.partition_roster import partition_roster
+from src.services.operation.partition_roster import partition_roster, roster_holds
 from src.services.operation.partition_tolerance import fold_agent
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 
@@ -88,6 +91,9 @@ async def _sealed_partition(session: AsyncSession, venture_id: str):
                 HeldOutPartition.verdictRule,
                 HeldOutPartition.forgeId,
                 HeldOutPartition.instructionHashes,
+                # ADR-0162. Who sits it, when The Office stated it, and the digest beside it.
+                HeldOutPartition.roster,
+                HeldOutPartition.rosterDigest,
             )
             .where(HeldOutPartition.ventureId == venture_id)
             .where(HeldOutPartition.status == "sealed")
@@ -104,7 +110,12 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     if partition is None:
         return _answer(venture_id, False, None, None)
 
-    partition_id, digest, rule, forge_id, authored_from = partition
+    partition_id, digest, rule, forge_id, authored_from, roster, roster_at_seal = partition
+    # ADR-0162. A recorded roster that no longer reads as recorded names nobody it was sealed
+    # for, so no sitting answers for the venture. The scenarios are not read here; the grader,
+    # which reads them, checks the whole seal and puts nothing when it does not hold.
+    if not roster_holds(roster, roster_at_seal):
+        return _answer(venture_id, True, "NOT_RUN", None)
     # ADR-0148. Before any verdict is read: a partition authored from instructions that are no
     # longer live answers nothing about the agents operating the live ones. Null hashes predate
     # ADR-0125; such a partition is never graded and its sittings are not current, so it already
@@ -135,11 +146,16 @@ async def venture_verdict(session: AsyncSession, venture_id: str) -> dict[str, A
     ).all()
     # ADR-0152. The grader's roster, read the same way. A partition that recorded no
     # modules predates ADR-0125 and keeps every agent's rows, as it always read.
-    if authored_from is not None:
-        roster = await partition_roster(
-            session, venture_id=venture_id, forge_id=forge_id, scope=set(authored_from)
+    # ADR-0162. Or the roster it recorded, which needs no scope to be read.
+    if authored_from is not None or roster is not None:
+        sitting = await partition_roster(
+            session,
+            venture_id=venture_id,
+            forge_id=forge_id,
+            scope=set(authored_from) if authored_from is not None else None,
+            recorded=roster,
         )
-        sitters = {a.agent_id for a in roster}
+        sitters = {a.agent_id for a in sitting}
         rows = [r for r in rows if r[0] in sitters]
 
     # ADR-0121: the weakest sitting, not the latest. Every final row counts, so the

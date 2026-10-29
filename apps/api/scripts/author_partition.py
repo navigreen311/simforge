@@ -1,7 +1,8 @@
 """Operator CLI: author a venture's held-out partition, seal one, or enrol an operator.
 
     apps/api/.venv/Scripts/python.exe -m scripts.author_partition \\
-        --venture <venture_id> --forge <forge_id> --by "<author's name>"
+        --venture <venture_id> --forge <forge_id> --by "<author's name>" \\
+        [--modules a,b] [--roster <The Office's roster statement, a JSON file>]
 
     apps/api/.venv/Scripts/python.exe -m scripts.author_partition \\
         --seal-id <partition_id> --sealed-by "<sealer's name>"
@@ -24,8 +25,14 @@ A lost credential is reset, never recovered (ADR-0156): the witness types
 theirs first, then the operator sets a new one, twice. The operator keeps
 their id, so what they authored stays theirs.
 
-It prints the partition id, the scenario count and, once sealed, the
-content digest. It never prints a scenario. ADR-0109.
+`--roster` is The Office's statement of its live grants on the venture and
+forge (docs/contracts/partition-roster.md). Its grants on the partition's
+modules are recorded, and they alone sit it (ADR-0162). Without it the
+partition keeps the run-history roster (ADR-0152).
+
+It prints the partition id, the scenario count, the number of rostered
+agents when a roster was recorded, and, once sealed, the content digest.
+It never prints a scenario. ADR-0109.
 
 Not a route, by design: no HTTP path authors or reads a partition.
 """
@@ -40,6 +47,7 @@ import sys
 from collections.abc import Callable
 
 from src.db import SessionLocal
+from src.models.held_out_partition import HeldOutPartition
 from src.services.operation.held_out_partition import (
     PartitionRefused,
     author_partition,
@@ -53,6 +61,15 @@ from src.services.operation.partition_operators import (
 )
 
 Prompt = Callable[[str], str]
+
+
+def _read_roster(path: str) -> dict:
+    """The Office's roster statement. Not validated here: `author_partition` does that."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError) as exc:
+        raise PartitionRefused(f"the roster file could not be read as JSON: {exc}") from exc
 
 
 def _credential_for(prompt: Prompt, name: str) -> str:
@@ -101,6 +118,7 @@ async def _run(args: argparse.Namespace, prompt: Prompt) -> dict:
             }
         raw = getattr(args, "modules", None)
         modules = raw.split(",") if raw else None
+        roster = _read_roster(args.roster) if getattr(args, "roster", None) else None
         pid = await author_partition(
             session,
             args.venture,
@@ -108,12 +126,17 @@ async def _run(args: argparse.Namespace, prompt: Prompt) -> dict:
             args.by,
             modules,
             credential=_credential_for(prompt, args.by),
+            roster=roster,
         )
-        return {
+        out = {
             "partition_id": pid,
             "scenarios": await scenario_count(session, pid),
             "status": "authoring",
         }
+        if roster is not None:
+            recorded = (await session.get(HeldOutPartition, pid)).roster
+            out["rostered_agents"] = len({g["agent_id"] for g in recorded["grants"]})
+        return out
 
 
 def main(argv: list[str] | None = None, prompt: Prompt = getpass.getpass) -> int:
@@ -124,6 +147,10 @@ def main(argv: list[str] | None = None, prompt: Prompt = getpass.getpass) -> int
     p.add_argument(
         "--modules",
         help="comma-separated: scope to the modules the venture operates (ADR-0129)",
+    )
+    p.add_argument(
+        "--roster",
+        help="The Office's roster statement, a JSON file: who sits the partition (ADR-0162)",
     )
     p.add_argument("--seal-id", help="seal an existing authoring partition")
     p.add_argument("--sealed-by", help="the sealer: an enrolled named human, not the author")
