@@ -102,6 +102,7 @@ from src.services.operation.partition_roster import (
     roster_holds,
     venture_of_run_ref,
 )
+from src.services.operation.partition_seal import content_digest
 from src.services.operation.partition_tolerance import (
     RULE_ZERO_TOLERANCE,
     fold_agent,
@@ -835,8 +836,6 @@ async def grade_partition(
     # ADR-0162. A rostered partition is graded only while its roster and scenarios still give
     # the digest it was sealed with. A partition without one is checked as it always was.
     if roster_at_seal is not None:
-        from src.services.operation.held_out_partition import content_digest
-
         resealed = content_digest((r.digest for r in scenario_rows), roster_at_seal)
         if not roster_holds(roster, roster_at_seal) or resealed != digest:
             log.warning("partition_seal_broken", partition=pid)
