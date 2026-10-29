@@ -55,11 +55,13 @@ A_SEAL_NAMES_ITS_SEALER_SQL = "status = 'authoring' OR \"sealedBy\" IS NOT NULL"
 class HeldOutPartition(Base):
     __tablename__ = "HeldOutPartition"
     __table_args__ = (
-        # ADR-0113 ruling 2. One sealed partition per venture, by the database.
-        # Two seals racing could both seal; the second commit now fails here.
+        # ADR-0113 ruling 2, narrowed by ADR-0163: one sealed partition per venture
+        # and forge, by the database. Two seals racing could both seal; the second
+        # commit now fails here. Another forge's seal is not limited.
         Index(
-            "HeldOutPartition_one_sealed_per_venture",
+            "HeldOutPartition_one_sealed_per_venture_forge",
             "ventureId",
+            "forgeId",
             unique=True,
             sqlite_where=text("status = 'sealed'"),
             postgresql_where=text("status = 'sealed'"),
