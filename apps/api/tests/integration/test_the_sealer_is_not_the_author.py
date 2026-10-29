@@ -1,7 +1,8 @@
 """A partition's sealer is never its author; one sealed per venture (ADR-0113).
 
 Ruling 1: both are named humans, and sealing writes its own audit record.
-Ruling 2: the database holds one sealed partition per venture.
+Ruling 2: the database holds one sealed partition per venture (per venture
+and forge since ADR-0163; `test_one_sealed_per_venture_and_forge`).
 
 Every assertion reads the row back from a fresh session. A seal that
 returns a digest and writes nothing fails here.
@@ -218,7 +219,7 @@ async def test_a_seal_that_loses_the_race_is_refused_and_leaves_nothing(
     loser = await _author(db_session)
     await _seal(db_session, winner, SEALER)
 
-    async def _saw_nothing(session, venture_id, *, keep):
+    async def _saw_nothing(session, venture_id, forge_id, *, keep):
         return []
 
     monkeypatch.setattr(hp, "_retire_sealed", _saw_nothing)
