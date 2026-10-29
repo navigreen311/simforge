@@ -6,7 +6,8 @@ WHAT THIS DOES
     author_partition  one venture, one forge -> a partition in `authoring`,
                       with adversarial scenarios stored as rows.
     seal_partition    fixes its content digest, marks it `sealed`,
-                      and retires the venture's earlier sealed one.
+                      and retires the venture's earlier sealed one for the same
+                      forge (ADR-0163).
 
 WHERE THE SCOPE COMES FROM (R3, measured in ADR-0109)
 =====================================================
@@ -535,10 +536,11 @@ async def seal_partition(
     """Seal an `authoring` partition. Returns its content digest.
 
     ADR-0113. `sealed_by` is a named human and never the author. The seal,
-    the retirement of the venture's earlier sealed partition and the seal's
-    own audit record are one commit. The database holds one sealed
-    partition per venture; a seal that loses a race is refused and leaves
-    nothing behind, including no audit record.
+    the retirement of the earlier sealed partition and the seal's own audit
+    record are one commit. ADR-0163: the database holds one sealed partition
+    per venture and forge, so only the same forge's earlier seal is retired
+    and another forge's stays sealed. A seal that loses a race is refused and
+    leaves nothing behind, including no audit record.
 
     ADR-0154. `sealed_by` must authenticate with `credential`, the author
     must have authenticated too, and the two must be different operators.
@@ -632,7 +634,8 @@ async def seal_partition(
     # Read before the commit: a rollback expires the row, and an async
     # session cannot lazy-load it back to name the venture in the refusal.
     venture_id = partition.ventureId
-    retired = await _retire_sealed(session, venture_id, keep=partition_id)
+    forge_id = partition.forgeId
+    retired = await _retire_sealed(session, venture_id, forge_id, keep=partition_id)
     # ADR-0162. The roster's digest is folded in when one was recorded.
     digest = content_digest(digests, partition.rosterDigest)
     partition.contentDigest = digest
@@ -671,7 +674,8 @@ async def seal_partition(
         if _lost_the_race(exc):
             raise PartitionRefused(
                 f"partition {partition_id!r} was not sealed: another seal for "
-                f"venture {venture_id!r} committed first (ADR-0113)."
+                f"venture {venture_id!r} and forge {forge_id!r} committed first "
+                "(ADR-0113, ADR-0163)."
             ) from exc
         raise PartitionRefused(
             f"partition {partition_id!r} was not sealed: the database refused "
@@ -680,22 +684,37 @@ async def seal_partition(
     return digest
 
 
-def _lost_the_race(exc: IntegrityError) -> bool:
-    """The one-sealed-per-venture index, and not some other constraint.
+#: ADR-0163's index first, then ADR-0113's: a database not yet migrated still names the old one,
+#: and a lost race there is the same race.
+ONE_SEALED_INDEXES = (
+    "HeldOutPartition_one_sealed_per_venture_forge",
+    "HeldOutPartition_one_sealed_per_venture",
+)
 
-    Postgres names the index; SQLite names the column it covers.
+
+def _lost_the_race(exc: IntegrityError) -> bool:
+    """The one-sealed index, and not some other constraint.
+
+    Postgres names the index; SQLite names the columns it covers.
     """
     text = str(exc.orig)
-    return "one_sealed_per_venture" in text or "HeldOutPartition.ventureId" in text
+    return any(name in text for name in ONE_SEALED_INDEXES) or "HeldOutPartition.ventureId" in text
 
 
-async def _retire_sealed(session: AsyncSession, venture_id: str, *, keep: str) -> list[str]:
-    """Retire the venture's sealed partitions other than `keep`. Their ids."""
+async def _retire_sealed(
+    session: AsyncSession, venture_id: str, forge_id: str, *, keep: str
+) -> list[str]:
+    """Retire this venture's sealed partitions for this forge, other than `keep`. Their ids.
+
+    ADR-0163. Keyed on venture and forge: a venture that operates two forges holds a sealed
+    partition for each, and sealing one never retires the other's.
+    """
     ids = list(
         (
             await session.execute(
                 select(HeldOutPartition.id).where(
                     HeldOutPartition.ventureId == venture_id,
+                    HeldOutPartition.forgeId == forge_id,
                     HeldOutPartition.status == "sealed",
                     HeldOutPartition.id != keep,
                 )
