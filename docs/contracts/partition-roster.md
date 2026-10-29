@@ -36,6 +36,9 @@ The CLI prints `rostered_agents`, a count. It never prints the roster.
 - **Live grants only:** rows with `revoked_at IS NULL` for this venture and
   forge. SimForge holds no grants and cannot tell a retired one from a live
   one, so a grant listed here is a sitter.
+- **A grant created but not yet activated counts.** Gate 9.5 runs before
+  Gate 11 activates grants, so at authoring the agents about to operate the
+  modules hold grants that are not yet active. List them.
 - **`agent_id` is the Village agent ref**, the id a probe is put to
   (ADR-0083: `villageAgentRef`, else `agentId`). It is not
   `office_agent_id`.
