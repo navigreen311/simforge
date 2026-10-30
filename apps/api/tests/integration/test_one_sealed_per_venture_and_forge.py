@@ -34,6 +34,7 @@ from src.models.held_out_partition import (
     HeldOutPartitionVerdict,
 )
 from src.services.operation import held_out_partition as hp
+from src.services.operation.partition_roster import roster_digest
 from src.services.operation.partition_verdict import (
     FORGE_RESPONSE_KEYS,
     RESPONSE_KEYS,
@@ -326,6 +327,40 @@ async def test_a_forge_with_no_sealed_partition_reads_as_absent(
             "verdict": None,
             "decided_at": None,
         }
+
+
+async def test_each_forge_is_read_by_its_own_recorded_roster(db_session: AsyncSession) -> None:
+    """ADR-0162 under ADR-0163: the roster binds per partition, so per forge.
+
+    One forge's roster holds and names only a1, so a9's FAIL there is not read. The other
+    forge's roster was edited after its seal, so it answers NOT_RUN. v1 names the weaker.
+    """
+
+    def _roster(agent: str) -> dict:
+        grant = {"grant_id": f"g-{agent}", "agent_id": agent, "module_id": "m"}
+        return {"stated_at": "2026-10-29T00:00:00+00:00", "grants": [grant]}
+
+    held = _partition("v-rost", FORGE)
+    held.roster = _roster("a1")
+    held.rosterDigest = roster_digest(held.roster)
+    moved = _partition("v-rost", OTHER_FORGE)
+    moved.roster = _roster("b1")
+    moved.rosterDigest = roster_digest(_roster("someone-else"))
+    await _add(db_session, held, moved)
+    await _add(
+        db_session,
+        _verdict(held, "a1", "PASS"),
+        _verdict(held, "a9", "FAIL"),
+        _verdict(moved, "b1", "PASS"),
+    )
+
+    async with fresh_session(db_session) as s:
+        on_held = await venture_verdict(s, "v-rost", FORGE)
+        on_moved = await venture_verdict(s, "v-rost", OTHER_FORGE)
+        either = await venture_verdict(s, "v-rost")
+    assert (on_held["partition_id"], on_held["verdict"]) == (held.id, "PASS")
+    assert (on_moved["partition_id"], on_moved["verdict"]) == (moved.id, "NOT_RUN")
+    assert (either["verdict"], either["decided_at"]) == ("NOT_RUN", None)
 
 
 @pytest.mark.parametrize(

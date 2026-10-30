@@ -63,7 +63,10 @@ one sealed at the time.
 
 - **The grader, the sweep and the re-sit** take a partition by id, or every
   sealed partition, and never "the" venture's. They needed no change.
-- **`partition_roster`** was already venture and forge.
+- **`partition_roster`** was already venture and forge. A recorded roster
+  (ADR-0162) binds its own partition, so each forge is read by its own: a
+  roster that no longer holds makes that forge NOT_RUN, and v1 reads it as
+  the weaker.
 - **No partition is un-retired.** Retired is final and no record is
   rewritten. The migration has no `UPDATE`. The partitions retired by the
   other forge's seal on 10 and 11 October stay retired, the seal records
@@ -101,6 +104,7 @@ forge's FAIL still blocks it.
   refused and leaves the loser in `authoring`;
 - the migration builds the new index before dropping the old, and rewrites
   nothing;
+- each forge is read by its own recorded roster (ADR-0162);
 - Gate 9.5 v2 reads one forge with six keys, and another forge's FAIL is not
   read; v1 reads four keys, the weakest across forges; a venture with one
   sealed partition answers v1 exactly as before; an unknown or retired forge
