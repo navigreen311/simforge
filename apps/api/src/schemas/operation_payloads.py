@@ -631,11 +631,16 @@ class HeldOutInventoryResponse(BaseModel):
 
 
 class Gate95VerdictRequest(BaseModel):
-    """`POST /office/gate_9_5_verdict`. One field. Anything else is refused."""
+    """`POST /office/gate_9_5_verdict`. Anything but these is refused.
+
+    ADR-0163 (contract v2). `forge_id` is optional. With it, the answer is that forge's sealed
+    partition, in `Gate95ForgeVerdictResponse`. Without it, the four v1 keys, unchanged.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     venture_id: str = Field(min_length=1)
+    forge_id: str | None = Field(default=None, min_length=1)
 
 
 class Gate95VerdictResponse(BaseModel):
@@ -660,4 +665,33 @@ class Gate95VerdictResponse(BaseModel):
     def _verdict_null_iff_absent(self) -> Gate95VerdictResponse:
         if (self.verdict is None) != (not self.partition_exists):
             raise ValueError("verdict is null if and only if partition_exists is false")
+        return self
+
+
+class Gate95ForgeVerdictResponse(BaseModel):
+    """ADR-0163, contract v2: asked for a venture and a forge. Six keys, always.
+
+    The v1 four plus `forge_id` (echoed) and `partition_id`, the sealed partition the verdict
+    is about. Identifiers only: still nothing about what the partition holds.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    venture_id: str
+    forge_id: str
+    partition_exists: bool
+    #: Null if and only if `partition_exists` is false.
+    partition_id: str | None
+    #: Null if and only if `partition_exists` is false.
+    verdict: Literal["PASS", "FAIL", "NOT_RUN", "IN_PROGRESS", "TIMEOUT"] | None
+    #: ISO-8601 UTC, or null when nothing was decided.
+    decided_at: str | None
+
+    @model_validator(mode="after")
+    def _null_iff_absent(self) -> Gate95ForgeVerdictResponse:
+        for value in (self.verdict, self.partition_id):
+            if (value is None) != (not self.partition_exists):
+                raise ValueError(
+                    "verdict and partition_id are null if and only if partition_exists is false"
+                )
         return self

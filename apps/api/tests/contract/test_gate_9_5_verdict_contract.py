@@ -16,8 +16,16 @@ import pytest
 
 from src.models.held_out_partition import PARTITION_VERDICTS
 from src.routers.office import MODULES
-from src.schemas.operation_payloads import Gate95VerdictResponse
-from src.services.operation.partition_verdict import RESPONSE_KEYS, WEAKNESS_ORDER
+from src.schemas.operation_payloads import (
+    Gate95ForgeVerdictResponse,
+    Gate95VerdictRequest,
+    Gate95VerdictResponse,
+)
+from src.services.operation.partition_verdict import (
+    FORGE_RESPONSE_KEYS,
+    RESPONSE_KEYS,
+    WEAKNESS_ORDER,
+)
 
 PAGE = Path(__file__).resolve().parents[4] / "docs" / "contracts" / "gate-9-5-verdict.md"
 FORBIDDEN_FRAGMENTS = ("held_out", "heldout", "prompt", "scenarios")
@@ -27,9 +35,9 @@ def _page() -> str:
     return PAGE.read_text(encoding="utf-8")
 
 
-def _answer_block() -> str:
+def _answer_block(heading: str = "## The answer") -> str:
     text = _page()
-    section = text.split("## The answer", 1)[1].split("\n## ", 1)[0]
+    section = text.split(heading, 1)[1].split("\n## ", 1)[0]
     return section.split("{", 1)[1].split("}", 1)[0]
 
 
@@ -74,3 +82,42 @@ def test_a_fifth_key_is_refused() -> None:
     with pytest.raises(pydantic.ValidationError):
         # verdict is null iff partition_exists is false.
         Gate95VerdictResponse.model_validate({**base, "verdict": "PASS"})
+
+
+# --- ADR-0163: contract v2, asked for a forge -----------------------------------------------
+
+
+def test_the_v2_keys_are_the_pages_keys_in_order() -> None:
+    keys = re.findall(r'"(\w+)":', _answer_block("## v2: asked for a forge"))
+    assert keys == list(FORGE_RESPONSE_KEYS)
+    assert list(Gate95ForgeVerdictResponse.model_fields) == keys
+    # The v1 four, in their order, plus two identifiers.
+    assert [k for k in keys if k in RESPONSE_KEYS] == list(RESPONSE_KEYS)
+    assert set(keys) - set(RESPONSE_KEYS) == {"forge_id", "partition_id"}
+
+
+def test_the_request_takes_an_optional_forge_and_nothing_else() -> None:
+    assert list(Gate95VerdictRequest.model_fields) == ["venture_id", "forge_id"]
+    assert Gate95VerdictRequest.model_validate({"venture_id": "v"}).forge_id is None
+    with pytest.raises(pydantic.ValidationError):
+        Gate95VerdictRequest.model_validate({"venture_id": "v", "partition_id": "p"})
+
+
+def test_no_v2_key_carries_a_forbidden_fragment() -> None:
+    for key in Gate95ForgeVerdictResponse.model_fields:
+        for fragment in FORBIDDEN_FRAGMENTS:
+            assert fragment not in key.lower()
+
+
+def test_a_seventh_key_is_refused_and_the_identifiers_follow_existence() -> None:
+    base = dict(zip(FORGE_RESPONSE_KEYS, ("v", "f", False, None, None, None), strict=True))
+    Gate95ForgeVerdictResponse.model_validate(base)
+    with pytest.raises(pydantic.ValidationError):
+        Gate95ForgeVerdictResponse.model_validate({**base, "reason": "x"})
+    sealed = {**base, "partition_exists": True, "partition_id": "p", "verdict": "PASS"}
+    Gate95ForgeVerdictResponse.model_validate(sealed)
+    with pytest.raises(pydantic.ValidationError):
+        # partition_id is null iff partition_exists is false.
+        Gate95ForgeVerdictResponse.model_validate({**sealed, "partition_id": None})
+    with pytest.raises(pydantic.ValidationError):
+        Gate95ForgeVerdictResponse.model_validate({**base, "partition_id": "p"})

@@ -103,6 +103,7 @@ from src.db import get_session
 from src.routers.operation import start_operation_run, submit_curriculum
 from src.schemas.operation_payloads import (
     ForgeOperationCurriculum,
+    Gate95ForgeVerdictResponse,
     Gate95VerdictRequest,
     Gate95VerdictResponse,
     OperationRunStartRequest,
@@ -275,6 +276,9 @@ async def _gate_9_5_verdict(
 ) -> dict[str, Any]:
     """Gate 9.5: whether this venture's sealed partition passed. Never why.
 
+    ADR-0163: with `forge_id`, that forge's sealed partition; without it, the
+    weakest across the venture's sealed partitions.
+
     The shape is `docs/contracts/gate-9-5-verdict.md` (ADR-0108 R5, ADR-0111).
     Always 200 for a well-formed body: an unknown venture answers exactly
     like a venture with no partition, so the call cannot probe which
@@ -284,10 +288,13 @@ async def _gate_9_5_verdict(
     holds a scenario, so nothing on this path can return one (ADR-0050).
     """
     body = _validated(Gate95VerdictRequest, payload, "gate_9_5_verdict")
-    answer = await venture_verdict(session, body.venture_id)
-    # Validated on the way out: a fifth key, or a verdict outside the
+    answer = await venture_verdict(session, body.venture_id, body.forge_id)
+    # Validated on the way out: an extra key, or a verdict outside the
     # contract, is a 500 here rather than a surprise at The Office.
-    return Gate95VerdictResponse.model_validate(answer).model_dump(mode="json")
+    # ADR-0163: the v2 shape only when the caller named a forge, so a v1
+    # caller never sees a fifth key.
+    shape = Gate95VerdictResponse if body.forge_id is None else Gate95ForgeVerdictResponse
+    return shape.model_validate(answer).model_dump(mode="json")
 
 
 async def _submitted_answers(
