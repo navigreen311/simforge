@@ -107,6 +107,13 @@ class HeldOutPartition(Base):
     #: ADR-0143. The verdict rule stamped at seal. Null - sealed before the rule - is rule 1,
     #: zero tolerance; rule 2 tolerates one slip per agent (`partition_tolerance`).
     verdictRule: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ADR-0162. Who sits it: The Office's live grants on the partition's modules, as stated
+    #: at authoring - `{"stated_at", "grants": [{"grant_id", "agent_id", "module_id"}]}`.
+    #: Null on partitions authored without one; those keep the ADR-0152 run-history roster.
+    roster: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    #: ADR-0162. sha256 of the canonical roster, set at authoring and folded into
+    #: `contentDigest` at seal. Its presence is the stamp: non-null means grant-backed.
+    rosterDigest: Mapped[str | None] = mapped_column(String, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sealedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: ADR-0113 ruling 1. A named human, never the author. Null while authoring.

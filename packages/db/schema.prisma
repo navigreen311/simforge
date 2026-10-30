@@ -1221,6 +1221,11 @@ model HeldOutPartition {
   /// ADR-0143. The verdict rule stamped at seal. Null is rule 1, zero tolerance.
   /// CHECK held_out_partition_verdict_rule - see the migration.
   verdictRule   Int?
+  /// ADR-0162. The Office's live grants on the partition's modules, stated at authoring.
+  /// Null: the ADR-0152 run-history roster.
+  roster        Json?
+  /// ADR-0162. sha256 of the canonical roster; folded into contentDigest at seal.
+  rosterDigest  String?
   createdAt     DateTime  @default(now())
   sealedAt      DateTime?
   /// A named human, never the author (ADR-0113). Null while authoring.

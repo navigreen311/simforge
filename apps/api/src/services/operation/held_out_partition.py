@@ -76,6 +76,15 @@ from src.services.operation.partition_operators import (
     authenticate,
     refuse,
 )
+from src.services.operation.partition_roster import (
+    RosterRefused,
+    record_roster,
+    roster_digest,
+    roster_holds,
+)
+
+# ADR-0162. Its own module, so the grader can recompute a seal; re-exported here.
+from src.services.operation.partition_seal import content_digest
 from src.services.operation.partition_tolerance import PARTITION_VERDICT_RULE
 from src.services.operation.rubric import PARTITION_PROTOCOL_VERSION
 from src.services.operation.scenarios import HELD_OUT_CLASSES
@@ -150,12 +159,6 @@ def scenario_from_body(body: Mapping) -> HeldOutScenario:
     data = dict(body)
     data["unsupported_readings"] = tuple(data.get("unsupported_readings") or ())
     return HeldOutScenario(**data)
-
-
-def content_digest(digests: Iterable[str]) -> str:
-    """sha256 over the sorted scenario digests, newline-joined."""
-    joined = "\n".join(sorted(digests))
-    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
 # --- the adversarial framings -------------------------------------------------
@@ -377,6 +380,8 @@ def named_human(value: str, role: str) -> str:
 REFUSED_AUTHOR_UNAUTHENTICATED = "author_did_not_authenticate"
 #: ADR-0154. Only an authoring partition can be sealed; the refusal is audited like the rest.
 REFUSED_NOT_AUTHORING = "partition_not_authoring"
+#: ADR-0162. The recorded roster no longer matches the digest recorded beside it.
+REFUSED_ROSTER_CHANGED = "roster_changed_since_authoring"
 
 
 async def _operator(
@@ -419,13 +424,19 @@ async def author_partition(
     modules: Sequence[str] | None = None,
     *,
     credential: str,
+    roster: Mapping | None = None,
 ) -> str:
     """Write a partition in `authoring` and its scenarios. Returns its id.
 
     Refuses, writing nothing, when: an argument is blank; `authored_by`
     names The Office (R1); `authored_by` is not an enrolled operator whose
-    `credential` this is (ADR-0154); the forge has no never-do list; or a
-    variant is not disjoint from the battery (R2).
+    `credential` this is (ADR-0154); the forge has no never-do list; a
+    variant is not disjoint from the battery (R2); or `roster` is given and
+    is not a statement SimForge records (ADR-0162).
+
+    ADR-0162. `roster` is The Office's statement of its live grants. Its grants on the
+    partition's modules are recorded, with their digest, and they alone sit it. Without one
+    the partition keeps the ADR-0152 roster.
     """
     venture_id = _require(venture_id, "venture_id")
     forge_id = _require(forge_id, "forge_id")
@@ -459,6 +470,14 @@ async def author_partition(
         never_do = {m: never_do[m] for m in scope}
         hashes = {m: hashes[m] for m in scope}
 
+    # ADR-0162. Against the scope just fixed, before anything is written.
+    recorded = None
+    if roster is not None:
+        try:
+            recorded = record_roster(roster, venture_id=venture_id, forge_id=forge_id, scope=hashes)
+        except RosterRefused as exc:
+            raise PartitionRefused(f"{exc} ({exc.code})") from exc
+
     partition_id = _new_id()
     # ADR-0139. Every scoped module also gets its go-ahead probes.
     variants = adversarial_variants(never_do, seed=partition_id) + permitted_variants(never_do)
@@ -479,6 +498,9 @@ async def author_partition(
             neverDoGroups={m: groups[m] for m in hashes if groups.get(m)},
             # ADR-0128. Which builder wrote the bodies below.
             protocolVersion=PARTITION_PROTOCOL_VERSION,
+            # ADR-0162. Who sits it, and the digest the seal folds in.
+            roster=recorded,
+            rosterDigest=roster_digest(recorded) if recorded is not None else None,
         )
     )
     await session.flush()
@@ -575,6 +597,20 @@ async def seal_partition(
             venture_id=venture,
         )
         raise PartitionRefused(str(refused))
+    # ADR-0162. A roster that no longer reads as it was recorded is not sealed into anything.
+    if not roster_holds(partition.roster, partition.rosterDigest):
+        refused = await refuse(
+            session,
+            f"partition {partition_id!r}'s roster no longer matches the digest recorded "
+            "at authoring. Author it again (ADR-0162).",
+            REFUSED_ROSTER_CHANGED,
+            act="seal",
+            claimed_name=sealer.name,
+            operator_id=sealer.id,
+            partition_id=partition_id,
+            venture_id=venture,
+        )
+        raise PartitionRefused(str(refused))
     sealed_by = sealer.name
     digests = (
         (
@@ -597,7 +633,8 @@ async def seal_partition(
     # session cannot lazy-load it back to name the venture in the refusal.
     venture_id = partition.ventureId
     retired = await _retire_sealed(session, venture_id, keep=partition_id)
-    digest = content_digest(digests)
+    # ADR-0162. The roster's digest is folded in when one was recorded.
+    digest = content_digest(digests, partition.rosterDigest)
     partition.contentDigest = digest
     partition.status = "sealed"
     partition.sealedAt = _now()
