@@ -2,6 +2,8 @@
 
 **Status:** accepted · **Decided by:** Ivan Green, 2026-10-12 · **Built.**
 Extends ADR-0157 (only key-graded exams certify).
+Narrowed by [ADR-0164](ADR-0164-a-restraint-fail-fails-the-unit-in-every-class.md): a
+re-sit is refused once the rubric has moved; that is a new exam.
 
 ## The ruling
 

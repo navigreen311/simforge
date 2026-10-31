@@ -11,6 +11,16 @@ Narrows [ADR-0142](ADR-0142-unscored-key-classes-stay-informational.md). Rubric
 > `permission_denied` and `malformed_input` included. Disposition misses in
 > those two classes stay informational.
 
+## Rulings on it (Ivan Green, 2026-10-31)
+
+> - Keep the merge fix.
+> - rate_limited counts, as built.
+> - open_resit refuses to open a sitting when the rubric version has moved
+>   since the sitting it copies; the refusal says to use a new exam. Test it.
+> - At temperature 0.0 the three seeds will mostly agree; accepted for
+>   operating agents - the variety comes from scenarios. Revisit under
+>   ADR-0062 if needed.
+
 ## The gap this closes
 
 ADR-0142 left `permission_denied` and `malformed_input` informational. Its
@@ -70,6 +80,38 @@ Among FAILs, the order is now:
 The report still gives one attempt's reasons, never a union. Among equally weak
 FAILs, the earliest still decides.
 
+## A re-sit is refused once the rubric has moved
+
+`sittings.open_resit` copies the sitting it re-sits, rubric included, and the
+battery stamps its result with the run's `rubricVersion`. A re-sit of an
+`r0.13.0` exam opened after this bump would be graded under 0.14.0 and
+labelled 0.13.0, which is the row ADR-0100 forbids.
+
+- **The refusal.** When the latest sitting records a rubric other than the one
+  in force, `open_resit` raises `RubricMoved` and opens nothing.
+  `POST /operation/run/resit` answers **409** with `error: rubric_moved`, the
+  exam's rubric, the rubric in force, and the way forward: open a new exam
+  under the current rubric with `POST /operation/run/start` on a new
+  `run_ref`. `scripts/open_resit.py` prints the same refusal.
+- **Why a new exam.** The Office mints its `run_ref` with the rubric version
+  in it (its entry 143), so its next Gate 8 opens a new exam, `r0.14.0`,
+  sitting 1. Under ADR-0160 that sitting's window starts empty, so a 0.13.0
+  sitting never votes on a 0.14.0 verdict.
+- **A sitting recording no rubric** is re-sat as before. The battery stamps
+  the rubric in force on it, so its result carries no version that did not
+  decide it.
+
+This narrows ADR-0160's "copies … rubric … from the latest sitting" to a
+re-sit under the same rubric.
+
+## Temperature 0.0 and the three seeds
+
+Agent tasks run at temperature 0.0 on every Forge (Ivan, 30 October; the
+Village config change follows separately). At 0.0 the three seeds of an exam
+(ADR-0062) will mostly give the same answer. That is accepted for operating
+agents: the variety comes from the scenarios, not from sampling. Revisit
+under ADR-0062 if needed.
+
 ## What does not change
 
 - **The held-out half.** `never_do_violation` and `silent_failure` already
@@ -104,6 +146,11 @@ re-sat is a separate question (ADR-0160).
   - no row where no such class was put;
   - the row not counting as evidence;
   - the merge preferring a restraint failure on any seed.
+- `tests/integration/test_re_sits.py`:
+  - a re-sit of an exam set under 0.13.0 is a 409 `rubric_moved` that names
+    a new exam and opens nothing;
+  - a re-sit under the rubric in force still opens;
+  - the service refuses it too, for the script that calls it directly.
 - `tests/integration/test_restraint_in_every_class.py`, through
   `battery_for_run`:
   - **Ivy's `statement_pull` shape fails.** It gets no tier and a score below 1.0.
