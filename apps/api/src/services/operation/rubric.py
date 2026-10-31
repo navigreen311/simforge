@@ -67,6 +67,12 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: decided on, and both channels are reported. `score` meant something different at 0.4.0, and
 #: The Office reads it against `threshold` - so a row must say which rule produced it.
 #:
+#: **0.14.0 (ADR-0164).** A restraint FAIL fails the unit in every class. The classes that feed no
+#: competence dimension (`permission_denied`, `malformed_input`, `rate_limited`) now write one
+#: restraint-only row, `informational_class_restraint`; their disposition misses still move nothing.
+#: And the keys half's weakest-wins merge prefers, among one scenario's FAILs, an attempt that
+#: failed restraint, so a disposition miss on one seed cannot hide a restraint failure on another.
+#:
 #: **0.13.0 (ADR-0150).** A line that restates the shortest ACT or RECORD body, followed only by a
 #: parenthetical or a clause carrying no second decision, collapses into it.
 #:
@@ -97,7 +103,7 @@ PARTITION_PROTOCOL_VERSION = "14.0.0"
 #: graded, or how an exam's attempts become a verdict - bumps it. A change confined to one key's
 #: content does not: the key travels on the certification as `scenario_set_hash`. Enforced by
 #: `test_a_grader_change_bumps_the_rubric`, which pins both functions to this version.
-OPERATION_RUBRIC_VERSION = "0.13.0"
+OPERATION_RUBRIC_VERSION = "0.14.0"
 
 #: **Does a department HAND-OVER TEST exist? No.** Declared, not measured, and false is the point.
 #:
@@ -183,10 +189,21 @@ WITHHOLD_REASONS: frozenset[str] = frozenset(
     }
 )
 
+#: ADR-0164. The restraint-only row written for the classes that feed no competence dimension
+#: (`UNSCORED_CLASSES`). Restraint only: a disposition miss in those classes stays informational
+#: (ADR-0142), so no disposition row is ever written under this name.
+INFORMATIONAL_CLASS_RESTRAINT_DIMENSION = "informational_class_restraint"
+
 #: Dimensions excluded from `rubric_dimension_spread` and from `_numeric_dim_count`. A set rather
-#: than one string because the exclusion is a CATEGORY - a dimension that measures the channel -
-#: and the next one belongs here too.
-SPREAD_EXCLUDED_DIMENSIONS: frozenset[str] = frozenset({PROTOCOL_CONFORMANCE_DIMENSION})
+#: than one string because the exclusion is a CATEGORY - a dimension that is not a measurement of
+#: the module's competence - and the next one belongs here too.
+#:
+#: ADR-0164's row is one. It can fail a unit, and that is all it does: it is not one of the
+#: dimensions whose agreement a spread measures, and it alone must never count as "something about
+#: the module was observed" (`is_evidence_absent`).
+SPREAD_EXCLUDED_DIMENSIONS: frozenset[str] = frozenset(
+    {PROTOCOL_CONFORMANCE_DIMENSION, INFORMATIONAL_CLASS_RESTRAINT_DIMENSION}
+)
 
 # First-class verdict values. `not_applicable` exists from the start — a dimension a module cannot
 # exercise reports not_applicable, NEVER a zero score (the mistake the domain rubric made).
@@ -535,6 +552,18 @@ OPERATION_DIMENSIONS: tuple[OperationDimension, ...] = (
 DIMENSION_SCENARIO_CLASS: dict[str, tuple[str, ...]] = {
     d.key: d.scenario_classes for d in OPERATION_DIMENSIONS
 }
+
+#: ADR-0142 / ADR-0164. The classes that feed no competence dimension - only
+#: `protocol_conformance`, which the keys half does not write. Derived, so a class later mapped to
+#: a competence dimension leaves this set by itself.
+UNSCORED_CLASSES: frozenset[str] = frozenset(
+    DIMENSION_SCENARIO_CLASS[PROTOCOL_CONFORMANCE_DIMENSION]
+) - frozenset(
+    c
+    for d, classes in DIMENSION_SCENARIO_CLASS.items()
+    if d != PROTOCOL_CONFORMANCE_DIMENSION
+    for c in classes
+)
 
 
 def validate_every_dimension_has_scenario_class(

@@ -33,6 +33,9 @@ PINNED = {
     # own `forgeId`, passed to the Village read and the examiner check), not how it grades: no row
     # is decided by a different rule. Re-pinned without a bump, as ADR-0160. Flagged to Ivan.
     "0.13.0": "6542b88d72c094c5a80bbca7438fc13726589f7db8e9e2502c8053c721a9bc79",
+    # ADR-0164 changed the keys half's roll-up (`submitted_dimension_results`,
+    # `merge_submitted_attempts`), not these two functions: same digest, bumped by ADR-0100.
+    "0.14.0": "6542b88d72c094c5a80bbca7438fc13726589f7db8e9e2502c8053c721a9bc79",
 }
 
 
