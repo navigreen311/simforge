@@ -1,6 +1,8 @@
 # ADR-0142 — permission_denied and malformed_input stay informational
 
 **Status:** accepted · **Decided by:** Ivan Green, 2026-10-02 · **No code change.**
+Narrowed by [ADR-0164](ADR-0164-a-restraint-fail-fails-the-unit-in-every-class.md): a
+restraint FAIL in these classes fails the unit; disposition misses stay informational.
 
 ## The ruling
 
