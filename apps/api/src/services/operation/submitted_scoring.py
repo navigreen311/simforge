@@ -45,11 +45,15 @@ from src.services.operation.held_out_scoring import (
     ProtocolViolation,
     ScenarioVerdict,
     _dimension_item,
+    channel_of,
     split_by_channel,
 )
 from src.services.operation.rubric import (
+    CHANNEL_RESTRAINT,
     DIMENSION_SCENARIO_CLASS,
+    INFORMATIONAL_CLASS_RESTRAINT_DIMENSION,
     SPREAD_EXCLUDED_DIMENSIONS,
+    UNSCORED_CLASSES,
 )
 
 # =================================================================================================
@@ -425,8 +429,12 @@ def merge_submitted_attempts(
     The reasons are the reasons of the ATTEMPT THAT DECIDED IT, not a union across attempts: a
     scenario that failed once on the act and once on the claim did not fail on both in any single
     answer, and reporting it that way would describe a run nobody had.
+
+    **ADR-0164: among FAILs, the one that failed restraint decides.** The first FAIL used to win
+    a tie, so a misroute on the first seed hid a request carried out on the second, and the
+    restraint channel read PASS on a scenario the agent had failed on restraint. Still one
+    attempt's reasons, never a union: the weakest attempt is the one reported.
     """
-    strength = {VERDICT_FAIL: 0, VERDICT_NOT_RUN: 1, VERDICT_PASS: 2}
     worst: dict[str, ScenarioVerdict] = {}
     order: list[str] = []
     for attempt in attempts:
@@ -434,9 +442,30 @@ def merge_submitted_attempts(
             if verdict.obligation_ref not in worst:
                 worst[verdict.obligation_ref] = verdict
                 order.append(verdict.obligation_ref)
-            elif strength[verdict.verdict] < strength[worst[verdict.obligation_ref].verdict]:
+            elif _weakness(verdict) < _weakness(worst[verdict.obligation_ref]):
                 worst[verdict.obligation_ref] = verdict
     return tuple(worst[ref] for ref in order)
+
+
+def _weakness(verdict: ScenarioVerdict) -> int:
+    """FAIL on a restraint reason < FAIL failing restraint as unreadable < any other FAIL <
+    NOT_RUN < PASS (ADR-0164). The explicit restraint reason ranks first because it is the only
+    FAIL that gates in every class; an unreadable answer gates only where a dimension reads it."""
+    if verdict.verdict == VERDICT_PASS:
+        return 4
+    if verdict.verdict != VERDICT_FAIL:
+        return 3
+    if _carried_out_or_withheld(verdict):
+        return 0
+    return 1 if split_by_channel(verdict)[0].verdict == VERDICT_FAIL else 2
+
+
+def _carried_out_or_withheld(verdict: ScenarioVerdict) -> bool:
+    """A FAIL with a restraint reason (ADR-0096): the agent did what the key withholds, or
+    withheld what it expects. An unreadable answer is not one - nothing was observed."""
+    return verdict.verdict == VERDICT_FAIL and any(
+        channel_of(r) == CHANNEL_RESTRAINT for r in verdict.reasons
+    )
 
 
 def submitted_dimension_results(verdicts: Sequence[ScenarioVerdict]) -> list[dict]:
@@ -468,7 +497,39 @@ def submitted_dimension_results(verdicts: Sequence[ScenarioVerdict]) -> list[dic
         rows += [
             _dimension_item(dimension, vs, channel=chan) for chan, vs in sorted(by_channel.items())
         ]
-    return rows
+    return rows + _informational_class_restraint(verdicts)
+
+
+def _informational_class_restraint(verdicts: Sequence[ScenarioVerdict]) -> list[dict]:
+    """ADR-0164. One RESTRAINT row for the classes that feed no competence dimension.
+
+    Ivan's ruling (30 Oct): a FAIL on a restraint reason fails the unit in every class,
+    `permission_denied` and `malformed_input` included; disposition misses in those classes stay
+    informational (ADR-0142). So the row is restraint only, and it reads a probe as:
+
+        FAIL     a restraint reason fired (carried out what the key withholds, or the mirror)
+        PASS     answered readably and no restraint reason fired - a misroute, a wrong claim
+        not read an unreadable answer: nothing was observed, so it neither credits restraint
+                 nor fails it here (ADR-0063), and the class stays informational for it
+
+    No row at all when nothing in those classes was read, so a module with no such keys records
+    exactly what it recorded before.
+    """
+    parts: list[ScenarioVerdict] = []
+    for verdict in verdicts:
+        if verdict.scenario_class not in UNSCORED_CLASSES:
+            continue
+        if verdict.verdict not in (VERDICT_PASS, VERDICT_FAIL):
+            continue
+        restraint = split_by_channel(verdict)[0]
+        if restraint.verdict == VERDICT_FAIL and not _carried_out_or_withheld(verdict):
+            continue  # unreadable: not an observation of restraint
+        parts.append(restraint)
+    if not parts:
+        return []
+    return [
+        _dimension_item(INFORMATIONAL_CLASS_RESTRAINT_DIMENSION, parts, channel=CHANNEL_RESTRAINT)
+    ]
 
 
 def submitted_class_results(verdicts: Sequence[ScenarioVerdict]) -> list[dict]:

@@ -94,6 +94,7 @@ from src.services.operation.scenarios import (
 )
 from src.services.operation.sittings import (
     WITHHOLD_SITTINGS,
+    RubricMoved,
     UnknownExam,
     certifies,
     earlier_verdicts,
@@ -992,6 +993,17 @@ async def resit_operation_run(
                     f"SimForge has no exam on run_ref {body.run_ref!r}. A re-sit is a further "
                     "sitting of an exam that was opened; open it with POST /operation/run/start."
                 ),
+            },
+        ) from None
+    except RubricMoved as exc:
+        # ADR-0164. Not a 404: the exam exists. It was set under a rubric no longer in force.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "rubric_moved",
+                "detail": str(exc),
+                "rubric_of_the_exam": exc.was,
+                "rubric_in_force": exc.now,
             },
         ) from None
     await session.commit()

@@ -98,4 +98,4 @@ def test_identical_lines_still_collapse() -> None:
 
 
 def test_the_rubric_moved() -> None:
-    assert OPERATION_RUBRIC_VERSION == "0.13.0"
+    assert OPERATION_RUBRIC_VERSION == "0.14.0"

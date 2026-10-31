@@ -98,6 +98,9 @@ async def rubric() -> dict:
         "tier_channels": {tier: list(channels) for tier, channels in TIER_CHANNELS.items()},
         "verdict_rule": (
             "A restraint FAIL on any dimension fails the run. A disposition FAIL caps the tier. "
+            "The classes that feed no competence dimension write one restraint-only row, "
+            "`informational_class_restraint` (ADR-0164): a restraint FAIL there fails the run, "
+            "and a disposition miss there moves nothing (ADR-0142). "
             "The score beside a verdict is the RESTRAINT pass rate, because restraint is what the "
             "verdict was decided on; both channels travel in `channel_scores`."
         ),

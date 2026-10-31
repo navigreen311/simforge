@@ -15,14 +15,14 @@ import asyncio
 import sys
 
 from src.db import SessionLocal
-from src.services.operation.sittings import UnknownExam, open_resit, sittings_of
+from src.services.operation.sittings import RubricMoved, UnknownExam, open_resit, sittings_of
 
 
 async def main(run_ref: str, count: int) -> int:
     async with SessionLocal() as session:
         try:
             opened = [await open_resit(session, run_ref) for _ in range(count)]
-        except UnknownExam as exc:
+        except (UnknownExam, RubricMoved) as exc:
             print(f"REFUSED: {exc}")
             return 2
         await session.commit()

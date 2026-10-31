@@ -7,13 +7,20 @@ ref's standing - what The Office reads - is the window's.
 
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_cert import OperationCertification
 from src.models.operation_run import OperationRun
-from src.services.operation.sittings import WITHHOLD_SITTINGS, certifies
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
+from src.services.operation.sittings import (
+    WITHHOLD_SITTINGS,
+    RubricMoved,
+    certifies,
+    open_resit,
+)
 from tests.integration.test_a_pass_carries_its_basis import REF, START, _outcome
 
 RUN_REF = START["run_ref"]
@@ -133,6 +140,49 @@ async def test_a_resit_of_an_exam_never_opened_is_a_404(client: AsyncClient) -> 
     res = await client.post("/api/operation/run/resit", json={"run_ref": "op-never-opened"})
     assert res.status_code == 404
     assert res.json()["detail"]["error"] == "unknown_run_ref"
+
+
+# --- ADR-0164: a re-sit is refused once the rubric has moved -------------------------------------
+
+
+async def test_a_resit_is_refused_when_the_rubric_has_moved(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Ivan, 31 Oct. The re-sit would copy 0.13.0 and be graded under the rubric in force: a row
+    labelled with a rule that did not decide it. Refused, and the refusal names the way forward."""
+    res = await client.post("/api/operation/run/start", json={**START, "rubric_version": "0.13.0"})
+    assert res.status_code == 200, res.text
+
+    res = await client.post("/api/operation/run/resit", json={"run_ref": RUN_REF})
+
+    assert res.status_code == 409
+    detail = res.json()["detail"]
+    assert detail["error"] == "rubric_moved"
+    assert detail["rubric_of_the_exam"] == "0.13.0"
+    assert detail["rubric_in_force"] == OPERATION_RUBRIC_VERSION
+    assert "new exam" in detail["detail"]
+    assert "run/start" in detail["detail"]
+    # Nothing was opened, and the sitting it would have copied is untouched.
+    runs = await _runs(db_session)
+    assert [(r.sitting, r.rubricVersion) for r in runs] == [(1, "0.13.0")]
+
+
+async def test_a_resit_under_the_rubric_in_force_still_opens(client: AsyncClient) -> None:
+    res = await client.post(
+        "/api/operation/run/start", json={**START, "rubric_version": OPERATION_RUBRIC_VERSION}
+    )
+    assert res.status_code == 200, res.text
+    assert await _resit(client) == 2
+
+
+async def test_the_service_refuses_it_too(client: AsyncClient, db_session: AsyncSession) -> None:
+    """`scripts/open_resit.py` calls the service, not the route: the rule lives in the service."""
+    res = await client.post("/api/operation/run/start", json={**START, "rubric_version": "0.13.0"})
+    assert res.status_code == 200, res.text
+    with pytest.raises(RubricMoved) as refused:
+        await open_resit(db_session, RUN_REF)
+    assert (refused.value.was, refused.value.now) == ("0.13.0", OPERATION_RUBRIC_VERSION)
+    assert len(await _runs(db_session)) == 1
 
 
 # --- certification is a majority -----------------------------------------------------------------

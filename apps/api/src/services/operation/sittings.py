@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
 from src.services.operation.gate_verdict import GateVerdict
+from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
 
 #: How many of the latest graded sittings are read. A strict majority of them must be PASS.
 WINDOW = 3
@@ -49,6 +50,23 @@ NEVER_DO_OUTVOTE_UNRULED = (
 
 class UnknownExam(LookupError):
     """A re-sit names a ref SimForge has never opened. There is no exam to sit again."""
+
+
+class RubricMoved(ValueError):
+    """A re-sit of an exam set under a rubric that is no longer in force (ADR-0164).
+
+    The sitting would copy the old version, and the battery stamps its result with it, so a row
+    would carry a rubric that did not decide it (ADR-0100). Under the new rubric it is a new exam:
+    a new run_ref, opened with `run/start`, whose first sitting stands on its own.
+    """
+
+    def __init__(self, run_ref: str, was: str, now: str) -> None:
+        self.run_ref, self.was, self.now = run_ref, was, now
+        super().__init__(
+            f"run_ref {run_ref!r} was set under rubric {was}; the rubric in force is {now}. "
+            "A re-sit would be graded under one and labelled with the other. Open a new exam "
+            "under the current rubric with POST /operation/run/start on a new run_ref."
+        )
 
 
 def own_verdict(run: OperationRun) -> str | None:
@@ -132,10 +150,16 @@ async def open_resit(session: AsyncSession, run_ref: str) -> OperationRun:
 
     Copies what makes it the same exam (unit, forge, module, agent, instructions, rubric, window)
     from the latest sitting. Nothing on any earlier sitting is touched. Flushes; the caller commits.
+
+    ADR-0164 (Ivan, 31 Oct): refused with `RubricMoved` when the rubric has moved since the
+    sitting it copies. A sitting recording no rubric is opened as before: the battery stamps the
+    rubric in force on it, so its result carries no version that did not decide it.
     """
     latest = await sitting_of(session, run_ref)
     if latest is None:
         raise UnknownExam(f"no exam has been opened on run_ref {run_ref!r}")
+    if latest.rubricVersion is not None and latest.rubricVersion != OPERATION_RUBRIC_VERSION:
+        raise RubricMoved(run_ref, latest.rubricVersion, OPERATION_RUBRIC_VERSION)
     top = (
         await session.execute(
             select(func.max(OperationRun.sitting)).where(OperationRun.runRef == run_ref)
@@ -165,6 +189,7 @@ async def open_resit(session: AsyncSession, run_ref: str) -> OperationRun:
 __all__ = [
     "GRADED",
     "NEVER_DO_OUTVOTE_UNRULED",
+    "RubricMoved",
     "WINDOW",
     "WITHHOLD_SITTINGS",
     "UnknownExam",
