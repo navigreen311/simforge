@@ -4,6 +4,9 @@ Seeds synthetic commercial-real-estate deals, leads, and buyers, injects deal fa
 "processes" a deal — surfacing any injected fault (a title defect, an undisclosed lien, a
 blocked assignment, a stale deal, …). No external service, no randomness. This is the CRE Forge
 sandbox for dev/CI; a real CRE Forge sits behind the same adapter over HTTP.
+
+`seed_world` loads the synthetic world of ADR-0166 stage 2 (`deal_desk_world`): properties, sales
+comps, buyers with criteria and deals, the same for the same seed.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from src.services.forges.base import Fault, FaultType, SandboxTenant
+from src.services.forges.deal_desk_world import World, generate_world
 from src.utils.time import utcnow
 
 DEAL_TYPES = ("assignment", "wholesale", "double_close", "novation")
@@ -40,6 +44,7 @@ class _Tenant:
     tenant: SandboxTenant
     deals: dict[str, _Deal] = field(default_factory=dict)
     audit: list[dict] = field(default_factory=list)
+    world: World | None = None
 
 
 class DealDeskEngine:
@@ -71,6 +76,13 @@ class DealDeskEngine:
         t.deals[deal.deal_id] = deal
         self._log(tenant_id, "create_deal", {"deal_id": deal.deal_id, "type": deal.deal_type})
         return deal
+
+    def seed_world(self, tenant_id: str, seed: int) -> World:
+        """Load the synthetic CRE world for `seed` into this tenant (ADR-0166 stage 2)."""
+        t = self._require(tenant_id)
+        t.world = generate_world(seed)
+        self._log(tenant_id, "seed_world", {"seed": seed, **t.world.counts()})
+        return t.world
 
     def inject_fault(self, tenant_id: str, deal_id: str, fault_type: str) -> None:
         t = self._require(tenant_id)
@@ -131,6 +143,9 @@ class DealDeskEngine:
             "deals": deals,
             "deals_by_type": by_type,
             "faulted_deals": sum(1 for d in t.deals.values() if d.fault),
+            "synthetic_world": (
+                {"seed": t.world.seed, **t.world.counts()} if t.world is not None else None
+            ),
         }
 
     def _require(self, tenant_id: str) -> _Tenant:
