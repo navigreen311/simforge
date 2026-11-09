@@ -1,6 +1,7 @@
 # ADR-0166 — An autonomous sandbox run
 
-**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 · **Not built.**
+**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stage 2 built;
+the rest not built.**
 Builds on [ADR-0157](ADR-0157-practice-runs-never-certify.md) and
 [ADR-0158](ADR-0158-no-certificate-from-practice-runs.md) (practice never certifies), and the
 `ForgeAdapter` sandbox-tenant contract (`provision_sandbox_tenant`, `FORGE_SANDBOX_URLS`).
@@ -31,6 +32,13 @@ end, on data that is synthetic by construction.
 >
 > Keep every guard in the outline: separate deployment and databases, simulation ventures only,
 > outbound credentials empty or it won't start, network blocked, sandbox-only machine approver.
+
+## The rulings on the open points (Ivan Green, 2026-11-09)
+
+> 1. The real Village operator runs the agents (a second instance with a sandbox config).
+> 2. Greenstone goes first.
+> 3. Schedule: at most one scheduled run per business day, max 60 tasks per run, never in
+>    :17-:24 or :47-:54, memory gate applies. Hand-started runs any time outside the sweeps.
 
 ## What exists (measured 8 November, read only)
 
@@ -193,16 +201,78 @@ a week, three or more PRs. Each stage ends with something you can open and check
 Order: 1 and 2 can go in parallel; 3 needs 1's ports and tokens; 4 needs 3; 5 needs 2; 6 needs 5;
 7 last. A first end-to-end run is possible after stage 6 with a hand-started run.
 
-## Open for Ivan
+## The open points, ruled (9 November)
 
-1. **Who runs the agents.** "Agents calling CRE Forge for real" is the Village operator, the
-   same code that runs live tasks. That is a fourth repo, though stage 4 is configuration only:
-   a second operator instance with a sandbox config. The alternative is SimForge driving Turn A
-   and Turn B with its exam runtime. That stays inside three repos but does not exercise the
-   operator. The suggestion is the operator.
-2. **Which venture first.** Greenstone, whose three read modules are these. Burkham's
-   capitalforge modules would need their own sandbox Forge.
-3. **The schedule's limits**: how often, and at most how many tasks per run.
+1. **Who runs the agents: the Village operator.** A second operator instance with a sandbox
+   config holding only sandbox agent tokens (stage 4, configuration only). SimForge does not
+   drive Turn A or Turn B with its exam runtime.
+2. **Which venture first: Greenstone.** Its three read modules are the ones the world is built
+   for. Burkham's capitalforge modules wait for their own sandbox Forge.
+3. **The schedule (stage 7):**
+   - at most one scheduled run per business day;
+   - at most 60 tasks per run;
+   - never inside :17-:24 or :47-:54;
+   - the memory gate applies (free memory under 8 GB refuses, as section 5);
+   - a hand-started run, by Ivan or Ira, may start at any time outside the sweeps.
+
+## Stage 2, as built
+
+`apps/api/src/services/forges/deal_desk_world.py`, next to `deal_desk.py`, whose engine gains
+`seed_world(tenant_id, seed)`.
+
+- **The world, for one seed.** 28-38 properties in four of eight invented markets, sales comps
+  for about half of them, 18-24 buyers with status, do-not-contact and a price range, and 7-9
+  deals. Every row carries `synthetic: true`, the seed and `GENERATOR_VERSION` (1.0.0). Buyer
+  emails end `@synthetic.invalid`.
+- **Same seed, same world.** Everything comes from `random.Random(seed)`. Ids are `uuid5` over
+  the version, the seed and the row's place. No clock, environment, file or database is read.
+  `world_digest` and `tasks_digest` are sha256 over canonical JSON.
+- **20 tasks per seed**, in `happy_path`, `partial_failure` and `malformed_input` only:
+  - **property_lookup, 6:** two city counts, the silent `page_size` cap, an address on no row,
+    and the two missing-field counts.
+  - **comp_analysis, 9:** a count, a count under `max_comps: 2`, a property whose comps are all
+    outside the default search, a widening with a reason, four policy refusals (over the cap,
+    no reason, age 0, age over the cap), and an unknown property.
+  - **buyer_match, 5:** a count, a count under `limit: 2`, a deal whose every in-band buyer is
+    do-not-contact, `limit: 0`, and an unknown deal.
+- **Each task carries:**
+  - the facts a person files and the request fields;
+  - **Turn A**, the ACT before any call. It is PROCEED, or PROCEED or DECLINE where the request
+    breaks a published bound, since the pre-call ACT is not certified (The Office's entry 254);
+  - **the Forge's answer, predicted from the world** with CRE Forge's own rules as of
+    medlink-wholesale `9f532fe`: the substring search and the 100-row cap, the B117 comp policy,
+    the buyer price band and `suppressed`;
+  - **Turn B**, the ACT and RECORD on that answer. It is graded only when Turn A was PROCEED.
+
+  Both turns are written in `SubmittedKey`'s fields, with subjects and claims in the approved
+  keys' vocabulary, and `grade_submitted` grades them unchanged.
+- **Stage 1's contract for comps.** A comp names its subject, `distance_mi` and
+  `sale_age_days`. The sandbox source returns a subject's comps within the searched radius,
+  nearest first, and the loader dates each sale that many days before the day it loads.
+  Distances sit at least 20% of a band from every bound, and ages at least 35 days from 365 and
+  730. The days between loading and running therefore cannot move a count.
+- **The page.** `python -m scripts.sandbox_world_page --seed N --out DIR` writes
+  `world-seed-N.html`. The page shows:
+  - the generator version and both digests;
+  - the world's counts by kind, and every row;
+  - every task with its facts, request, Turn A expected, the predicted answer, Turn B expected
+    and notes.
+
+  It has no timestamp, so the same seed gives the same bytes.
+- **Held-out stays sealed.** `tests/unit/forges/test_the_sandbox_world_is_sealed_off.py`
+  requires that:
+  - the generator and the page script reach no SimForge module but the generator;
+  - the generator imports only eight standard-library modules;
+  - it calls nothing that opens a file, reads the environment or imports by name;
+  - it names nothing held out (no `held_out`, `never_do`, `partition`, `look_alike`).
+
+  The test also shows that a held-out import would be caught.
+  `test_deal_desk_world.py` checks, for 50 seeds, that no task is `never_do_violation`,
+  `silent_failure` or `permitted_request`, and that a seed has at most 60 tasks.
+- **What it does not do.** It loads nothing into a Forge, files nothing and grades no agent.
+  That is stages 1, 3, 5 and 7. If CRE Forge changes one of the rules above, a predicted
+  answer can go stale without this module changing; stage 5 will show that as a miss on the
+  Forge's side, not the agent's.
 
 ## Not decided here
 
