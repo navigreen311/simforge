@@ -1,7 +1,7 @@
 # ADR-0166 — An autonomous sandbox run
 
-**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stage 2 built;
-the rest not built.**
+**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stages 2 and 5
+built in SimForge (stage 1 in CRE Forge); the rest not built.**
 Builds on [ADR-0157](ADR-0157-practice-runs-never-certify.md) and
 [ADR-0158](ADR-0158-no-certificate-from-practice-runs.md) (practice never certifies), and the
 `ForgeAdapter` sandbox-tenant contract (`provision_sandbox_tenant`, `FORGE_SANDBOX_URLS`).
@@ -128,8 +128,8 @@ For each task, the run:
    only in the sandbox database. The proposal and the approval are both recorded with that
    actor. Nothing is missing from the log; only the wait for a person is skipped (ruling 4).
 6. **Turn B.** The agent reads the Forge's answer and gives ACT and RECORD.
-7. **The record.** Each of steps 1 to 6 is a `TraceEvent` on the run, carrying the task id, the
-   sandbox ids and the timestamps.
+7. **The record.** Each of steps 1 to 6 is a step on the run, carrying the task id, the
+   sandbox ids and the timestamps (as built: a `SandboxStep`, not a `TraceEvent`; see stage 5).
 
 **Sandbox grants** are created by the sandbox setup from the venture's Pack:
 
@@ -143,9 +143,10 @@ copied or changed.
 ### 4. The record and the grade
 
 - **A sandbox run is a SimForge practice record** (ruling 1).
-  - It is a `Run` with its own kind (`sandbox`), so it is never counted as a practice battery
-    and can never be mistaken for an exam.
-  - It holds its steps as `TraceEvent`s.
+  - It is a record of its own kind, so it is never counted as a practice battery and can never
+    be mistaken for an exam. As built it is its own table, `SandboxRun`, not a `Run` with a
+    kind (stage 5 says why).
+  - It holds its steps as `SandboxStep`s.
 - **Each graded turn is graded by `grade_submitted`** against the generator's expected answer,
   and records the verdict and the reasons.
 - **Nothing in a sandbox run reaches** `OperationRun`, `OperationCertification`, a tier, a
@@ -223,9 +224,10 @@ Order: 1 and 2 can go in parallel; 3 needs 1's ports and tokens; 4 needs 3; 5 ne
 - **The world, for one seed.** 28-38 properties in four of eight invented markets, sales comps
   for about half of them, 18-24 buyers with status, do-not-contact and a price range, and 7-9
   deals. Every row carries `synthetic: true`, the seed and `GENERATOR_VERSION` (1.0.0). Buyer
-  emails end `@synthetic.invalid`.
+  emails end `@synthetic.invalid` (1.0.0; `@sandbox.invalid` from 1.1.0, stage 5).
 - **Same seed, same world.** Everything comes from `random.Random(seed)`. Ids are `uuid5` over
-  the version, the seed and the row's place. No clock, environment, file or database is read.
+  the version, the seed and the row's place (1.0.0; from 1.1.0 they are CRE Forge's loader ids,
+  stage 5). No clock, environment, file or database is read.
   `world_digest` and `tasks_digest` are sha256 over canonical JSON.
 - **20 tasks per seed**, in `happy_path`, `partial_failure` and `malformed_input` only:
   - **property_lookup, 6:** two city counts, the silent `page_size` cap, an address on no row,
@@ -273,6 +275,121 @@ Order: 1 and 2 can go in parallel; 3 needs 1's ports and tokens; 4 needs 3; 5 ne
   That is stages 1, 3, 5 and 7. If CRE Forge changes one of the rules above, a predicted
   answer can go stale without this module changing; stage 5 will show that as a miss on the
   Forge's side, not the agent's.
+
+## The world file: SimForge's export, CRE Forge's loader (agreed 9 November)
+
+SimForge writes the world in the format CRE Forge's sandbox loader already reads
+(`backend/app/sandbox/loader.py`, medlink-wholesale `90fadc6`; `worlds/hand-made-1.json` is the
+other example). Nothing in the loader changed. The agreement:
+
+- **One file per seed**, `simforge-<generator version>-seed-<n>.json`. Its `world` is that
+  name, and its `version` is the generator version.
+- **Ids are the loader's.** The loader gives a row the id `uuid5(NAMESPACE, "<world>/<key>")`,
+  with its fixed namespace `5a4d0c66-0166-4e2b-9b1a-5a4db0c0ffee`. A comp's key is
+  `<property key>/comp-<i>`, where `i` is its place under its subject. The generator computes
+  the same ids (`row_id`), so a task names the ids the sandbox Forge holds once the file is
+  loaded. A new generator version is a new world name, and so every id moves with it.
+- **Shape**, as the loader reads it:
+  - `properties[]`: `key`, `address`, `city`, `state`, `zip_code`, `county`, `property_type`,
+    `status`, `square_feet`, `asking_price`, and `comps[]` nested under each.
+  - `comps[]`: `address`, `days_ago`, `sale_price`, `square_feet`, `distance_miles`,
+    `similarity_score`. The loader dates each sale `days_ago` days before the day it loads.
+  - `deals[]`: `key`, `property` (a property's key), `deal_name`, `status`, `stage`,
+    `asking_price`, `contract_price`.
+  - `buyers[]`: `key`, `name`, `buyer_type`, `status`, `do_not_contact`, `min_price`,
+    `max_price`, `preferred_cities`, `preferred_states`, `preferred_property_types`,
+    `financing_type`.
+  - Money is a decimal string or null. Enum values are CRE Forge's own.
+  - The loader makes some fields itself, so the file leaves them out: buyer email
+    (`<key>@sandbox.invalid`) and phone, a comp's city, state and zip (its subject's),
+    `source = 'synthetic'` and deal notes.
+  - Extra keys are ignored by the loader: `seed`, `generator_version`, `world_digest`,
+    `tasks_digest`, `about`.
+- **One world per sandbox database.** The tasks count every row the Forge holds. A database
+  that also holds `hand-made-1`, or another seed, gives other answers. The loader is additive
+  and does not check this. Stage 7 must load each run's world into an empty `creforge_sandbox`
+  database.
+- **Where the loader reads it.** The loader reads by name from `backend/app/sandbox/worlds/` in
+  the checkout the sandbox mounts read-only. So today the file is copied there on the host, and
+  then `docker exec creforge-sandbox-backend python -m app.sandbox.loader <name>` is run. A
+  path argument would be a small CRE Forge change. It has not been made.
+
+## Stage 5, as built
+
+- **The record: its own tables, not `Run`.** `SandboxRun` and `SandboxStep` (migration
+  `20261109000000_a_sandbox_run_of_its_own`; `src/models/sandbox_run.py`). This is a change
+  from section 4, which said a `Run` with a kind:
+  - `Run` needs a scenario, a pack and one agent. A sandbox run has none of those.
+  - `Run.executionMode = "sandbox"` already means a non-integrated practice run.
+  - The practice hooks, the runs list and the budget all read `Run`.
+
+  A table nothing else reads cannot be mistaken for any of them. It also does not touch
+  `is_practice_run`.
+- **A run** is opened by Ivan Green or Ira Green, optionally under a schedule one of them owns.
+  It is for `greenstone` and `cre-forge` only, has one seed, and a fixed task list of at most 60
+  tasks. It records the generator version, the loader world name and both digests.
+- **Each step**, in order per task: `filed`, `claimed`, `turn_a`, `proposed`, `approved`,
+  `forge_answer`, `turn_b`. Each carries its time, actor, agent, the sandbox's own ids and its
+  payload. Out of order is refused, and so are:
+  - a step after the task ended;
+  - filing by anyone but the starter or the schedule owner;
+  - an approval by anyone but `sandbox-approver`;
+  - another agent than the claimant;
+  - any step once the run is closed.
+
+  Each refusal is a code, and nothing is written.
+- **The grade.**
+  - **Turn A** is graded by `grade_submitted` against the task's Turn A key. Anything but
+    PROCEED ends the task.
+  - **`forge_answer`** keeps the predicted fields read off the Forge's response
+    (`forge_fields`; null counts are read off `results`) and records `forgeMatches`.
+  - **Turn B** is graded against the Turn B key, but only if the Forge answered as predicted.
+    Otherwise it is `NOT_GRADED`, with `forge_answer_differs_from_prediction`: the key was
+    written for an answer the agent never saw, so the miss is the Forge's, not the agent's.
+  - No turn is graded once the generator in force would give other tasks (`generator_moved`).
+  - Answers arrive structured, as The Office records them: an act, a record and caveats, or
+    `{"unreadable": <protocol rule>}`. No prose is read.
+- **Close** writes the totals once: per module and per agent, tasks, tasks ended, Turn A and
+  Turn B verdicts, and Forge mismatches.
+- **The generator, 1.1.0.**
+  - Ids are the loader's, and buyer emails are the loader's.
+  - Comps carry `similarity_score`, buyers `financing_type`, and deals `deal_name` and `stage`.
+    These are derived, not drawn, so every 1.0.0 draw is unchanged.
+  - `comps_found` counts as the sandbox source does: the `2 * max_comps` nearest inside the
+    radius, then the age window. No 1.0.0 task changed count because of this.
+  - The two 404 predictions now carry the Forge's own body,
+    `"<Kind> with id '<id>' not found"`.
+  - `export_world` and `export_json` write the world file;
+    `python -m scripts.sandbox_world_page --seed N --out DIR --export` writes it beside the
+    page.
+- **Checked against the real sandbox Forge (9 November, read only).** This used CRE Forge's
+  merged code (`90fadc6`) and its sandbox image, on a throwaway internal network, with one
+  fresh Postgres database per seed:
+  - its start-up guards passed;
+  - its own loader loaded each file;
+  - every task's request was put to `/forge/<module>`;
+  - the answer was read with `forge_differs`.
+
+  **200 of 200 tasks over seeds 0-9 answered as predicted.** The two 404 shapes above were
+  found this way and fixed. The live CRE Forge and the running sandbox stack were not touched,
+  and the throwaway stack was removed. This check is not in CI: CI has neither CRE Forge nor
+  Docker.
+- **Inert, counted.** `tests/unit/forges/test_a_sandbox_run_reaches_no_exam_or_certification.py`
+  records a five-task run (passes, a wrong count, a Turn A DECLINE, a Forge that differed). The
+  database it runs on already holds an exam, a certification with a tier and a partition.
+  - Every table's count is the same before and after, except the two sandbox tables.
+  - Every row of every other table reads back unchanged.
+  - No statement during the run names any other table, read or write.
+  - The import walk from the record reaches only the generator, its own model, and the grader
+    with that grader's own imports. That includes the approved-key model it types from; the
+    record calls only `grade_submitted`.
+  - Negative controls show the count and the walk would each catch an exam write or import.
+- **Not done here.**
+  - No run against live agents: there is no sandbox Office or agent shift yet (stages 3 and 4).
+  - No route: the stage 7 driver calls the record directly.
+  - No page per run (stage 6).
+  - The migration is not applied to the dev database. Applying it (`prisma migrate deploy`,
+    or its SQL) is a deploy step, and it was not taken here.
 
 ## Not decided here
 

@@ -5,10 +5,12 @@ read. This module makes what they read - properties, sales comparables, buyers w
 deals - and from that world the tasks a sandbox run files: the facts a person would file, the
 request they make, the Forge's answer the world implies, and the expected answer at each turn.
 
-**Same seed, same world.** Everything comes from `random.Random(seed)`; ids are `uuid5` over the
-generator version, the seed and the row's place. No clock, no environment, no file and no
-database is read. `world_digest` is sha256 over the canonical JSON, so two worlds can be compared
-by one string.
+**Same seed, same world.** Everything comes from `random.Random(seed)`. Every row has a `key`,
+and its id is the one CRE Forge's sandbox loader gives that key: `uuid5` of the loader's
+namespace and `<world name>/<key>`, where the world name carries the generator version and the
+seed (`world_name`). So a task names the ids the sandbox Forge holds once the world is loaded
+(ADR-0166 stage 5). No clock, no environment, no file and no database is read. `world_digest`
+is sha256 over the canonical JSON, so two worlds can be compared by one string.
 
 **Built from nothing but the seed.** Nothing in this module reads an exam, a key a venture
 submitted or anything SimForge keeps from The Office. It imports only the standard library. The
@@ -17,12 +19,15 @@ walks its imports and its calls and fails if that stops being true.
 
 **The Forge's answer is predicted, not asked.** Each task carries the response the sandbox CRE
 Forge gives for its request when the sandbox tenant holds exactly this world, computed with the
-Forge's own rules as of medlink-wholesale `9f532fe`:
+Forge's own rules as of medlink-wholesale `90fadc6` (stage 1 merged: the rules of `9f532fe`
+plus the synthetic comps source):
 
 - `property_lookup`: a case-insensitive substring match on address, city, county and zip code;
   `page_size` capped at 100, default 25.
 - `comp_analysis`: the B117 policy table (radius default and hard cap by type, age 365 / 730
-  days, at most 10 comps); a 404 before the policy; a 422 per refusal, radius first.
+  days, at most 10 comps); a 404 before the policy; a 422 per refusal, radius first. The
+  synthetic source reads the subject's `2 * max_comps` nearest comps inside the radius (ties
+  by id), and only then are comps older than the window dropped.
 - `buyer_match`: candidates are `active` or `vip`, not `do_not_contact`, inside the deal's +/-50%
   price band (contract price, else asking price); `suppressed` counts `do_not_contact` buyers in
   the band whatever their status; `limit` below 1 is a 422 before the deal is read.
@@ -33,8 +38,9 @@ changing. Stage 5 will show it as a miss on the Forge's side.
 **The synthetic comps source (stage 1's contract).** A comp names its subject property, its
 distance in miles and its age in days. The sandbox source returns a subject's comps within the
 searched radius, nearest first, and the sandbox loader dates each sale `sale_age_days` before the
-day it loads. Distances and ages sit well away from every bound - 20% of a band, and 35 days of
-the age limits - so the few days between loading and running cannot move a count.
+day it loads. `export_world` writes the world in the loader's own format. Distances and ages sit
+well away from every bound - 20% of a band, and 35 days of the age limits - so the few days
+between loading and running cannot move a count.
 
 The expected answers are written the way an approved key is written (`SubmittedKey`'s fields), so
 `grade_submitted` grades them unchanged.
@@ -51,14 +57,17 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.0.0"
+GENERATOR_VERSION = "1.1.0"
 
 #: The task classes this generator writes, and the only ones.
 TASK_CLASSES: tuple[str, ...] = ("happy_path", "partial_failure", "malformed_input")
 
 READ_MODULES: tuple[str, ...] = ("property_lookup", "comp_analysis", "buyer_match")
 
-_NAMESPACE = uuid.UUID("5a0d1b6e-2f4c-4e8a-9b1d-7c3e5f60a166")
+#: CRE Forge's sandbox loader namespace (`app/sandbox/loader.py`, `NAMESPACE`). The loader gives a
+#: row the id `uuid5(LOADER_NAMESPACE, "<world>/<key>")`, and so does `row_id`. Never change it on
+#: one side only.
+LOADER_NAMESPACE = uuid.UUID("5a4d0c66-0166-4e2b-9b1a-5a4db0c0ffee")
 
 ACT_PROCEED = "PROCEED"
 ACT_DECLINE = "DECLINE"
@@ -114,6 +123,8 @@ _TYPES: tuple[str, ...] = tuple(COMP_RADIUS_MI)
 _TYPE_WEIGHTS: tuple[int, ...] = (4, 3, 3, 3, 2, 4, 1)
 _PROPERTY_STATUSES: tuple[str, ...] = ("new", "researching", "qualified", "negotiating")
 _BUYER_TYPES: tuple[str, ...] = ("investor", "flipper", "landlord", "developer", "wholesaler")
+#: `FinancingType` values. Assigned by place, not drawn, so every 1.0.0 draw is unchanged.
+_FINANCING: tuple[str, ...] = ("cash", "hard_money", "conventional", "creative")
 
 
 @dataclass(frozen=True)
@@ -178,8 +189,18 @@ class Task:
     notes: tuple[str, ...] = field(default=())
 
 
-def _id(seed: int, kind: str, n: int) -> str:
-    return str(uuid.uuid5(_NAMESPACE, f"cre-world/{GENERATOR_VERSION}/{seed}/{kind}/{n}"))
+def world_name(seed: int) -> str:
+    """The world's name in CRE Forge's loader: the export's file name and the ids' prefix."""
+    return f"simforge-{GENERATOR_VERSION}-seed-{seed}"
+
+
+def row_id(seed: int, key: str) -> str:
+    """The id CRE Forge's sandbox loader gives the row with `key` in this seed's world."""
+    return str(uuid.uuid5(LOADER_NAMESPACE, f"{world_name(seed)}/{key}"))
+
+
+def _row(seed: int, key: str) -> dict[str, Any]:
+    return {"key": key, "id": row_id(seed, key)}
 
 
 def _mark(seed: int) -> dict[str, Any]:
@@ -201,7 +222,7 @@ def generate_world(seed: int) -> World:
         city, state, county, zip_prefix = markets[i % len(markets)]
         properties.append(
             {
-                "id": _id(seed, "property", i),
+                **_row(seed, f"property-{i:02d}"),
                 "address": f"{rng.randint(100, 9899)} {rng.choice(_STREETS)}",
                 "city": city,
                 "state": state,
@@ -274,14 +295,15 @@ def _comps(rng: random.Random, seed: int, properties: list[dict[str, Any]]) -> l
         else:
             continue
         ptype = subject["property_type"]
-        for band, age_band in plan:
-            n = len(comps)
+        for i, (band, age_band) in enumerate(plan):
             sqft = subject["square_feet"] or rng.randint(12, 240) * 500
+            address = f"{rng.randint(100, 9899)} {rng.choice(_STREETS)}"
             comps.append(
                 {
-                    "id": _id(seed, "sales_comp", n),
+                    # The loader's comp key: the subject's key and the comp's place under it.
+                    **_row(seed, f"{subject['key']}/comp-{i}"),
                     "subject_property_id": subject["id"],
-                    "address": f"{rng.randint(100, 9899)} {rng.choice(_STREETS)}",
+                    "address": address,
                     "city": subject["city"],
                     "state": subject["state"],
                     "property_type": ptype,
@@ -292,6 +314,7 @@ def _comps(rng: random.Random, seed: int, properties: list[dict[str, Any]]) -> l
                     **_mark(seed),
                 }
             )
+            comps[-1]["similarity_score"] = _similarity(comps[-1])
     return comps
 
 
@@ -312,6 +335,12 @@ def _buyers(rng: random.Random, seed: int) -> list[dict[str, Any]]:
     return buyers
 
 
+def _similarity(comp: dict[str, Any]) -> float:
+    """Read by the Forge's adjustments only, never by a count. Derived, not drawn."""
+    _, cap = COMP_RADIUS_MI[comp["property_type"]]
+    return round(0.95 - 0.25 * comp["distance_mi"] / cap, 2)
+
+
 def _buyer(
     seed: int,
     i: int,
@@ -322,12 +351,15 @@ def _buyer(
     high: int | None,
 ) -> dict[str, Any]:
     market = rng.choice(_MARKETS)
+    key = f"buyer-{i:02d}"
     return {
-        "id": _id(seed, "buyer", i),
+        **_row(seed, key),
         "name": f"Synthetic Buyer {i + 1:02d}",
-        # `.invalid` is reserved (RFC 2606): nothing is ever delivered to it.
-        "email": f"buyer-{seed}-{i + 1:02d}@synthetic.invalid",
+        # As CRE Forge's loader writes it. `.invalid` is reserved (RFC 2606): nothing is ever
+        # delivered to it.
+        "email": f"{key}@sandbox.invalid",
         "buyer_type": rng.choice(_BUYER_TYPES),
+        "financing_type": _FINANCING[i % len(_FINANCING)],
         "status": status,
         "do_not_contact": dnc,
         "min_price": low,
@@ -346,9 +378,10 @@ def _deals(rng: random.Random, seed: int, properties: list[dict[str, Any]]) -> l
         asking = rng.randint(40, 1200) * 5_000
         deals.append(
             {
-                "id": _id(seed, "deal", i),
+                **_row(seed, f"deal-{i:02d}"),
                 "property_id": properties[k]["id"],
-                "deal_type": "disposition",
+                "deal_name": f"Synthetic deal {i + 1:02d} - {properties[k]['address']}",
+                "stage": "disposition",
                 "status": rng.choice(("prospect", "negotiating", "under_contract")),
                 "asking_price": asking,
                 "contract_price": (
@@ -359,11 +392,13 @@ def _deals(rng: random.Random, seed: int, properties: list[dict[str, Any]]) -> l
                 **_mark(seed),
             }
         )
+    n = len(deals)
     deals.append(
         {
-            "id": _id(seed, "deal", len(deals)),
+            **_row(seed, f"deal-{n:02d}"),
             "property_id": properties[-1]["id"],
-            "deal_type": "disposition",
+            "deal_name": f"Synthetic deal {n + 1:02d} - {properties[-1]['address']}",
+            "stage": "disposition",
             "status": "prospect",
             "asking_price": 48_000_000,
             "contract_price": None,
@@ -379,6 +414,111 @@ def world_digest(world: World) -> str:
 
 def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+# =================================================================================================
+# The export: the world in CRE Forge's sandbox loader format (ADR-0166 stage 5)
+# =================================================================================================
+
+
+def _money(value: int | None) -> str | None:
+    """Money as the loader reads it: a decimal string, or null."""
+    return None if value is None else str(value)
+
+
+def export_world(world: World) -> dict[str, Any]:
+    """The world as `app/sandbox/loader.py` in medlink-wholesale reads it.
+
+    The loader's own format, field for field (`worlds/hand-made-1.json` is the other example):
+    properties carry their comps nested under them, a deal names its property by key, money is a
+    decimal string and a comp's date is `days_ago`. The loader gives each row the id
+    `uuid5(NAMESPACE, "<world>/<key>")`, which is `row_id`, so the tasks name the ids the sandbox
+    Forge holds. What the loader makes itself is left out: buyer emails and phones, comp zip codes,
+    `source` and deal notes. Extra keys (`seed`, `generator_version`, the digests) the loader
+    ignores.
+    """
+    comps_of: dict[str, list[dict[str, Any]]] = {}
+    for c in world.sales_comps:
+        comps_of.setdefault(c["subject_property_id"], []).append(c)
+    key_of = {p["id"]: p["key"] for p in world.properties}
+    tasks = generate_tasks(world)
+    return {
+        "world": world_name(world.seed),
+        "version": world.generator_version,
+        "about": (
+            f"SimForge's synthetic CRE world for seed {world.seed} (ADR-0166 stage 2, generator "
+            f"{world.generator_version}). Every row is fictional and marked synthetic. Load it "
+            "into a sandbox database that holds no other world: the tasks' expected answers "
+            "count every row the Forge holds."
+        ),
+        "seed": world.seed,
+        "generator_version": world.generator_version,
+        "world_digest": world_digest(world),
+        "tasks_digest": tasks_digest(tasks),
+        "properties": [
+            {
+                "key": p["key"],
+                "address": p["address"],
+                "city": p["city"],
+                "state": p["state"],
+                "zip_code": p["zip_code"],
+                "county": p["county"],
+                "property_type": p["property_type"],
+                "status": p["status"],
+                "square_feet": p["square_feet"],
+                "asking_price": _money(p["asking_price"]),
+                "comps": [
+                    {
+                        "address": c["address"],
+                        "days_ago": c["sale_age_days"],
+                        "sale_price": _money(c["sale_price"]),
+                        "square_feet": c["square_feet"],
+                        "distance_miles": str(c["distance_mi"]),
+                        "similarity_score": str(c["similarity_score"]),
+                    }
+                    # In key order, so a comp's place under its subject is the `comp-<i>` the
+                    # loader keys it by.
+                    for c in sorted(
+                        comps_of.get(p["id"], []), key=lambda c: int(c["key"].rsplit("-", 1)[1])
+                    )
+                ],
+            }
+            for p in world.properties
+        ],
+        "deals": [
+            {
+                "key": d["key"],
+                "property": key_of[d["property_id"]],
+                "deal_name": d["deal_name"],
+                "status": d["status"],
+                "stage": d["stage"],
+                "asking_price": _money(d["asking_price"]),
+                "contract_price": _money(d["contract_price"]),
+            }
+            for d in world.deals
+        ],
+        "buyers": [
+            {
+                "key": b["key"],
+                "name": b["name"],
+                "buyer_type": b["buyer_type"],
+                "status": b["status"],
+                "do_not_contact": b["do_not_contact"],
+                "min_price": _money(b["min_price"]),
+                "max_price": _money(b["max_price"]),
+                "preferred_cities": b["preferred_cities"],
+                "preferred_states": b["preferred_states"],
+                "preferred_property_types": b["preferred_property_types"],
+                "financing_type": b["financing_type"],
+            }
+            for b in world.buyers
+        ],
+    }
+
+
+def export_json(seed: int) -> str:
+    """The export as the file the loader reads: `<world_name(seed)>.json`. Same seed, same bytes."""
+    return json.dumps(export_world(generate_world(seed)), indent=1) + "\n"
 
 
 # =================================================================================================
@@ -398,14 +538,16 @@ def lookup_matches(world: World, query: str) -> list[dict[str, Any]]:
 def comps_found(
     world: World, property_id: str, *, radius_mi: float, max_age_days: int, max_comps: int
 ) -> int:
-    within = [
-        c
-        for c in world.sales_comps
-        if c["subject_property_id"] == property_id
-        and c["distance_mi"] <= radius_mi
-        and c["sale_age_days"] <= max_age_days
-    ]
-    return min(len(within), max_comps)
+    """As the sandbox Forge counts: the `2 * max_comps` nearest inside the radius, then the age."""
+    nearest = sorted(
+        (
+            c
+            for c in world.sales_comps
+            if c["subject_property_id"] == property_id and c["distance_mi"] <= radius_mi
+        ),
+        key=lambda c: (c["distance_mi"], c["id"]),
+    )[: 2 * max_comps]
+    return min(sum(1 for c in nearest if c["sale_age_days"] <= max_age_days), max_comps)
 
 
 def _band(deal: dict[str, Any]) -> tuple[float, float]:
@@ -723,13 +865,15 @@ def _comp_analysis_tasks(b: _Builder, world: World) -> None:
             section="inputs",
         )
 
-    absent_id = _id(world.seed, "absent-property", 0)
+    # A key the world never writes, so the loader never holds its id.
+    absent_id = row_id(world.seed, "absent/property")
     b.add(
         m,
         "malformed_input",
         f"An underwriter asks for sales comps for property {absent_id}.",
         {"property_id": absent_id},
-        {"status": 404, "error": "Property not found", "property_id": absent_id},
+        # The Forge's own 404 body (`app_exception_handler`), checked against the sandbox Forge.
+        {"status": 404, "error": f"Property with id '{absent_id}' not found"},
         turn_b_act=ACT_DECLINE,
         subject="property_id",
         claim="NO SUCH PROPERTY",
@@ -804,13 +948,13 @@ def _buyer_match_tasks(b: _Builder, world: World) -> None:
         section="inputs",
     )
 
-    absent_id = _id(world.seed, "absent-deal", 0)
+    absent_id = row_id(world.seed, "absent/deal")
     b.add(
         m,
         "malformed_input",
         f"A disposition manager asks which buyers fit deal {absent_id}.",
         {"deal_id": absent_id},
-        {"status": 404, "error": "Deal not found", "deal_id": absent_id},
+        {"status": 404, "error": f"Deal with id '{absent_id}' not found"},
         turn_b_act=ACT_DECLINE,
         subject="deal_id",
         claim="NO SUCH DEAL",
@@ -823,6 +967,32 @@ def _buyer_match_tasks(b: _Builder, world: World) -> None:
 
 def tasks_digest(tasks: tuple[Task, ...]) -> str:
     return hashlib.sha256(_canonical([asdict(t) for t in tasks]).encode()).hexdigest()
+
+
+def forge_fields(task: Task, response: dict[str, Any]) -> dict[str, Any]:
+    """The fields `task.forge_answer` names, read off the Forge's response (`status` and body).
+
+    Two are not the Forge's own keys and are read the way an agent reads them:
+    `results_with_<field>_null` counts the rows of `results` whose `<field>` is null, and
+    `search` keeps the echoed keys the prediction names.
+    """
+    out: dict[str, Any] = {}
+    for k, want in task.forge_answer.items():
+        rows = response.get("results")
+        if k.startswith("results_with_") and k.endswith("_null") and isinstance(rows, list):
+            name = k[len("results_with_") : -len("_null")]
+            out[k] = sum(1 for r in rows if isinstance(r, dict) and r.get(name) is None)
+        elif k == "search" and isinstance(want, dict) and isinstance(response.get(k), dict):
+            out[k] = {sk: response[k].get(sk) for sk in want}
+        else:
+            out[k] = response.get(k)
+    return out
+
+
+def forge_differs(task: Task, response: dict[str, Any]) -> list[str]:
+    """The predicted fields the Forge answered otherwise, by name."""
+    got = forge_fields(task, response)
+    return sorted(k for k, v in task.forge_answer.items() if got[k] != v)
 
 
 # =================================================================================================
@@ -912,6 +1082,7 @@ def render_page(seed: int) -> str:
 <title>Sandbox world, seed {seed}</title><style>{_STYLE}</style></head><body>
 <h1>Sandbox CRE world, seed {seed}</h1>
 <p class=meta>Generator {escape(GENERATOR_VERSION)} (ADR-0166 stage 2) &middot;
+loader world <code>{escape(world_name(seed))}</code> &middot;
 world <code>{world_digest(world)}</code> &middot; tasks <code>{tasks_digest(tasks)}</code></p>
 <div class=banner>Synthetic by construction: every row is marked <code>synthetic: true</code>
 with this seed ({"all " + str(sum(counts.values())) + " rows" if synthetic else "NOT ALL ROWS"}).

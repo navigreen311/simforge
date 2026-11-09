@@ -43,6 +43,7 @@ from src.models.production_outcome import ProductionOutcome
 from src.models.registry import LineageEdge, ObjectRegistryEntry
 from src.models.run import Run, TraceEvent
 from src.models.safe_mode import SafeModeState
+from src.models.sandbox_run import SandboxRun, SandboxStep
 from src.models.scenario_truth_review import ScenarioTruthReview
 from src.models.scorecard import Scorecard
 from src.models.spec_document import SpecDocument
@@ -94,6 +95,8 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalDecision",
     "SafeModeState",
+    "SandboxRun",
+    "SandboxStep",
     "ScenarioTruthReview",
     "EvidenceRecord",
     "EvidenceAccess",

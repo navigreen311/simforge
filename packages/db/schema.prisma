@@ -1463,3 +1463,50 @@ model OperationCertificationEvent {
 
   @@index([operationCertificationId])
 }
+
+// ADR-0166 stage 5: a sandbox run, practice of its own kind. Never evidence:
+// no gate, certification, tier or partition reads it. The CHECK constraints on
+// status, step and verdict are in the migration.
+model SandboxRun {
+  id               String        @id @default(cuid())
+  runRef           String        @unique
+  venture          String
+  forgeId          String
+  seed             Int
+  generatorVersion String
+  worldName        String
+  worldDigest      String
+  tasksDigest      String
+  taskIds          Json
+  startedBy        String
+  scheduleOwner    String?
+  status           String        @default("open") // "open" | "closed"
+  startedAt        DateTime      @default(now())
+  endedAt          DateTime?
+  totals           Json?
+  steps            SandboxStep[]
+}
+
+// One step of one task in a sandbox run, in order. A graded turn carries the
+// verdict grade_submitted gave against the generator's expected answer.
+model SandboxStep {
+  id           String     @id @default(cuid())
+  sandboxRunId String
+  sandboxRun   SandboxRun @relation(fields: [sandboxRunId], references: [id], onDelete: Restrict)
+  seq          Int
+  taskId       String
+  moduleId     String
+  step         String // filed | claimed | turn_a | proposed | approved | forge_answer | turn_b
+  at           DateTime
+  actor        String
+  agentId      String?
+  sandboxIds   Json
+  payload      Json
+  verdict      String? // PASS | FAIL | NOT_GRADED
+  reasons      Json?
+  forgeMatches Boolean?
+  recordedAt   DateTime   @default(now())
+
+  @@unique([sandboxRunId, seq], map: "SandboxStep_run_seq_key")
+  @@index([sandboxRunId])
+}
