@@ -34,6 +34,13 @@ from src.services.sandbox import record
 
 SRC = Path(__file__).resolve().parents[3] / "src"
 ENTRY = "src.services.sandbox.record"
+#: The sandbox package: the record, the results page and the demo's fake run (stage 6).
+SANDBOX_MODULES = (
+    ENTRY,
+    "src.services.sandbox",
+    "src.services.sandbox.page",
+    "src.services.sandbox.demo",
+)
 SANDBOX_TABLES = {"SandboxRun", "SandboxStep"}
 #: Everything the sandbox record may reach, and why.
 ALLOWED = {
@@ -99,6 +106,13 @@ def test_the_sandbox_record_reaches_nothing_but_the_grader_and_its_own_tables() 
         "src.services.operation.battery",
     ):
         assert forbidden not in reached
+
+
+def test_the_page_and_the_demo_reach_nothing_more_than_the_record() -> None:
+    """Stage 6: the results page and the demo's fake run add only each other and the record."""
+    for entry in SANDBOX_MODULES[2:]:
+        reached = _reachable(entry)
+        assert reached <= ALLOWED | set(SANDBOX_MODULES), sorted(reached - ALLOWED)
 
 
 def test_the_record_uses_only_grade_submitted_from_the_grader() -> None:
@@ -272,8 +286,8 @@ async def test_the_counts_would_see_a_write_to_an_exam_table(db_session: AsyncSe
 
 
 def test_nothing_reads_a_sandbox_table_but_the_record() -> None:
-    """No module outside the sandbox record and its model names the sandbox tables."""
-    own = {_path(ENTRY), _path("src.models.sandbox_run"), _path("src.models")}
+    """No module outside the sandbox package and its model names the sandbox tables."""
+    own = {_path(m) for m in (*SANDBOX_MODULES, "src.models.sandbox_run", "src.models")}
     for path in SRC.rglob("*.py"):
         if path in own:
             continue
@@ -287,3 +301,31 @@ async def test_the_sqlite_tables_carry_the_migrations_checks(db_session: AsyncSe
     rows = (await db_session.execute(text(sql))).all()
     ddl = " ".join(r[0] or "" for r in rows)
     assert "sandbox_step_step" in ddl and "sandbox_run_status" in ddl
+
+
+async def test_rendering_a_runs_page_only_selects_from_the_sandbox_tables(
+    db_session: AsyncSession,
+) -> None:
+    """Stage 6: loading and rendering the page reads the two sandbox tables, writes nothing."""
+    from src.services.sandbox.page import load_run, render_run_page
+
+    await _seed_exam_side(db_session)
+    run = await _a_run(db_session)
+    before, contents = await _counts(db_session), await _contents(db_session)
+    statements: list[str] = []
+    engine = db_session.bind.sync_engine  # type: ignore[union-attr]
+
+    def _keep(_conn: Any, _cursor: Any, statement: str, *_a: Any) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _keep)
+    try:
+        with _tables_named(db_session) as named:
+            loaded, steps = await load_run(db_session, run.runRef)
+            render_run_page(loaded, steps)
+    finally:
+        event.remove(engine, "before_cursor_execute", _keep)
+    assert named == SANDBOX_TABLES
+    assert statements and all(s.lstrip().upper().startswith("SELECT") for s in statements)
+    assert await _counts(db_session) == before
+    assert await _contents(db_session) == contents
