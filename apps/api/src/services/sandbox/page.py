@@ -6,6 +6,8 @@ One HTML page per `SandboxRun`, built from its `SandboxStep`s and nothing else:
   Turn B verdicts and the Forge mismatches. The turn counts are the run's own totals, written
   when it closed (or counted the same way while it is open).
 - **Every task**, one line each: its result and a one-line why for each miss.
+- **Refused at filing by The Office**: the seed's tasks the Office would not file (ruled 10
+  November). Never filed, so no agent saw them; counted against no agent.
 - **Then every task step by step**: the facts filed, the claim, Turn A expected and given, the
   call proposed, its approval (actor and time), the Forge's answer (predicted and read), Turn B
   expected and given, and for each graded step its verdict and why.
@@ -35,6 +37,7 @@ from src.services.forges.deal_desk_world import READ_MODULES, Task, TurnKey
 from src.services.sandbox.record import (
     ACT_PROCEED,
     REASON_FORGE_DIFFERS,
+    REFUSED_AT_FILING,
     VERDICT_NOT_GRADED,
     SandboxRefused,
     task_ended,
@@ -335,6 +338,34 @@ def _counts_table(
     return f"<table>{head}{''.join(rows)}</table>"
 
 
+def _refused_section(refused: Sequence[Mapping[str, Any]], tasks: Mapping[str, Task] | None) -> str:
+    """The tasks The Office refused at filing: shown, and counted against no agent."""
+    if not refused:
+        return ""
+    rows = []
+    for r in refused:
+        task = (tasks or {}).get(str(r.get("task")))
+        rows.append(
+            "<tr class=n>"
+            f"<td><b>{escape(str(r.get('task')))}</b><br><span class=s>"
+            f"{escape(str(r.get('module')))} ({escape(str(r.get('class')))})</span></td>"
+            f"<td>{_code(task.facts) if task else ''}{'<br>' if task else ''}"
+            f"{_code(task.request) if task else ''}</td>"
+            f"<td>{escape(str(r.get('status')))}</td><td>{escape(str(r.get('why')))}</td>"
+            "<td class=r>refused at filing by The Office</td></tr>"
+        )
+    return (
+        f"<h2>Refused at filing by The Office ({len(refused)})</h2>"
+        "<p class=s>The run tried to file these tasks and The Office refused them, before any "
+        "agent saw them. They are not among the run's tasks and are counted against no agent: "
+        "no Turn A, no Turn B, not in the totals (ruled 10 November).</p>"
+        "<table><tr><th>task</th><th>facts and request, as the run tried to file them</th>"
+        "<th>status</th><th>The Office's reason</th><th>result</th></tr>"
+        + "".join(rows)
+        + "</table>"
+    )
+
+
 def render_run_page(
     run: SandboxRun, steps: Sequence[SandboxStep], *, fake_note: str | None = None
 ) -> str:
@@ -359,7 +390,8 @@ def render_run_page(
         t: (tasks[t].module_id if tasks else next((s.moduleId for s in by_task[t]), "?"))
         for t in run.taskIds
     }
-    if run.totals is not None:
+    refused = list((run.totals or {}).get(REFUSED_AT_FILING) or [])
+    if run.status == "closed" and run.totals and "all" in run.totals:
         tally, tally_note = run.totals, "the totals written when the run closed"
     elif tasks is not None:
         tally, tally_note = totals(run, steps), "the run is still open: the totals so far"
@@ -429,7 +461,9 @@ def render_run_page(
 {escape(run.generatorVersion)} &middot; world <code>{escape(run.worldDigest)}</code> &middot;
 tasks <code>{escape(run.tasksDigest)}</code><br>
 Started by {escape(run.startedBy)}{owner} &middot; {when} &middot; {escape(run.status)}
-&middot; {len(run.taskIds)} tasks, {len(steps)} steps recorded</p>
+&middot; {len(run.taskIds)} tasks, {len(steps)} steps recorded{
+        f", {len(refused)} refused at filing by The Office" if refused else ""
+    }</p>
 <div class=banner><b>Practice only, never evidence</b> (ADR-0166 ruling 5). A sandbox run is its
 own record: no exam, certification, tier or partition reads it. Each turn is graded by SimForge's
 <code>grade_submitted</code> against the generator's expected answer for this seed. Turn B is
@@ -443,6 +477,7 @@ agent's.</div>
 <h2>Every task</h2>
 <table><tr><th>task</th><th>agent</th><th>Turn A</th><th>Turn B</th><th>result</th>
 <th>why (each miss)</th></tr>{"".join(index_rows)}</table>
+{_refused_section(refused, tasks)}
 {detail}
 </body></html>
 """

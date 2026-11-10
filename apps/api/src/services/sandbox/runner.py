@@ -918,6 +918,7 @@ async def drive(
         started_by=starter,
         task_ids=[t.task_id for t in filed],
         schedule_owner=schedule_owner,
+        refused_at_filing=out.refused_at_filing,
     )
     out.run_ref = run.runRef
     log(f"7. SandboxRun {run.runRef}: ticking the operator, approving, recording")

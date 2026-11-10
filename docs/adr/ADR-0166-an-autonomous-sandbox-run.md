@@ -505,8 +505,14 @@ other example). Nothing in the loader changed. The agreement:
   the record refuses (for example an approval by anyone but `sandbox-approver`) stops that
   task's recording and is named in `summary.json`.
 - **A filing the Office refuses** (B117: a radius or window above the default with no
-  `widening_reason`) is skipped, the next task is tried, and the refusal is named in
-  `summary.json`. The `SandboxRun` holds the tasks filed only.
+  `widening_reason`) is skipped and the next task is tried. Ruled by Ivan Green, 10 November:
+  the generator keeps making such tasks. The run keeps each refusal
+  (`totals["refused_at_filing"]`: the task, the Office's status and reason), and the page shows
+  it as "refused at filing by The Office", apart from the run's tasks and counted against no
+  agent. The `SandboxRun`'s tasks are the tasks filed only.
+- **Also ruled 10 November:** Turn A stays on every task (real filings carry a person's words);
+  dropping the previous sandbox Office database each run and unloading phi4 after a run are
+  approved.
 - **Writes only its own two tables.** `test_sandbox_runner` counts every INSERT, UPDATE and
   DELETE during a run: `SandboxRun` and `SandboxStep`, nothing else. The runner reads
   `OperationRun` only to refuse or pause while an exam is open.
