@@ -127,7 +127,7 @@ def read_answer(payload: Mapping[str, Any]) -> TurnAnswer | ProtocolViolation:
     return TurnAnswer(act=act, record=pair, caveats=caveats)
 
 
-def _tasks_of(run: SandboxRun) -> dict[str, Task]:
+def tasks_of(run: SandboxRun) -> dict[str, Task]:
     tasks = generate_tasks(generate_world(run.seed))
     if run.generatorVersion != GENERATOR_VERSION or tasks_digest(tasks) != run.tasksDigest:
         raise SandboxRefused(
@@ -191,7 +191,7 @@ async def _steps(db: AsyncSession, run: SandboxRun) -> list[SandboxStep]:
     return list((await db.execute(stmt)).scalars())
 
 
-def _ended(steps: Sequence[SandboxStep]) -> bool:
+def task_ended(steps: Sequence[SandboxStep]) -> bool:
     """A task ends at Turn B, or at a Turn A that called nothing."""
     if not steps:
         return False
@@ -220,10 +220,10 @@ async def record_step(
         raise SandboxRefused("task_not_in_run", task_id)
     if step not in STEPS:
         raise SandboxRefused("unknown_step", step)
-    task = _tasks_of(run)[task_id]
+    task = tasks_of(run)[task_id]
     steps = await _steps(db, run)
     mine = [s for s in steps if s.taskId == task_id]
-    if _ended(mine):
+    if task_ended(mine):
         raise SandboxRefused("task_ended", task_id)
     expected = STEPS[len(mine)]
     if step != expected:
@@ -299,7 +299,7 @@ def totals(run: SandboxRun, steps: Sequence[SandboxStep]) -> dict[str, Any]:
     by_task: dict[str, list[SandboxStep]] = {t: [] for t in run.taskIds}
     for s in steps:
         by_task[s.taskId].append(s)
-    tasks = _tasks_of(run)
+    tasks = tasks_of(run)
     out: dict[str, Any] = {"all": _tally(), "module": {}, "agent": {}}
     for task_id, mine in by_task.items():
         agent = next((s.agentId for s in mine if s.agentId), None) or "unclaimed"
@@ -310,7 +310,7 @@ def totals(run: SandboxRun, steps: Sequence[SandboxStep]) -> dict[str, Any]:
         )
         for b in buckets:
             b["tasks"] += 1
-            b["ended"] += int(_ended(mine))
+            b["ended"] += int(task_ended(mine))
             for s in mine:
                 if s.step in ("turn_a", "turn_b") and s.verdict:
                     b[s.step][s.verdict] += 1

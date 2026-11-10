@@ -1,7 +1,7 @@
 # ADR-0166 — An autonomous sandbox run
 
-**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stages 2 and 5
-built in SimForge (stage 1 in CRE Forge); the rest not built.**
+**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stages 2, 5
+and 6 built in SimForge (stage 1 in CRE Forge); the rest not built.**
 Builds on [ADR-0157](ADR-0157-practice-runs-never-certify.md) and
 [ADR-0158](ADR-0158-no-certificate-from-practice-runs.md) (practice never certifies), and the
 `ForgeAdapter` sandbox-tenant contract (`provision_sandbox_tenant`, `FORGE_SANDBOX_URLS`).
@@ -387,9 +387,59 @@ other example). Nothing in the loader changed. The agreement:
 - **Not done here.**
   - No run against live agents: there is no sandbox Office or agent shift yet (stages 3 and 4).
   - No route: the stage 7 driver calls the record directly.
-  - No page per run (stage 6).
+  - No page per run (stage 6; built 10 November, below).
   - The migration is not applied to the dev database. Applying it (`prisma migrate deploy`,
     or its SQL) is a deploy step, and it was not taken here.
+
+## Stage 6, as built (10 November)
+
+- **One HTML page per sandbox run**, from `SandboxRun` and its `SandboxStep`s and nothing else
+  (`src/services/sandbox/page.py`). Laid out like the 8 November practice page, but step by step:
+  - **Totals** per module and per agent: tasks, tasks finished, tasks passing, Turn A pass/fail,
+    Turn B pass/fail/not graded, Forge mismatches. The turn counts are the totals the run wrote
+    when it closed, or counted the same way, and labelled as such, while it is open. Tasks
+    passing and finished are counted from the steps.
+  - **Every task** on one line: Turn A, Turn B, its result, and a one-line why for each miss.
+  - **Then each task step by step:** the facts filed, the claim, Turn A expected and given, the
+    call proposed (expected and as proposed), the approval (actor and time), the Forge's answer
+    (predicted and read), Turn B expected and given. Each step has its time, actor and the
+    sandbox's ids. Each graded step has its verdict and why.
+- **A task's result:** FAIL if a turn failed; else UNFINISHED if it never ended (the page shows
+  the step it was waiting at); else NOT GRADED if Turn B went ungraded because the Forge
+  differed; else PASS. A Turn A other than PROCEED that the key allows is a PASS with no call.
+- **The why** is built from the grader's reason codes and the values compared, for example
+  "Turn B: recorded 9 for total; the key expects 8", or "the Forge's status was 503, predicted
+  200". A protocol violation names the rule. A code the page does not know is shown as the code:
+  the page never invents a cause.
+- **Expected answers** are the generator's, regenerated from the seed. If the generator in force
+  would give other tasks, the page says so and shows the recorded verdicts without expected
+  answers.
+- **Reads only.** `load_run` selects one run and its steps. Rendering reads no database, and the
+  page carries no time of its own, so the same rows give the same bytes. The inertness test now
+  also walks the page's and the demo's imports, and checks that loading and rendering a page
+  issues only SELECTs, naming only the two sandbox tables, with every count and row unchanged.
+- **The script.** From `apps/api`:
+  - `python -m scripts.sandbox_run_page --run <runRef> --out DIR` reads a run from the database
+    and writes `sandbox-run-<runRef>.html`. There are no real runs yet, and the migration is not
+    applied to the dev database.
+  - `python -m scripts.sandbox_run_page --demo --out DIR` writes `sandbox-run-demo.html`.
+- **The demo: a recorded fake run** (`src/services/sandbox/demo.py`). Thirteen seed 0 tasks,
+  recorded through the real `open_run`, `record_step` and `close_run` and graded by the real
+  grader. The database is in-memory SQLite and holds only the two sandbox tables. No agent
+  answered and no Forge was called: the answers are scripted, the Forge's answer is the
+  prediction except where a mismatch is staged, and the agents are `fake-agent-1` to `-3`. The
+  page says so in red at the top. It stages, across the three modules:
+  - four plain passes (two property_lookup, one comp_analysis, one buyer_match);
+  - a wrong count, a missing caveat, a record under the wrong subject;
+  - a Turn A DECLINE the key does not allow, and one it does;
+  - a Turn B claim not on the list;
+  - an answer that broke the protocol;
+  - a Forge answer other than predicted, so Turn B is not graded;
+  - a task left waiting for its approval.
+
+  Result: 5 of 13 pass, 6 fail, 1 not graded, 1 unfinished.
+- **Not done here.** No route or web page in the dashboard: the page is a file, like stage 2's.
+  No run with real agents (stages 3 and 4).
 
 ## Not decided here
 
