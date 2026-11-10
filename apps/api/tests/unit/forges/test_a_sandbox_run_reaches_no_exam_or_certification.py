@@ -41,6 +41,14 @@ SANDBOX_MODULES = (
     "src.services.sandbox.page",
     "src.services.sandbox.demo",
 )
+#: Stage 7's runner and what it reads the Office and the clock with. Inside the sandbox package,
+#: but not in the walk above: the runner reads OperationRun, to pause while an exam is open.
+#: `test_sandbox_runner` counts what it writes: the two sandbox tables only.
+RUNNER_MODULES = (
+    "src.services.sandbox.runner",
+    "src.services.sandbox.rules",
+    "src.services.sandbox.office_sync",
+)
 SANDBOX_TABLES = {"SandboxRun", "SandboxStep"}
 #: Everything the sandbox record may reach, and why.
 ALLOWED = {
@@ -287,7 +295,10 @@ async def test_the_counts_would_see_a_write_to_an_exam_table(db_session: AsyncSe
 
 def test_nothing_reads_a_sandbox_table_but_the_record() -> None:
     """No module outside the sandbox package and its model names the sandbox tables."""
-    own = {_path(m) for m in (*SANDBOX_MODULES, "src.models.sandbox_run", "src.models")}
+    own = {
+        _path(m)
+        for m in (*SANDBOX_MODULES, *RUNNER_MODULES, "src.models.sandbox_run", "src.models")
+    }
     for path in SRC.rglob("*.py"):
         if path in own:
             continue
