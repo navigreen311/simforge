@@ -1,0 +1,20 @@
+# A THROWAWAY sandbox CRE Forge for testing the SimForge sandbox runner (ADR-0166 stage 7).
+#
+# Ivan Green, 10 November 2026: "test on throwaway stacks; never load worlds into or depend on
+# the shared sandbox Forge; only the stage 7 runner does." `sandbox_run --throwaway` overlays
+# this on medlink-wholesale's docker-compose.sandbox.yml: its own project, containers, image
+# tag, volume (project-scoped), token and port (8013, the throwaway port The Office's guard
+# allows). The runner takes it down with its volume at the end.
+
+name: sf-runner-forge
+
+services:
+  sandbox-db:
+    container_name: sf-runner-forge-db
+  sandbox-redis:
+    container_name: sf-runner-forge-redis
+  backend:
+    image: sf-runner-forge-backend
+    container_name: sf-runner-forge-backend
+  gateway:
+    container_name: sf-runner-forge-gateway

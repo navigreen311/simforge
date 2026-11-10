@@ -1,7 +1,8 @@
 # ADR-0166 — An autonomous sandbox run
 
-**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stages 2, 5
-and 6 built in SimForge (stage 1 in CRE Forge); the rest not built.**
+**Status:** accepted · **Decided by:** Ivan Green, 2026-11-08 and 2026-11-09 · **Stages 2, 5,
+6 and 7 built in SimForge (stage 1 in CRE Forge; 3 and 4 open as The Office #521 and
+village-os #25).**
 Builds on [ADR-0157](ADR-0157-practice-runs-never-certify.md) and
 [ADR-0158](ADR-0158-no-certificate-from-practice-runs.md) (practice never certifies), and the
 `ForgeAdapter` sandbox-tenant contract (`provision_sandbox_tenant`, `FORGE_SANDBOX_URLS`).
@@ -440,6 +441,109 @@ other example). Nothing in the loader changed. The agreement:
   Result: 5 of 13 pass, 6 fail, 1 not graded, 1 unfinished.
 - **Not done here.** No route or web page in the dashboard: the page is a file, like stage 2's.
   No run with real agents (stages 3 and 4).
+
+## Stage 7, as built (10 November)
+
+`python -m scripts.sandbox_run` (`src/services/sandbox/runner.py`, `rules.py`,
+`office_sync.py`); how to use it is in [docs/sandbox-runner.md](../sandbox-runner.md).
+
+- **One run, start to stop.**
+  1. The start rules.
+  2. A seed: the next after the last one run, unless named. Its tasks are taken one module at
+     a time in turn.
+  3. The seed's world loaded into the shared sandbox CRE Forge (8012) by its own loader with
+     `--replace`.
+  4. A fresh sandbox Office: `office_sandbox` dropped and made again, migrated, set up for
+     Greenstone, served on 9212.
+  5. The sandbox operator set up from the Office's fresh tokens.
+  6. The starter, with their own sandbox token, starts the Office's run and files up to N
+     tasks.
+  7. The `SandboxRun` opens on the tasks filed. The operator then ticks one step at a time,
+     each proposal is approved by `sandbox-approver` at the starter's request, and every step
+     the Office wrote is recorded as a `SandboxStep`, with the Office's times.
+  8. The Office's run is finished, the `SandboxRun` closed and the page written.
+  9. Everything the run started is stopped.
+- **The rules**, each a refusal with every reason reported (`rules.check_start`):
+  - Ivan or Ira only;
+  - 1 to 60 tasks;
+  - never inside :17-:24 or :47-:54 (a hand start is refused; a scheduled one waits);
+  - no SimForge exam open;
+  - 8 GB free, after the phi4 rule (phi4 unloaded first if loaded, no exam open and outside
+    the sweeps);
+  - one run at a time (a lock);
+  - 9212 free;
+  - the checkouts, the Forge's env, a loader with `--replace`, and SimForge's sandbox tables
+    all present.
+
+  A scheduled run also refuses on a weekend, after a scheduled run already started that day,
+  or with its schedule stopped.
+- **Pause, budgets, stop.**
+  - A run pauses inside a sweep or while a SimForge exam is open (no tick, no approval) and
+    resumes after.
+  - It stops at its tick budget, at its wall-clock budget, after 8 ticks in a row that record
+    nothing, or on `stop`.
+  - Whichever ends it, the run is closed and its page written, with unfinished tasks shown as
+    such.
+- **The schedule** is `schedule.json` in the runner's own directory: an owner, a time, a task
+  count. It is not a table: every run it starts records its owner on
+  `SandboxRun.scheduleOwner`, which is what the page shows. Only the owner stops or replaces it.
+  `--register` makes the Windows scheduled task (business days at that time).
+- **What a task is filed with.** The task's request, plus the generator's facts as
+  `instruction`. A read whose facts carry a person's words keeps Turn A (The Office's B113),
+  and the record grades Turn A. Without it the Office skips Turn A on a read (entry 256), and
+  no step after `claimed` could be recorded.
+- **What is read from The Office**, SELECT only, from its own database
+  (`office_sync.OFFICE_TASK_SQL`):
+  - acts and records as the Office parsed them;
+  - caveats counted by the Office (`caveat_lines` on its log);
+  - an answer that broke the grammar twice, as the rule its `agent_answer_malformed` entry
+    names;
+  - the Forge's status and body;
+  - the approver by `office_human.origin`.
+
+  A step not yet written stops the list for that task; nothing after a gap is guessed. A step
+  the record refuses (for example an approval by anyone but `sandbox-approver`) stops that
+  task's recording and is named in `summary.json`.
+- **A filing the Office refuses** (B117: a radius or window above the default with no
+  `widening_reason`) is skipped, the next task is tried, and the refusal is named in
+  `summary.json`. The `SandboxRun` holds the tasks filed only.
+- **Writes only its own two tables.** `test_sandbox_runner` counts every INSERT, UPDATE and
+  DELETE during a run: `SandboxRun` and `SandboxStep`, nothing else. The runner reads
+  `OperationRun` only to refuse or pause while an exam is open.
+- **Tested.**
+  - In CI, the loop runs against a fake Office: every step recorded and graded, a filing
+    refused, a Forge that differed, a sweep pause and resume, an exam pause, each budget, a
+    stop, an operator that records nothing, and writes counted.
+  - On throwaway stacks (10 November), the real runner ran: a throwaway CRE Forge (8013), a
+    throwaway Office Postgres (55443) with a stand-in for the simulation declaration, the real
+    sandbox Office broker (#521 at 7f137c2) on 9212, the real sandbox operator (#25 at aead1e5)
+    on phi4, and a throwaway SimForge database. All of these runs are practice and none is
+    evidence.
+    Seven runs, seeds 0 to 6:
+    - **Seed 0** found that The Office refused every answer (`ModelMismatch`): the digest was
+      not in the live form `sha256:<hex>`. #521 fixed its side at 7f137c2, and the runner now
+      passes the digest in that form. That run ended on its tick budget, and is why a run now
+      stops after 8 ticks that record nothing.
+    - **Seeds 1, 3, 5:** 4, 4 and 3 tasks, every one finished. Seed 3 started at 13:16:58,
+      paused at 13:17:19 inside the sweep, resumed at 13:25:19 and finished.
+    - **Seed 2:** Ira Green, all 20 tasks. The Office refused 2 at filing (s2-012 and s2-014,
+      B117), so 18 were filed and all 18 finished. Turn A: 9 PASS, 9 FAIL; 7 of the failures
+      are comp_analysis REFUSE or ESCALATE before the call. Turn B: 6 PASS, 3 FAIL. 6 of 18
+      tasks pass.
+    - **Seed 4:** a scheduled run on Ira's schedule, recorded with `scheduleOwner` and shown
+      on its page. A second `scheduled` the same day was refused
+      (`scheduled_run_already_today`); Ivan could not stop Ira's schedule; Ira could.
+    - **Seed 6:** stopped by `stop` after its third tick. It closed with 5 of 18 tasks
+      finished, and the page shows the rest as unfinished.
+    - **The Forge:** 22 calls in all, and every answer matched the generator's prediction, with
+      `instruction` in the facts.
+    - **Time zone:** the record's times round-trip only on a server whose `TimeZone` is the
+      machine's own, as SimForge's database is (America/Los_Angeles). On a UTC server the
+      stored times moved 8 hours. The throwaway database was set to SimForge's zone, and a page
+      written again from it was byte-identical to the run's own.
+- **Migration 20261109000000 is not applied** to SimForge's database, and the runner refuses
+  until it is. Founder block 135 applies it (drafted, not run). It was tested on a throwaway
+  database holding SimForge's schema as it stood before #269.
 
 ## Not decided here
 
