@@ -70,6 +70,8 @@ ACT_PROCEED = "PROCEED"
 
 VERDICT_NOT_GRADED = "NOT_GRADED"
 REASON_FORGE_DIFFERS = "forge_answer_differs_from_prediction"
+#: The key under `SandboxRun.totals` that keeps the filings The Office refused (10 November).
+REFUSED_AT_FILING = "refused_at_filing"
 
 
 class SandboxRefused(ValueError):
@@ -145,8 +147,16 @@ async def open_run(
     started_by: str,
     task_ids: Sequence[str] | None = None,
     schedule_owner: str | None = None,
+    refused_at_filing: Sequence[Mapping[str, Any]] = (),
 ) -> SandboxRun:
-    """Open a sandbox run on `seed`'s world: every task, or the ones named, in order."""
+    """Open a sandbox run on `seed`'s world: every task, or the ones named, in order.
+
+    `refused_at_filing` names the seed's tasks The Office refused when the run tried to file
+    them (`task`, and the Office's `status` and `why`). Ruled by Ivan Green, 10 November: they
+    are kept on the run and shown on its page as refused at filing by The Office, and counted
+    against no agent: they are not among the run's tasks, so no step and no total names them.
+    They are kept under `totals["refused_at_filing"]`, which close keeps.
+    """
     if started_by not in STARTERS:
         raise SandboxRefused("not_a_starter", started_by)
     if schedule_owner is not None and schedule_owner not in STARTERS:
@@ -166,6 +176,7 @@ async def open_run(
     unknown = [t for t in chosen if t not in known]
     if unknown:
         raise SandboxRefused("unknown_task", ", ".join(unknown))
+    refused = _refusals(tasks, chosen, refused_at_filing)
     run = SandboxRun(
         runRef=f"sandbox-{ULID()}",
         venture=venture,
@@ -180,10 +191,38 @@ async def open_run(
         scheduleOwner=schedule_owner,
         status="open",
         startedAt=utcnow(),
+        totals={REFUSED_AT_FILING: refused} if refused else None,
     )
     db.add(run)
     await db.commit()
     return run
+
+
+def _refusals(
+    tasks: Sequence[Task], chosen: Sequence[str], given: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """The filing refusals as kept on the run: each a task of the seed, not among the run's."""
+    by_id = {t.task_id: t for t in tasks}
+    out: list[dict[str, Any]] = []
+    for r in given:
+        task_id = str(r.get("task"))
+        if task_id not in by_id:
+            raise SandboxRefused("unknown_task", task_id)
+        if task_id in chosen:
+            raise SandboxRefused("refused_task_is_in_the_run", task_id)
+        if any(o["task"] == task_id for o in out):
+            raise SandboxRefused("task_named_twice", task_id)
+        task = by_id[task_id]
+        out.append(
+            {
+                "task": task_id,
+                "module": task.module_id,
+                "class": task.scenario_class,
+                "status": str(r.get("status") or ""),
+                "why": str(r.get("why") or ""),
+            }
+        )
+    return out
 
 
 async def _steps(db: AsyncSession, run: SandboxRun) -> list[SandboxStep]:
@@ -323,7 +362,10 @@ async def close_run(db: AsyncSession, run: SandboxRun) -> SandboxRun:
     """Close the run and write its totals once. A task not ended is counted, not hidden."""
     if run.status != "open":
         raise SandboxRefused("run_closed", run.runRef)
+    refused = (run.totals or {}).get(REFUSED_AT_FILING)
     run.totals = totals(run, await _steps(db, run))
+    if refused:
+        run.totals[REFUSED_AT_FILING] = refused
     run.status = "closed"
     run.endedAt = utcnow()
     await db.commit()

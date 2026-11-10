@@ -99,8 +99,9 @@ check) and the sandbox operator's. A refusal there stops the run and is shown in
 6. **Filing.** As the starter, with their own sandbox token, the runner starts the Office's run
    and files up to N tasks. A task's facts are its request, plus the person's words as
    `instruction`, so Turn A runs (The Office's B113). A filing the Office refuses (for example a
-   radius with no `widening_reason`, B117) is skipped, the next task tried, and the refusal
-   named in `summary.json`.
+   radius with no `widening_reason`, B117) is skipped and the next task tried. The refusal is
+   kept on the run and shown on its page as "refused at filing by The Office", counted against
+   no agent (ruled 10 November).
 7. **The run.** The `SandboxRun` opens on the tasks filed. Then, until every task is finished:
    - the operator takes one tick (`sandbox_operator.py run --once`): each agent one step;
    - each pending proposal is approved by `sandbox-approver`, at the starter's request;
