@@ -4,6 +4,16 @@ All notable changes to SimForge. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Fixed — The sandbox runner names the operator's broker (ADR-0166 stage 5)
+
+- Stage 5 runs `sandbox_operator.py setup ... --broker-url`, which village-os #25 (a3d0879)
+  requires: `http://127.0.0.1:9212` for the runner's stack, `:9213` for a throwaway. Both come
+  from `Targets.office_port`, which the broker is also served on and the port check reads.
+  The first real run (10 November, 15:26) stopped here.
+- A throwaway's broker moves from 9212 to 9213, so a throwaway never takes the runner's port.
+- `tests/unit/forges/test_sandbox_operator_command.py` checks every operator command the runner
+  builds against the operator's usage (pinned, and a real checkout when configured).
+
 ### Added — Deployable production seams (v1.1, ADR-0030)
 - **Production API image** (`apps/api/Dockerfile`) — multi-stage, **non-root**, `HEALTHCHECK` on `/api/health/`, installs the validator package + API, runs uvicorn.
 - **Self-contained stack** (`infra/compose/docker-compose.full.yml`) — API + Postgres 17 + Redis + Prometheus + Grafana in one file; Grafana mounts the ADR-0029 dashboards, Prometheus scrapes the API `/metrics`, the API waits on healthy datastores.

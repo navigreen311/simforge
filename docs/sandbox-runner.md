@@ -94,7 +94,7 @@ check) and the sandbox operator's. A refusal there stops the run and is shown in
 4. **A fresh sandbox Office.** Its Postgres (`office-sandbox-db`, 55442) is started if down, the
    `office_sandbox` database is dropped and made again, migrated, and set up for Greenstone
    (`python -m broker.sandbox setup`). The simulation check reads the live Office's own
-   declaration once, on its read-only DSN. The broker is served on 127.0.0.1:9212.
+   declaration once, on its read-only DSN. The broker is served on 127.0.0.1:9212 (9213 for a throwaway).
 5. **The sandbox operator** is set up from the Office's fresh tokens (`sandbox_operator.py setup`).
 6. **Filing.** As the starter, with their own sandbox token, the runner starts the Office's run
    and files up to N tasks. A task's facts are its request, plus the person's words as
@@ -153,8 +153,16 @@ python -m scripts.sandbox_run start --as "Ivan Green" --tasks 4 --throwaway --si
 
 Both stacks are removed with their volumes at the end. `--simforge-db-file` names a file
 holding a throwaway SimForge database's URL (no password on a command line). It is required,
-and the runner refuses if SimForge's settings point anywhere else. The broker still uses
-127.0.0.1:9212, because the operator talks to that port and no other.
+and the runner refuses if SimForge's settings point anywhere else. The broker is served on
+127.0.0.1:9213, the operator's throwaway port, so a throwaway never takes the runner's 9212.
+
+The operator is told which broker it talks to: stage 5 runs `sandbox_operator.py setup ...
+--broker-url http://127.0.0.1:9212` (9213 for a throwaway), from the same `Targets.office_port`
+the broker is served on. That needs a village-os checkout at #25 (a3d0879) or later; an older
+one (aead1e5) has no `--broker-url` and refuses with `unrecognized arguments`.
+`tests/unit/forges/test_sandbox_operator_command.py` checks every operator command the runner
+builds against the operator's usage; set `SANDBOX_OPERATOR_CHECKOUT` and
+`SANDBOX_OPERATOR_PYTHON` to check a real checkout too.
 
 Set the throwaway SimForge database's time zone to SimForge's own
 (`ALTER DATABASE ... SET timezone TO 'America/Los_Angeles'`). SimForge writes naive UTC

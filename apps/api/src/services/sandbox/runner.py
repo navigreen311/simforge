@@ -6,8 +6,8 @@ For one run it:
 2. picks a seed (the next after the last one run, unless named) and that seed's tasks;
 3. loads the seed's world into the sandbox CRE Forge with `--replace` (the Forge's own loader);
 4. starts a fresh sandbox Office (a new `office_sandbox` database), sets up Greenstone and serves
-   it on 127.0.0.1:9212;
-5. sets up the sandbox Village operator;
+   it on 127.0.0.1:9212 (9213 for a throwaway);
+5. sets up the sandbox Village operator, pointed at that Office's broker;
 6. as the starter, with their own sandbox token, starts the Office's run and files up to N
    tasks; a filing the Office refuses is skipped and named;
 7. opens the `SandboxRun` on the tasks filed, then ticks the operator one step at a time,
@@ -63,7 +63,10 @@ VENTURE = "greenstone"
 TERMINAL = frozenset({"answered", "refused", "declined", "escalated", "failed"})
 OLLAMA = "http://127.0.0.1:11434"
 PHI4 = "phi4:latest"
-OFFICE_PORT = 9212  # the operator talks to this port and no other
+#: The sandbox Office's broker: 9212 is the runner's, 9213 a throwaway's. The operator
+#: (village-os `sandbox.BROKER_URLS`) and the Office (`broker/sandbox/guards.py`) accept these.
+RUNNER_OFFICE_PORT = 9212
+THROWAWAY_OFFICE_PORT = 9213
 
 # --- the runner's own directory ------------------------------------------------------------------
 
@@ -127,6 +130,7 @@ class Targets:
     forge_compose: tuple[Path, ...]
     forge_env: Path
     office_project: str
+    office_port: int
     office_pg_port: int
     office_env: Path
     live_office_env: Path
@@ -138,6 +142,11 @@ class Targets:
     @property
     def office_db(self) -> str:
         return f"{self.office_project}-db"
+
+    @property
+    def broker_url(self) -> str:
+        """The sandbox Office this run serves, and the only one its operator may talk to."""
+        return f"http://127.0.0.1:{self.office_port}"
 
     @property
     def forge_url(self) -> str:
@@ -167,6 +176,7 @@ class Targets:
                 forge_compose=(forge / "docker-compose.sandbox.yml", here / "forge-throwaway.yaml"),
                 forge_env=tw / "forge.env",
                 office_project="sf-runner-office",
+                office_port=THROWAWAY_OFFICE_PORT,
                 office_pg_port=55443,
                 office_env=tw / "office.env",
                 **common,  # type: ignore[arg-type]
@@ -179,6 +189,7 @@ class Targets:
             forge_compose=(forge / "docker-compose.sandbox.yml",),
             forge_env=forge / ".sandbox" / "sandbox.env",
             office_project="office-sandbox",
+            office_port=RUNNER_OFFICE_PORT,
             office_pg_port=55442,
             office_env=state / "office.env",
             **common,  # type: ignore[arg-type]
@@ -209,9 +220,9 @@ class Targets:
     def ports(self) -> tuple[int, ...]:
         """Ports that must be free before the run starts its own processes."""
         return (
-            (OFFICE_PORT, self.forge_port, self.office_pg_port)
+            (self.office_port, self.forge_port, self.office_pg_port)
             if self.throwaway
-            else (OFFICE_PORT,)
+            else (self.office_port,)
         )
 
 
@@ -408,7 +419,6 @@ class ProcessStack:
             port = self.t.office_pg_port
             values = {
                 "OFFICE_SANDBOX": "1",
-                "OFFICE_SANDBOX_PORT": str(OFFICE_PORT),
                 "OFFICE_SANDBOX_PROJECT": self.t.office_project,
                 "OFFICE_SANDBOX_PG_PORT": str(port),
                 "OFFICE_SANDBOX_PG_PASSWORD": pw["pg"],
@@ -428,6 +438,9 @@ class ProcessStack:
         tag_digest = ollama_digest(PHI4)
         return {
             **values,
+            # Always the targets' port, never a stored one: an office.env written before the
+            # throwaway moved to 9213 still says 9212.
+            "OFFICE_SANDBOX_PORT": str(self.t.office_port),
             "SANDBOX_AGENT_MODEL_TAG": PHI4,
             "SANDBOX_AGENT_MODEL_DIGEST": tag_digest,
             "SANDBOX_AGENT_MODEL_TEMPERATURE": "0.0",
@@ -511,7 +524,7 @@ class ProcessStack:
             text=True,
         )
         for _ in range(90):
-            if http_ok(f"http://127.0.0.1:{OFFICE_PORT}/api/live"):
+            if http_ok(f"{self.t.broker_url}/api/live"):
                 break
             if self.broker.poll() is not None:
                 raise RuntimeError(
@@ -520,13 +533,13 @@ class ProcessStack:
                 )
             time.sleep(1)
         else:
-            raise RuntimeError(f"the sandbox Office is not live on :{OFFICE_PORT}")
+            raise RuntimeError(f"the sandbox Office is not live on {self.t.broker_url}")
         return tokens
 
     def office(self, method: str, path: str, token: str, body: Any = None) -> tuple[int, Any]:
         data = None if body is None else json.dumps(body).encode("utf-8")
         req = urllib.request.Request(  # noqa: S310 - loopback only
-            f"http://127.0.0.1:{OFFICE_PORT}{path}",
+            f"{self.t.broker_url}{path}",
             data=data,
             method=method,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -546,18 +559,35 @@ class ProcessStack:
         return [json.loads(line) for line in self._psql(sql).splitlines() if line.strip()]
 
     # -- the operator
+    def operator_setup_args(self, run_dir: Path, tokens: Path) -> list[str]:
+        """`sandbox_operator.py setup`, pointed at the broker this stack serves."""
+        return [
+            str(self.t.operator_python),
+            "sandbox_operator.py",
+            "setup",
+            "--office-tokens",
+            str(tokens),
+            "--dir",
+            str(run_dir / "operator"),
+            "--broker-url",
+            self.t.broker_url,
+        ]
+
+    def operator_run_args(self) -> list[str]:
+        """`sandbox_operator.py run --once` on the config `setup` wrote."""
+        assert self.operator_config is not None
+        return [
+            str(self.t.operator_python),
+            "sandbox_operator.py",
+            "run",
+            "--once",
+            "--config",
+            str(self.operator_config),
+        ]
+
     def operator_up(self, run_dir: Path, tokens: Path) -> None:
-        out = run_dir / "operator"
         done = self._run(
-            [
-                str(self.t.operator_python),
-                "sandbox_operator.py",
-                "setup",
-                "--office-tokens",
-                str(tokens),
-                "--dir",
-                str(out),
-            ],
+            self.operator_setup_args(run_dir, tokens),
             cwd=self.t.operator_checkout,
             env=clean_env(),
         )
@@ -565,19 +595,11 @@ class ProcessStack:
             raise RuntimeError(
                 f"the sandbox operator's setup refused (exit {done.returncode}): " + _tail(done)
             )
-        self.operator_config = out / "operator.env"
+        self.operator_config = run_dir / "operator" / "operator.env"
 
     def tick(self) -> list[str]:
-        assert self.operator_config is not None
         done = self._run(
-            [
-                str(self.t.operator_python),
-                "sandbox_operator.py",
-                "run",
-                "--once",
-                "--config",
-                str(self.operator_config),
-            ],
+            self.operator_run_args(),
             cwd=self.t.operator_checkout,
             env=clean_env(),
             timeout=1800,
@@ -601,7 +623,7 @@ class ProcessStack:
                 self.broker.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 self.broker.kill()
-            said.append(f"stopped the sandbox Office broker on :{OFFICE_PORT}")
+            said.append(f"stopped the sandbox Office broker on {self.t.broker_url}")
         verb = ["down", "-v"] if self.t.throwaway else ["stop"]
         if self.t.throwaway or self.started_office_db:
             self._run([*self._compose_office(), *verb], timeout=300)
