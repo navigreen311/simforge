@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import hashlib
 import json
 import os
 import secrets
@@ -37,15 +38,18 @@ import subprocess
 import sys
 import time
 import urllib.request
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from src.config import Settings, settings
 from src.models.operation_run import OperationRun
 from src.models.sandbox_run import SandboxRun, SandboxStep
 from src.services.forges.deal_desk_world import (
@@ -67,6 +71,14 @@ PHI4 = "phi4:latest"
 #: (village-os `sandbox.BROKER_URLS`) and the Office (`broker/sandbox/guards.py`) accept these.
 RUNNER_OFFICE_PORT = 9212
 THROWAWAY_OFFICE_PORT = 9213
+THROWAWAY_FORGE_PORT = 8013
+THROWAWAY_OFFICE_PG_PORT = 55443
+#: Set by `scripts.sandbox_run` when `--throwaway` replaces DATABASE_URL before any import: the
+#: value DATABASE_URL had before (empty when it had none). Its presence says a throwaway database
+#: is in use, so the exam check must find the live one some other way.
+DATABASE_URL_BEFORE_THROWAWAY = "SIMFORGE_SANDBOX_DATABASE_URL_BEFORE_THROWAWAY"
+#: The label the throwaway Forge's containers carry: the runner home that started them.
+HOME_LABEL = "simforge.sandbox.home"
 
 # --- the runner's own directory ------------------------------------------------------------------
 
@@ -106,6 +118,14 @@ def write_env(path: Path, values: Mapping[str, str], note: str) -> None:
 
 
 # --- the targets: the shared sandbox, or a throwaway copy ----------------------------------------
+
+
+def home_tag(state: Path) -> str:
+    """A runner home's own suffix for its throwaway compose projects. Two homes on one machine
+    once shared `sf-runner-forge` and `sf-runner-office`, so one run's `down -v` could remove
+    another's stack (11 November)."""
+    return hashlib.sha256(str(state.resolve()).lower().encode()).hexdigest()[:8]
+
 
 CONFIG_KEYS = (
     "SANDBOX_FORGE_CHECKOUT",  # medlink-wholesale main, with the loader's --replace (#110)
@@ -168,16 +188,17 @@ class Targets:
         )
         if throwaway:
             tw = state / "throwaway"
+            tag = home_tag(state)
             return cls(
                 throwaway=True,
                 state=tw,
-                forge_project="sf-runner-forge",
-                forge_port=8013,
+                forge_project=f"sf-runner-forge-{tag}",
+                forge_port=THROWAWAY_FORGE_PORT,
                 forge_compose=(forge / "docker-compose.sandbox.yml", here / "forge-throwaway.yaml"),
                 forge_env=tw / "forge.env",
-                office_project="sf-runner-office",
+                office_project=f"sf-runner-office-{tag}",
                 office_port=THROWAWAY_OFFICE_PORT,
-                office_pg_port=55443,
+                office_pg_port=THROWAWAY_OFFICE_PG_PORT,
                 office_env=tw / "office.env",
                 **common,  # type: ignore[arg-type]
             )
@@ -308,6 +329,15 @@ class ProcessStack:
             check=False,
         )
 
+    def _forge_compose_env(self) -> dict[str, str]:
+        """What the throwaway overlay interpolates: its project (container names, image) and the
+        runner home that owns it (a label, so another home's start can name it)."""
+        return {
+            **os.environ,
+            "SF_RUNNER_FORGE_PROJECT": self.t.forge_project,
+            "SF_RUNNER_HOME": str(self.t.state.parent),
+        }
+
     def _compose_forge(self) -> list[str]:
         files = [x for f in self.t.forge_compose for x in ("-f", str(f))]
         return [
@@ -320,10 +350,17 @@ class ProcessStack:
             str(self.t.forge_env),
         ]
 
+    def _office_compose_env(self) -> dict[str, str]:
+        """The project the Office's compose interpolates into its container names: always the
+        targets', whatever an older office.env says."""
+        return {**os.environ, "OFFICE_SANDBOX_PROJECT": self.t.office_project}
+
     def _compose_office(self) -> list[str]:
         return [
             "docker",
             "compose",
+            "-p",
+            self.t.office_project,
             "-f",
             str(self.t.office_checkout / "compose.sandbox.yaml"),
             "--env-file",
@@ -377,7 +414,11 @@ class ProcessStack:
         self._forge_env()
         if not self._running(self.t.forge_backend):
             self.log(f"   the sandbox CRE Forge ({self.t.forge_project}) is down: starting it")
-            up = self._run([*self._compose_forge(), "up", "-d", "--build"], timeout=1800)
+            up = self._run(
+                [*self._compose_forge(), "up", "-d", "--build"],
+                env=self._forge_compose_env(),
+                timeout=1800,
+            )
             if up.returncode:
                 raise RuntimeError(
                     "the sandbox CRE Forge did not come up: "
@@ -414,6 +455,16 @@ class ProcessStack:
     def _office_values(self) -> dict[str, str]:
         if self.t.office_env.is_file():
             values = read_env(self.t.office_env)
+            if values.get("OFFICE_SANDBOX_PROJECT") != self.t.office_project:
+                # An office.env written when every throwaway shared `sf-runner-office`: the
+                # project is the targets', and compose reads it from this file.
+                values["OFFICE_SANDBOX_PROJECT"] = self.t.office_project
+                write_env(
+                    self.t.office_env,
+                    values,
+                    "The sandbox Office's generated values (SimForge sandbox runner). "
+                    "Never printed.",
+                )
         else:
             pw = {k: secrets.token_hex(24) for k in ("pg", "owner", "app", "reader")}
             port = self.t.office_pg_port
@@ -486,7 +537,11 @@ class ProcessStack:
         values = self._office_values()
         env = clean_env({**values, "SANDBOX_CRE_FORGE_TOKEN": self.forge_token()})
         if not self._running(self.t.office_db):
-            up = self._run([*self._compose_office(), "up", "-d", "--wait"], timeout=600)
+            up = self._run(
+                [*self._compose_office(), "up", "-d", "--wait"],
+                env=self._office_compose_env(),
+                timeout=600,
+            )
             if up.returncode:
                 raise RuntimeError(
                     "the sandbox Office's Postgres did not come up: "
@@ -626,10 +681,10 @@ class ProcessStack:
             said.append(f"stopped the sandbox Office broker on {self.t.broker_url}")
         verb = ["down", "-v"] if self.t.throwaway else ["stop"]
         if self.t.throwaway or self.started_office_db:
-            self._run([*self._compose_office(), *verb], timeout=300)
+            self._run([*self._compose_office(), *verb], env=self._office_compose_env(), timeout=300)
             said.append(f"{' '.join(verb)}: {self.t.office_project}")
         if self.t.throwaway or self.started_forge:
-            self._run([*self._compose_forge(), *verb], timeout=300)
+            self._run([*self._compose_forge(), *verb], env=self._forge_compose_env(), timeout=300)
             said.append(f"{' '.join(verb)}: {self.t.forge_project}")
         elif not self.started_forge:
             said.append(f"left {self.t.forge_project} as it was found (up)")
@@ -721,7 +776,7 @@ def pid_alive(pid: int) -> bool:
 
 
 class Lock:
-    """One run at a time on this machine."""
+    """One run at a time per runner home; `throwaway_lock` is one throwaway per machine."""
 
     def __init__(self, state: Path) -> None:
         self.path = state / "run.lock"
@@ -735,9 +790,14 @@ class Lock:
             return "an unreadable lock file"
         if not pid_alive(int(held.get("pid", 0))):
             return None  # its process is gone: a stale lock
-        return f"pid {held['pid']}, since {held.get('since')}"
+        said = f"pid {held['pid']}, since {held.get('since')}"
+        if held.get("what"):
+            said += f", {held['what']}"
+        if held.get("home"):
+            said += f", runner home {held['home']}"
+        return said
 
-    def take(self, what: str) -> None:
+    def take(self, what: str, home: Path | None = None) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
             json.dumps(
@@ -745,6 +805,7 @@ class Lock:
                     "pid": os.getpid(),
                     "since": datetime.now().isoformat(timespec="seconds"),
                     "what": what,
+                    **({"home": str(home)} if home is not None else {}),
                 }
             ),
             encoding="utf-8",
@@ -755,11 +816,120 @@ class Lock:
             self.path.unlink()
 
 
+def throwaway_lock() -> Lock:
+    """One throwaway run per machine, whichever runner home starts it: every home's throwaway
+    uses the same ports (8013, 9213, 55443). Kept beside the homes, never inside one.
+    `SIMFORGE_SANDBOX_THROWAWAY_LOCK_DIR` overrides it (the tests)."""
+    where = os.environ.get("SIMFORGE_SANDBOX_THROWAWAY_LOCK_DIR")
+    return Lock(Path(where) if where else Path.home() / ".simforge-sandbox-throwaway-lock")
+
+
+def _listening_pid(port: int) -> int | None:
+    done = subprocess.run(
+        ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=30, check=False
+    )
+    for line in done.stdout.splitlines():
+        cols = line.split()
+        if len(cols) >= 5 and cols[1] == f"127.0.0.1:{port}" and cols[3] == "LISTENING":
+            return int(cols[4])
+    return None
+
+
+def _process_line(pid: int) -> str:
+    """A process's executable and the module or script it runs. No other argument is shown:
+    an argument can carry a secret."""
+    done = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    words = done.stdout.strip().replace('"', "").split()
+    if not words:
+        return "a process"
+    shown = [Path(words[0]).name]
+    if "-m" in words[1:-1]:
+        shown += ["-m", words[words.index("-m", 1) + 1]]
+    return " ".join(shown)
+
+
+def port_holder(port: int, mine: Targets | None) -> tuple[str, bool]:
+    """Who holds a local port, and whether it is another runner home's throwaway stack.
+
+    A container is named by its compose project and the runner home on its label (the
+    throwaway Forge's overlay sets one); a project of the old shared names (`sf-runner-forge`,
+    `sf-runner-office`) or of another home's suffix is another home's. A process is named by
+    pid, executable and module, never its other arguments.
+    """
+    done = subprocess.run(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"publish={port}",
+            "--format",
+            '{{.Names}}\t{{.Label "com.docker.compose.project"}}\t{{.Label "' + HOME_LABEL + '"}}',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    rows = [x.split("\t") for x in done.stdout.splitlines() if x.strip()]
+    if done.returncode == 0 and rows:
+        name, project, owner = ([*rows[0], "", ""])[:3]
+        ours = {mine.forge_project, mine.office_project} if mine else set()
+        other = project not in ours and project.startswith(("sf-runner-forge", "sf-runner-office"))
+        said = f"container {name} (compose project {project or 'none'}"
+        said += f", runner home {owner})" if owner else ")"
+        return said, other
+    pid = _listening_pid(port)
+    if pid is None:
+        return "a process this runner could not name", False
+    return f"pid {pid} ({_process_line(pid)})", False
+
+
 # --- SimForge's side ----------------------------------------------------------------------------
 
 
-async def exam_open(db: AsyncSession) -> bool:
-    stmt = (
+class _FilesOnly(Settings):
+    """SimForge's settings from its .env files and defaults alone, as they resolve when nothing
+    in the environment overrides DATABASE_URL."""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (init_settings, dotenv_settings, file_secret_settings)
+
+
+def live_database_url() -> str:
+    """SimForge's own database: the one the real runner reads.
+
+    `--throwaway` points SimForge's settings at a throwaway database before anything is
+    imported, and leaves DATABASE_URL's earlier value in `DATABASE_URL_BEFORE_THROWAWAY`. With
+    no throwaway, the live database is the settings' own. phi4 is shared, so a throwaway's exam
+    check reads the live database too (11 November).
+    """
+    if DATABASE_URL_BEFORE_THROWAWAY not in os.environ:
+        return settings.database_url
+    before = os.environ[DATABASE_URL_BEFORE_THROWAWAY]
+    return before or _FilesOnly().database_url
+
+
+def _open_exams() -> Any:
+    return (
         select(func.count())
         .select_from(OperationRun)
         .where(
@@ -768,7 +938,27 @@ async def exam_open(db: AsyncSession) -> bool:
             OperationRun.timedOutAt.is_(None),
         )
     )
-    return bool((await db.execute(stmt)).scalar_one())
+
+
+async def live_exam_open() -> bool:
+    """Whether a SimForge exam is open, read from the live database in a READ ONLY transaction:
+    the check every run makes, throwaway or not, at its start and before every tick."""
+    url = Settings.model_construct(database_url=live_database_url()).sqlalchemy_url
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SET TRANSACTION READ ONLY"))
+            count = (await conn.execute(_open_exams())).scalar_one()
+            await conn.rollback()
+        return bool(count)
+    finally:
+        await engine.dispose()
+
+
+async def exam_open(db: AsyncSession) -> bool:
+    """Whether an exam is open in the database `db` reads. A run's own check is
+    `live_exam_open`; this is for a session already on the database meant."""
+    return bool((await db.execute(_open_exams())).scalar_one())
 
 
 async def sandbox_tables_exist(db: AsyncSession) -> bool:
@@ -869,12 +1059,16 @@ async def drive(
     budget: Budget,
     log: Callable[[str], None],
     schedule_owner: str | None = None,
+    exam_is_open: Callable[[], Awaitable[bool]],
     stop_requested: Callable[[], str | None] = lambda: None,
     clock: Clock | None = None,
 ) -> Outcome:
     """Steps 3 to 8: world, Office, operator, filing, the recorded loop, close and page.
 
     The caller has checked the start rules and holds the lock; it stops the stack after.
+    `exam_is_open` is asked before every tick; a run passes `live_exam_open`, so a throwaway
+    pauses for a live exam as the real runner does. It has no default, so nothing reaches a
+    database it was not handed.
     """
     clock = clock or Clock()
     out = Outcome(seed=seed)
@@ -1019,7 +1213,7 @@ async def drive(
         if (clock.monotonic() - started) / 60 > budget.max_minutes:
             out.stopped_because = f"wall-clock budget spent ({budget.max_minutes:g} min)"
             break
-        reason = rules.pause_reason(now=clock.now(), exam_open=await exam_open(db))
+        reason = rules.pause_reason(now=clock.now(), exam_open=await exam_is_open())
         if reason:
             if paused_since is None:
                 paused_since = clock.now().isoformat(timespec="seconds")

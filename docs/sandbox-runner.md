@@ -30,8 +30,9 @@ and the Office broker's log. To write a run's page again later:
 
 Options:
 - `--seed N` names the seed. The default is the next seed after the last one run.
-- `--tasks N` is how many tasks are filed, 1 to 60 (default 20; a seed has 21 since generator
-  1.1.1, and the 21st, a widening kept, is filed only with `--tasks 21`).
+- `--tasks N` is how many tasks are filed, 1 to 60. The default is all of the seed's tasks, at
+  most 60 (21 since generator 1.1.1), so a default run never leaves out the seed's last task.
+  A schedule set without `--tasks` files all of each seed's tasks too.
 - `--max-ticks N` is the step budget: operator ticks (default 4 per task + 10).
 - `--max-minutes M` is the wall-clock budget (default 240).
 
@@ -74,10 +75,11 @@ Every rule is checked and every reason reported. `check` runs them alone.
 | `not_a_starter` | anyone but Ivan Green or Ira Green |
 | `over_task_cap`, `more_tasks_than_the_seed` | over 60 tasks, or more than the seed has |
 | `inside_a_sweep` | the minute is in :17-:24 or :47-:54 (a hand start is refused; a scheduled one waits) |
-| `exam_open` | a SimForge `OperationRun` is open (no end, verdict or timeout) |
+| `exam_open` | a SimForge `OperationRun` is open (no end, verdict or timeout), read from the live SimForge database in a READ ONLY transaction, a throwaway included |
 | `memory` | under 8 GB free. First, the phi4 rule: if phi4 is loaded, no exam is open and it is outside the sweeps, phi4 is unloaded (`ollama stop phi4`) and memory measured again |
 | `another_run` | another run holds the lock |
-| `port_in_use` | 127.0.0.1:9212 already listening |
+| `port_in_use` | 127.0.0.1:9212 already listening (a throwaway: 8013, 9213 or 55443), with who holds it |
+| `throwaway_held` | a throwaway only: another runner home's throwaway stack holds 8013, 9213 or 55443, or another throwaway run holds the machine's one throwaway slot; both name the home |
 | `missing` | `runner.env`, a checkout, a python, the CRE Forge's env, a loader without `--replace`, or SimForge's sandbox tables (migration 20261109000000) |
 | `not_a_business_day`, `scheduled_run_already_today`, `schedule_stopped`, `no_schedule`, `not_the_schedule_owner` | `scheduled` only |
 
@@ -170,10 +172,25 @@ python -m scripts.sandbox_run start --as "Ivan Green" --tasks 4 --throwaway --si
 ```
 
 `--throwaway` runs the same code against throwaway copies:
-- a CRE Forge `sf-runner-forge` on 8013 (`scripts/sandbox_runner/forge-throwaway.yaml` over the
-  Forge's own compose);
-- the Office's Postgres `sf-runner-office` on 55443;
+- a CRE Forge `sf-runner-forge-<home>` on 8013 (`scripts/sandbox_runner/forge-throwaway.yaml`
+  over the Forge's own compose);
+- the Office's Postgres `sf-runner-office-<home>` on 55443;
 - a stand-in for the simulation declaration, so the live Office is not read.
+
+`<home>` is 8 hex digits of the runner home's path (`runner.home_tag`), so two homes' stacks
+never share a compose project and one run's `down -v` cannot remove another's (11 November;
+both once used `sf-runner-forge` and `sf-runner-office`). The Forge's containers carry the
+label `simforge.sandbox.home`. The ports are still every home's, so a machine runs one throwaway
+at a time: a throwaway takes `~/.simforge-sandbox-throwaway-lock/run.lock`, naming its home, and
+a start from another home is refused `throwaway_held` while it is held, or while another home's
+stack (by its label, its project, or the old shared names) holds 8013, 9213 or 55443. A port
+held by a process is named by pid, executable and module, never its other arguments.
+
+**The exam check reads the live SimForge database.** phi4 is shared, so a throwaway never runs
+while a real exam is open: its start rules, its pause before every tick and its phi4 rule read
+the live database, read-only, as the real runner does. That is the DATABASE_URL SimForge's
+settings had before `--simforge-db-file` replaced it (from the environment, else the `.env`
+files, else the default). Everything else a throwaway reads and writes is the throwaway's.
 
 Both stacks are removed with their volumes at the end. `--simforge-db-file` names a file
 holding a throwaway SimForge database's URL (no password on a command line). It is required,
