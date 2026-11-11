@@ -1,7 +1,7 @@
 """Three fixes to the sandbox runner (11 November).
 
 1. `--tasks` defaults to all of the seed's tasks, at most 60: a default run never leaves out
-   the seed's last task (s0-021, the widening kept).
+   the seed's last task (s0-031 since generator 1.2.0).
 2. A throwaway's exam check reads the live SimForge database, read-only, as the real runner
    does: phi4 is shared, so a throwaway never runs while a real exam is open.
 3. A throwaway's compose projects are its runner home's own, and a start names who holds the
@@ -51,9 +51,9 @@ def test_no_task_count_means_all_of_the_seeds(argv: list[str]) -> None:
 def test_all_of_the_seeds_tasks_includes_its_last_and_stays_under_the_cap() -> None:
     tasks = generate_tasks(generate_world(0))
     want = rules.all_tasks(len(tasks))
-    assert want == len(tasks) == 21
+    assert want == len(tasks) == 31
     chosen = runner.choose_tasks(0)[:want]
-    assert "s0-021" in {t.task_id for t in chosen}
+    assert "s0-031" in {t.task_id for t in chosen}
     assert rules.all_tasks(70) == rules.MAX_TASKS == 60
 
 

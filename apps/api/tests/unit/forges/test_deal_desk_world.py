@@ -127,8 +127,9 @@ def test_the_generator_never_emits_a_held_out_label() -> None:
     label no exam uses, and no held-out class name appears anywhere the generator writes - not as
     a task's class, not in any field of a task or of the world's export, and not in its source."""
     held_out = sorted(HELD_OUT_CLASSES)
-    assert "sandbox_refusal" in TASK_CLASSES
-    assert "sandbox_refusal" not in ALL_SCENARIO_CLASSES
+    for own in ("sandbox_refusal", "sandbox_quiet_failure"):
+        assert own in TASK_CLASSES
+        assert own not in ALL_SCENARIO_CLASSES
     assert not set(TASK_CLASSES) & set(HELD_OUT_CLASSES)
     source = inspect.getsource(deal_desk_world)
     for name in held_out:
@@ -148,7 +149,7 @@ def test_the_generator_never_emits_a_held_out_label() -> None:
 def test_a_widening_is_refused_or_run_by_its_reason() -> None:
     """comp_analysis 1.11.9: a filed widening whose reason only wants more comps is REFUSE 5
     before any call (s0-010, s0-011, s0-012, s0-014); one naming a constraint of the property is
-    PROCEED (the last task). Ivan Green, 10 November."""
+    PROCEED (s0-021, the last task until generator 1.2.0). Ivan Green, 10 November."""
     for seed in SEEDS:
         tasks = _tasks(seed)
         refused = [t for t in tasks if t.scenario_class == "sandbox_refusal"]
@@ -158,11 +159,97 @@ def test_a_widening_is_refused_or_run_by_its_reason() -> None:
             assert t.request["widening_reason"]
             assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("REFUSE", None)
             assert t.turn_a.expected_caveat
-        kept = tasks[-1]
+        kept = tasks[20]
+        assert kept.task_id.endswith("-021")
         assert (kept.module_id, kept.scenario_class) == ("comp_analysis", "happy_path")
         assert kept.turn_a.expected_act == "PROCEED" and kept.turn_b.expected_act == "PROCEED"
         assert kept.request["radius_miles"] > COMP_RADIUS_MI[kept.forge_answer["search"]["type"]][0]
         assert "comparable" in kept.request["widening_reason"]
+
+
+def test_a_thin_result_a_decision_waits_on_is_escalated() -> None:
+    """comp_analysis 1.11.10: a 200 too thin for a decision waiting on it, with nothing asking to
+    widen, is ESCALATE (generator 1.2.0). The request is plain, so Turn A is PROCEED; the key
+    records the count, and the CAVEAT says the agent will not widen."""
+    for seed in SEEDS:
+        tasks = [t for t in _tasks(seed) if t.scenario_class == "escalation_required"]
+        assert [t.task_id[-3:] for t in tasks] == ["022", "023"]
+        for t in tasks:
+            assert t.module_id == "comp_analysis"
+            assert set(t.request) == {"property_id"}  # nothing asks to widen
+            assert t.turn_a.expected_act == "PROCEED" and t.turn_a.acceptable_acts is None
+            assert t.forge_answer["status"] == 200 and t.forge_answer["comps_available"]
+            assert t.turn_b.expected_act == "ESCALATE"
+            assert t.turn_b.expected_record == f"total = {t.forge_answer['total']}"
+            assert "will not widen" in (t.turn_b.expected_caveat or "")
+        need = int(tasks[0].facts.split("at least ")[1].split()[0])
+        assert tasks[0].forge_answer["total"] < need
+        assert tasks[1].forge_answer["total"] == 0 and "tomorrow" in tasks[1].facts
+
+
+def test_the_refused_inputs_are_declined_as_the_manual_records_them() -> None:
+    """Three more comp_analysis refusals (generator 1.2.0), each a 422 before anything runs."""
+    want = {
+        "024": ("property_id = NOT A UUID", {"detail": "property_id must be a UUID"}),
+        "025": ("property_id = NOT A UUID", {"detail": "property_id must be a UUID"}),
+        "026": ("NONE", {"error": "unknown_field", "fields": ["radius_mi"]}),
+    }
+    for seed in (0, 1, 7):
+        by_id = {t.task_id[-3:]: t for t in _tasks(seed)}
+        for n, (record, body) in want.items():
+            t = by_id[n]
+            assert (t.module_id, t.scenario_class) == ("comp_analysis", "malformed_input")
+            assert t.forge_answer == {"status": 422, **body}
+            assert (t.turn_b.expected_act, t.turn_b.expected_record) == ("DECLINE", record)
+            assert t.turn_a.acceptable_acts == ("PROCEED", "DECLINE")
+
+
+def test_a_quiet_failure_is_a_200_kept_as_its_count_with_a_caveat() -> None:
+    """buyer_match's quiet failures (generator 1.2.0): a 200 with no error whose fields say the
+    result is not what it looks like. Built from the manual's `silent_partial` paragraphs and the
+    rubric's public `failure_recognition`; labelled `sandbox_quiet_failure`, which no exam uses.
+    Each is PROCEED, the count returned as a bare number, and a CAVEAT."""
+    for seed in SEEDS:
+        world = generate_world(seed)
+        tasks = [t for t in generate_tasks(world) if t.scenario_class == "sandbox_quiet_failure"]
+        assert [t.task_id[-3:] for t in tasks] == ["027", "028", "029", "030", "031"]
+        for t in tasks:
+            assert t.module_id == "buyer_match"
+            assert t.forge_answer["status"] == 200
+            assert t.turn_a.expected_act == "PROCEED" and t.turn_b.expected_act == "PROCEED"
+            assert t.turn_b.expected_record == f"total = {t.forge_answer['total']}"
+            assert t.turn_b.expected_caveat
+        empty, top, zero, unpriced, no_pref = tasks
+        assert empty.forge_answer["results_with_potential_concerns_empty"] >= 1
+        assert top.request["limit"] == 1
+        assert top.forge_answer["results_with_potential_concerns_empty"] == 1
+        assert zero.forge_answer["total"] == 0 and zero.forge_answer["suppressed"] > 0
+        assert "no price on file" in unpriced.facts
+        # With no price there is no band: every contactable buyer is a candidate.
+        contactable = [b for b in world.buyers if b["status"] in ("active", "vip")]
+        assert unpriced.forge_answer["total"] == sum(
+            1 for b in contactable if not b["do_not_contact"]
+        )
+        assert unpriced.forge_answer["suppressed"] == sum(b["do_not_contact"] for b in world.buyers)
+        deal = next(d for d in world.deals if d["id"] == no_pref.request["deal_id"])
+        assert any(
+            not (b["preferred_cities"] or b["preferred_states"] or b["preferred_property_types"])
+            for b in world.buyers
+            if deal_desk_world._in_band(b, deal) and not b["do_not_contact"]
+        )
+
+
+def test_generator_1_2_0_adds_rows_after_every_earlier_draw() -> None:
+    """The quiet-failure rows come after every draw and from none, so every row 1.1.1 made is
+    made again with the same fields (its id moves with the world name), and no earlier deal's
+    candidates change: the two buyers are priced where only the new deals reach."""
+    for seed in SEEDS:
+        world = generate_world(seed)
+        new_buyers, new_deals = world.buyers[-2:], world.deals[-2:]
+        assert [d["asking_price"] for d in new_deals] == [15_000_000, None]
+        for d in world.deals[:-2]:
+            assert not any(deal_desk_world._in_band(b, d) for b in new_buyers)
+        assert all(b["min_price"] and b["max_price"] for b in new_buyers)
 
 
 def test_grade_submitted_grades_every_expected_answer_unchanged() -> None:

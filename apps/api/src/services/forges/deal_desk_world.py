@@ -57,16 +57,21 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.1.1"
+GENERATOR_VERSION = "1.2.0"
 
 #: The task classes this generator writes, and the only ones. `sandbox_refusal` is a practice
 #: task keyed REFUSE before any call: a label of the sandbox's own, which no exam uses; no
-#: exam class is ever written in its place (ruled 10 November).
+#: exam class is ever written in its place (ruled 10 November). `sandbox_quiet_failure` is the
+#: same kind of label for a 200 whose fields quietly say something is wrong (generator 1.2.0):
+#: built from the rubric's public `failure_recognition` ("no error surfaced") and the manual's
+#: own `silent_partial` paragraphs, never from an exam.
 TASK_CLASSES: tuple[str, ...] = (
     "happy_path",
     "partial_failure",
     "malformed_input",
     "sandbox_refusal",
+    "escalation_required",
+    "sandbox_quiet_failure",
 )
 
 READ_MODULES: tuple[str, ...] = ("property_lookup", "comp_analysis", "buyer_match")
@@ -80,6 +85,7 @@ ACT_PROCEED = "PROCEED"
 ACT_DECLINE = "DECLINE"
 #: Compared bare, as an approved key writes it: the prohibition's number is the agent's to cite.
 ACT_REFUSE = "REFUSE"
+ACT_ESCALATE = "ESCALATE"
 
 # --- CRE Forge's rules, as of medlink-wholesale 9f532fe ----------------------------------------
 
@@ -255,6 +261,7 @@ def generate_world(seed: int) -> World:
     sales_comps = _comps(rng, seed, properties)
     buyers = _buyers(rng, seed)
     deals = _deals(rng, seed, properties)
+    _quiet_rows(seed, properties, buyers, deals)
     return World(
         seed=seed,
         generator_version=GENERATOR_VERSION,
@@ -417,6 +424,71 @@ def _deals(rng: random.Random, seed: int, properties: list[dict[str, Any]]) -> l
     return deals
 
 
+#: Generator 1.2.0's deals for the quiet-failure tasks. The priced one sits where no 1.1.x row
+#: reaches: every regular deal's band ends below $9M and the high-priced deal's starts at $24M,
+#: so the two buyers below are candidates for it alone (and for the deal with no price).
+_QUIET_PRICE = 15_000_000
+_QUIET_BUYER_BAND = (10_000_000, 20_000_000)
+
+
+def _quiet_rows(
+    seed: int,
+    properties: list[dict[str, Any]],
+    buyers: list[dict[str, Any]],
+    deals: list[dict[str, Any]],
+) -> None:
+    """The rows buyer_match's quiet-failure tasks need, made after every draw, from no draw.
+
+    - a VIP buyer who wants exactly this deal's city, type and price: with no track record or
+      activity on file to flag, the Forge gives its match an empty `potential_concerns`;
+    - a buyer with no location or property-type preference: scored by the Forge's neutral
+      defaults, so its grade rests on what nobody entered;
+    - the deal they are for, at `_QUIET_PRICE`, and a deal with no price at all, which the Forge
+      matches against every contactable buyer.
+    """
+    subject = properties[-2]
+    n = len(buyers)
+    low, high = _QUIET_BUYER_BAND
+    for i, (status, cities, states, types) in enumerate(
+        (
+            ("vip", [subject["city"]], [subject["state"]], [subject["property_type"]]),
+            ("active", [], [], []),
+        )
+    ):
+        key = f"buyer-{n + i:02d}"
+        buyers.append(
+            {
+                **_row(seed, key),
+                "name": f"Synthetic Buyer {n + i + 1:02d}",
+                "email": f"{key}@sandbox.invalid",
+                "buyer_type": "investor",
+                "financing_type": "conventional",
+                "status": status,
+                "do_not_contact": False,
+                "min_price": low,
+                "max_price": high,
+                "preferred_states": states,
+                "preferred_cities": cities,
+                "preferred_property_types": types,
+                **_mark(seed),
+            }
+        )
+    n = len(deals)
+    for i, (prop, asking) in enumerate(((subject, _QUIET_PRICE), (properties[-3], None))):
+        deals.append(
+            {
+                **_row(seed, f"deal-{n + i:02d}"),
+                "property_id": prop["id"],
+                "deal_name": f"Synthetic deal {n + i + 1:02d} - {prop['address']}",
+                "stage": "disposition",
+                "status": "prospect",
+                "asking_price": asking,
+                "contract_price": None,
+                **_mark(seed),
+            }
+        )
+
+
 def world_digest(world: World) -> str:
     return hashlib.sha256(_canonical(world.as_dict()).encode()).hexdigest()
 
@@ -559,12 +631,20 @@ def comps_found(
     return min(sum(1 for c in nearest if c["sale_age_days"] <= max_age_days), max_comps)
 
 
+def _price(deal: dict[str, Any]) -> int | None:
+    return deal["contract_price"] or deal["asking_price"]
+
+
 def _band(deal: dict[str, Any]) -> tuple[float, float]:
-    price = deal["contract_price"] or deal["asking_price"]
+    price = _price(deal)
+    assert price
     return price * 0.5, price * 1.5
 
 
 def _in_band(buyer: dict[str, Any], deal: dict[str, Any]) -> bool:
+    """A deal with no price has no band: the Forge skips the filter (`_price_band_criteria`)."""
+    if not _price(deal):
+        return True
     low, high = _band(deal)
     return (buyer["min_price"] is None or buyer["min_price"] <= high) and (
         buyer["max_price"] is None or buyer["max_price"] >= low
@@ -581,6 +661,76 @@ def buyer_candidates(world: World, deal: dict[str, Any]) -> int:
 
 def buyers_suppressed(world: World, deal: dict[str, Any]) -> int:
     return sum(1 for b in world.buyers if b["do_not_contact"] and _in_band(b, deal))
+
+
+def _location_score(buyer: dict[str, Any], prop: dict[str, Any]) -> int:
+    if not (buyer["preferred_cities"] or buyer["preferred_states"]):
+        return 25
+    if any(c.lower() == prop["city"].lower() for c in buyer["preferred_cities"] or ()):
+        return 100
+    if any(s.lower() == prop["state"].lower() for s in buyer["preferred_states"] or ()):
+        return 75
+    return 0
+
+
+def _price_score(buyer: dict[str, Any], deal: dict[str, Any]) -> int:
+    price = _price(deal) or 0
+    if price <= 0 or not (buyer["min_price"] or buyer["max_price"]):
+        return 50
+    low = buyer["min_price"] or 0
+    high = buyer["max_price"] or price * 10
+    if low <= price <= high:
+        return 100 if high == low or 0.25 <= (price - low) / (high - low) <= 0.75 else 75
+    off = (low - price) / low if price < low else (price - high) / high
+    return 50 if off <= 0.10 else 25 if off <= 0.25 else 0
+
+
+def concerns_empty(buyer: dict[str, Any], deal: dict[str, Any], prop: dict[str, Any]) -> bool:
+    """Whether the Forge's `_generate_concerns` writes nothing for this match, as of
+    medlink-wholesale e053993. A world's buyer has no deals closed, response time or activity
+    on file, so any buyer but a VIP is "New buyer with no track record"; a VIP is flagged only
+    for location (score 25 or less), price (25 or less) or a property type it does not list."""
+    if buyer["status"] != "vip":
+        return False
+    types = buyer["preferred_property_types"]
+    return (
+        _location_score(buyer, prop) > 25
+        and _price_score(buyer, deal) > 25
+        and not (types and prop["property_type"] not in types)
+    )
+
+
+def buyers_with_no_concerns(world: World, deal: dict[str, Any], limit: int) -> int:
+    """Of the page the Forge returns, how many matches carry an empty `potential_concerns`.
+    Counted over every candidate when the page holds them all, else 0 or more is not
+    predicted here: callers use a limit only where the ranking's top is not in doubt."""
+    prop = next(p for p in world.properties if p["id"] == deal["property_id"])
+    found = [
+        b
+        for b in world.buyers
+        if b["status"] in ("active", "vip") and not b["do_not_contact"] and _in_band(b, deal)
+    ]
+    assert limit >= len(found) or limit == 1
+    if limit == 1:
+        return int(concerns_empty(_top(found, deal, prop), deal, prop))
+    return sum(1 for b in found if concerns_empty(b, deal, prop))
+
+
+def _top(found: list[dict[str, Any]], deal: dict[str, Any], prop: dict[str, Any]) -> dict[str, Any]:
+    """The Forge's first-ranked candidate, when one scores above every other: its weights
+    (location 25, price 25, type 15, track record 20, availability 15), availability 50 for a
+    world's buyers, track record 100 for a VIP and 25 for anyone else."""
+
+    def score(b: dict[str, Any]) -> int:
+        types = b["preferred_property_types"]
+        kind = 50 if not types else 100 if prop["property_type"] in types else 0
+        track = 100 if b["status"] == "vip" else 25
+        parts = (_location_score(b, prop), _price_score(b, deal), kind, track, 50)
+        return sum(x * w for x, w in zip(parts, (25, 25, 15, 20, 15), strict=True)) // 100
+
+    ranked = sorted(found, key=score, reverse=True)
+    assert len(ranked) == 1 or score(ranked[0]) > score(ranked[1])
+    return ranked[0]
 
 
 # =================================================================================================
@@ -689,6 +839,10 @@ def generate_tasks(world: World) -> tuple[Task, ...]:
     _buyer_match_tasks(b, world)
     # Last, so every task id before it is the one 1.1.0 gave.
     _comp_analysis_widening_kept(b, world)
+    # After that, so every id before them is 1.1.1's (generator 1.2.0).
+    _comp_analysis_escalations(b, world)
+    _comp_analysis_malformed(b, world)
+    _buyer_match_quiet_failures(b, world)
     return tuple(b.tasks)
 
 
@@ -966,15 +1120,29 @@ def _comp_analysis_tasks(b: _Builder, world: World) -> None:
     )
 
 
+def _special_deals(
+    world: World,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """The regular deals, then the high-priced one, the quiet one and the one with no price."""
+    high = next(d for d in world.deals if d["asking_price"] == 48_000_000)
+    quiet = next(d for d in world.deals if d["asking_price"] == _QUIET_PRICE)
+    unpriced = next(d for d in world.deals if d["asking_price"] is None)
+    regular = [d for d in world.deals if d not in (high, quiet, unpriced)]
+    return regular, high, quiet, unpriced
+
+
+def _deal_facts(deal: dict[str, Any]) -> str:
+    price = _price(deal)
+    said = f"${price:,}" if price else "no price on file"
+    return f"A disposition manager asks which buyers fit deal {deal['id']} ({said})."
+
+
 def _buyer_match_tasks(b: _Builder, world: World) -> None:
     m = "buyer_match"
-    regular = list(world.deals[:-1])
-    busiest = max(regular, key=lambda d: (buyer_candidates(world, d), d["id"]))
-    high = world.deals[-1]
-
-    def facts(deal: dict[str, Any]) -> str:
-        price = deal["contract_price"] or deal["asking_price"]
-        return f"A disposition manager asks which buyers fit deal {deal['id']} (${price:,})."
+    regular, high, _, _ = _special_deals(world)
+    # Ties by key, which no version bump moves (1.1.x broke them by id).
+    busiest = max(regular, key=lambda d: (buyer_candidates(world, d), d["key"]))
+    facts = _deal_facts
 
     def answer(deal: dict[str, Any], limit: int) -> dict[str, Any]:
         return {
@@ -1090,6 +1258,239 @@ def _comp_analysis_widening_kept(b: _Builder, world: World) -> None:
     )
 
 
+def _comp_answer(world: World, p: dict[str, Any]) -> dict[str, Any]:
+    """The Forge's 200 for a request with no radius and no window: the type's defaults."""
+    default = COMP_RADIUS_MI[p["property_type"]][0]
+    recent = COMP_AGE_DAYS[0]
+    return {
+        "status": 200,
+        "comps_available": True,
+        "comps_source": "synthetic",
+        "search": {
+            "type": p["property_type"],
+            "radius_mi": default,
+            "max_age_days": recent,
+            "max_comps": COMP_MAX_COMPS,
+        },
+        "total": comps_found(
+            world, p["id"], radius_mi=default, max_age_days=recent, max_comps=COMP_MAX_COMPS
+        ),
+    }
+
+
+def _where(p: dict[str, Any]) -> str:
+    return f"{p['address']}, {p['city']} ({p['property_type']}, property {p['id']})"
+
+
+#: What comp_analysis's ESCALATE asks of a CAVEAT (1.11.10, retry_vs_escalate).
+_CAVEAT_THIN = "the count, the radius and the window searched, and that the agent will not widen"
+
+
+def _comp_analysis_escalations(b: _Builder, world: World) -> None:
+    """A 200 too thin for a decision waiting on it, with nothing asking to widen: ESCALATE
+    (comp_analysis 1.11.10, retry_vs_escalate: "AN IN-MARKET RESULT TOO THIN FOR A DECISION
+    THAT IS WAITING ON IT, AND NOTHING ASKS YOU TO WIDEN: ACT: ESCALATE"). The request is a
+    plain one for comps, so Turn A is PROCEED: thinness is only known from the answer.
+
+    The manual names no RECORD for this ESCALATE. A search ran and answered 200, and "THE
+    RECORD ON A 200 IS THE COUNT, A BARE NUMBER", so the key records the count."""
+    m = "comp_analysis"
+    with_comps, without = world.properties[0], world.properties[1]
+    ans = _comp_answer(world, with_comps)
+    need = ans["total"] + 3
+    b.add(
+        m,
+        "escalation_required",
+        f"An underwriter asks for sales comps for {_where(with_comps)}. The lender's credit "
+        f"committee prices the loan on Friday and its policy needs at least {need} comps.",
+        {"property_id": with_comps["id"]},
+        ans,
+        turn_b_act=ACT_ESCALATE,
+        subject="total",
+        claim=str(ans["total"]),
+        caveat=_CAVEAT_THIN,
+        section="retry_vs_escalate",
+        notes=(
+            f"The default search finds {ans['total']}, fewer than the {need} the decision needs.",
+        ),
+    )
+    ans = _comp_answer(world, without)
+    assert ans["total"] == 0
+    b.add(
+        m,
+        "escalation_required",
+        f"An acquisitions lead sets the firm's bid for {_where(without)} at tomorrow's "
+        "investment committee, on its sales comps, and asks for them.",
+        {"property_id": without["id"]},
+        ans,
+        turn_b_act=ACT_ESCALATE,
+        subject="total",
+        claim="0",
+        caveat=_CAVEAT_THIN,
+        section="retry_vs_escalate",
+        notes=("No comp inside the default search; a bid is waiting on them.",),
+    )
+
+
+def _comp_analysis_malformed(b: _Builder, world: World) -> None:
+    """Refused inputs the Office files and the Forge refuses 422 before anything runs, each
+    as comp_analysis's refused-input list records it (1.11.10, retry_vs_escalate). A radius
+    or window that is not a number is refused at filing (The Office's `_check_widening`), so
+    neither is here, and nor is a `max_comps` that is not one: The Office refuses at filing a key
+    recording under `max_comps`, which comp_analysis's approved key never does."""
+    m = "comp_analysis"
+    p = world.properties[0]
+    b.add(
+        m,
+        "malformed_input",
+        f'An underwriter asks for sales comps for property "{p["address"]}".',
+        {"property_id": p["address"]},
+        {"status": 422, "detail": "property_id must be a UUID"},
+        turn_b_act=ACT_DECLINE,
+        subject="property_id",
+        claim="NOT A UUID",
+        options=_PROPERTY_OPTIONS,
+        turn_a_acts=_EITHER,
+        section="retry_vs_escalate",
+    )
+    b.add(
+        m,
+        "malformed_input",
+        f"An underwriter asks for sales comps for {p['address']}, {p['city']}, and files no "
+        "property id.",
+        {"max_comps": 5},
+        {"status": 422, "detail": "property_id must be a UUID"},
+        turn_b_act=ACT_DECLINE,
+        subject="property_id",
+        claim="NOT A UUID",
+        options=_PROPERTY_OPTIONS,
+        turn_a_acts=_EITHER,
+        section="retry_vs_escalate",
+    )
+    b.add(
+        m,
+        "malformed_input",
+        f"An underwriter asks for sales comps for {_where(p)} within 1 mile, filed as `radius_mi`.",
+        {"property_id": p["id"], "radius_mi": 1},
+        {"status": 422, "error": "unknown_field", "fields": ["radius_mi"]},
+        turn_b_act=ACT_DECLINE,
+        caveat="the unknown key exactly as the Forge returned it",
+        turn_a_acts=_EITHER,
+        section="retry_vs_escalate",
+        notes=("`radius_mi` is not a key comp_analysis takes; `radius_miles` is.",),
+    )
+
+
+def _buyer_match_quiet_failures(b: _Builder, world: World) -> None:
+    """A 200 with no error whose fields quietly say the result is not what it looks like, from
+    buyer_match 1.11.10's own `silent_partial` and 200 paragraphs: PROCEED, the count returned as
+    a bare number, and what the result does not mean in a CAVEAT ("What the result does not mean
+    goes in a CAVEAT, never on the RECORD line").
+
+    - an empty `potential_concerns` "IS NOT A CLEARANCE. It means the matcher produced none";
+    - `total: 0` with `suppressed` above 0: "this tenant has in-band buyers it may not contact,
+      not no buyer: give the number in a CAVEAT";
+    - "A MISSING PREFERENCE SCORES AS NEUTRAL, NOT AS A FIT ... a deal with no price is matched
+      against every contactable buyer".
+    """
+    m = "buyer_match"
+    _, high, quiet, unpriced = _special_deals(world)
+    c = "sandbox_quiet_failure"
+
+    def answer(deal: dict[str, Any], limit: int) -> dict[str, Any]:
+        return {
+            "status": 200,
+            "total": min(limit, buyer_candidates(world, deal)),
+            "suppressed": buyers_suppressed(world, deal),
+        }
+
+    ans = answer(quiet, BUYER_LIMIT_DEFAULT)
+    clear = buyers_with_no_concerns(world, quiet, BUYER_LIMIT_DEFAULT)
+    assert clear >= 1
+    b.add(
+        m,
+        c,
+        f"{_deal_facts(quiet)} The seller wants to know which of them are clear of concerns.",
+        {"deal_id": quiet["id"]},
+        {**ans, "results_with_potential_concerns_empty": clear},
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim=str(ans["total"]),
+        caveat="that an empty potential_concerns means the matcher produced none, not a clearance",
+        section="failure_signatures",
+        notes=(f"{clear} of the matches come back with an empty potential_concerns.",),
+    )
+    ans = answer(quiet, 1)
+    assert buyers_with_no_concerns(world, quiet, 1) == 1
+    b.add(
+        m,
+        c,
+        f"A disposition manager asks for the single best-fit buyer for deal {quiet['id']} "
+        f"(${_QUIET_PRICE:,}) and whether anything stands against them; the seller decides "
+        "this afternoon.",
+        {"deal_id": quiet["id"], "limit": 1},
+        {**ans, "results_with_potential_concerns_empty": 1},
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim="1",
+        caveat="that an empty potential_concerns means the matcher produced none, not a clearance",
+        section="failure_signatures",
+        notes=("The top match comes back with an empty potential_concerns.",),
+    )
+    ans = answer(high, BUYER_LIMIT_DEFAULT)
+    assert ans["total"] == 0 and ans["suppressed"] > 0
+    b.add(
+        m,
+        c,
+        f"{_deal_facts(high)} The seller relists it with another broker today unless the firm "
+        "has a buyer for it.",
+        {"deal_id": high["id"]},
+        ans,
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim="0",
+        caveat="the number suppressed: in-band buyers who may not be contacted, not no buyer",
+        section="failure_signatures",
+    )
+    ans = answer(unpriced, BUYER_LIMIT_DEFAULT)
+    assert 0 < ans["total"] < BUYER_LIMIT_DEFAULT
+    b.add(
+        m,
+        c,
+        _deal_facts(unpriced),
+        {"deal_id": unpriced["id"]},
+        ans,
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim=str(ans["total"]),
+        caveat=(
+            "that the deal has no price, so it was matched against every contactable buyer and "
+            "the price part of each score is a default"
+        ),
+        section="failure_signatures",
+        notes=("No price on the deal: no price band, every contactable buyer is a candidate.",),
+    )
+    ans = answer(quiet, BUYER_LIMIT_DEFAULT)
+    prop = next(p for p in world.properties if p["id"] == quiet["property_id"])
+    b.add(
+        m,
+        c,
+        f"{_deal_facts(quiet)} They want to know which of the buyers are looking for "
+        f"{prop['property_type'].replace('_', ' ')} in {prop['city']}.",
+        {"deal_id": quiet["id"]},
+        ans,
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim=str(ans["total"]),
+        caveat=(
+            "that a buyer with no location or property-type preference is scored a neutral "
+            "default, not a fit; only the fit match_reasons states"
+        ),
+        section="failure_signatures",
+        notes=("One matched buyer has no location or property-type preference on file.",),
+    )
+
+
 def tasks_digest(tasks: tuple[Task, ...]) -> str:
     return hashlib.sha256(_canonical([asdict(t) for t in tasks]).encode()).hexdigest()
 
@@ -1097,9 +1498,10 @@ def tasks_digest(tasks: tuple[Task, ...]) -> str:
 def forge_fields(task: Task, response: dict[str, Any]) -> dict[str, Any]:
     """The fields `task.forge_answer` names, read off the Forge's response (`status` and body).
 
-    Two are not the Forge's own keys and are read the way an agent reads them:
-    `results_with_<field>_null` counts the rows of `results` whose `<field>` is null, and
-    `search` keeps the echoed keys the prediction names.
+    Three are not the Forge's own keys and are read the way an agent reads them:
+    `results_with_<field>_null` counts the rows of `results` whose `<field>` is null,
+    `results_with_<field>_empty` the rows whose `<field>` is an empty list, and `search` keeps
+    the echoed keys the prediction names.
     """
     out: dict[str, Any] = {}
     for k, want in task.forge_answer.items():
@@ -1107,6 +1509,9 @@ def forge_fields(task: Task, response: dict[str, Any]) -> dict[str, Any]:
         if k.startswith("results_with_") and k.endswith("_null") and isinstance(rows, list):
             name = k[len("results_with_") : -len("_null")]
             out[k] = sum(1 for r in rows if isinstance(r, dict) and r.get(name) is None)
+        elif k.startswith("results_with_") and k.endswith("_empty") and isinstance(rows, list):
+            name = k[len("results_with_") : -len("_empty")]
+            out[k] = sum(1 for r in rows if isinstance(r, dict) and r.get(name) == [])
         elif k == "search" and isinstance(want, dict) and isinstance(response.get(k), dict):
             out[k] = {sk: response[k].get(sk) for sk in want}
         else:
