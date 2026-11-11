@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import Base
 from src.models.operation_run import OperationRun
 from src.models.sandbox_run import STEPS, SandboxRun, SandboxStep
-from src.services.forges.deal_desk_world import Task
+from src.services.forges.deal_desk_world import GENERATOR_VERSION, Task
 from src.services.sandbox import runner
 
 T0 = datetime(2026, 11, 10, 21, 0)
@@ -48,7 +48,7 @@ class FakeStack:
 
     def load_world(self, seed: int, path: Path) -> str:
         self.world = path
-        return f"world simforge-1.1.0-seed-{seed}: loaded"
+        return f"world simforge-{GENERATOR_VERSION}-seed-{seed}: loaded"
 
     def office_up(self, run_dir: Path) -> Path:
         tokens = run_dir / "tokens.env"
@@ -226,7 +226,7 @@ async def test_a_run_files_records_every_step_and_writes_its_page(
     approver = {s.actor for s in steps if s.step == "approved"}
     assert approver == {"sandbox-approver"}
     assert out.page and out.page.is_file() and run.runRef in out.page.read_text(encoding="utf-8")
-    assert stack.world and stack.world.name == "simforge-1.1.0-seed-0.json"
+    assert stack.world and stack.world.name == f"simforge-{GENERATOR_VERSION}-seed-0.json"
     assert ("POST", "/api/sandbox/runs/office-run-1/finish") in stack.calls
 
 

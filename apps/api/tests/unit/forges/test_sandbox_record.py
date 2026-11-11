@@ -10,7 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.models.sandbox_run import SandboxRun, SandboxStep
-from src.services.forges.deal_desk_world import Task, generate_tasks, generate_world
+from src.services.forges.deal_desk_world import (
+    GENERATOR_VERSION,
+    Task,
+    generate_tasks,
+    generate_world,
+)
 from src.services.operation.held_out_scoring import REASON_PROTOCOL_MULTIPLE_ACT
 from src.services.operation.submitted_scoring import (
     REASON_CAVEAT_ABSENT,
@@ -250,6 +255,6 @@ async def test_a_run_records_its_world(db_session: AsyncSession) -> None:
     run = await _open(db_session, *TASKS)
     assert run.runRef.startswith("sandbox-")
     assert run.forgeId == "cre-forge"
-    assert run.worldName == "simforge-1.1.0-seed-0"
+    assert run.worldName == f"simforge-{GENERATOR_VERSION}-seed-0"
     assert run.taskIds == [t.task_id for t in TASKS]
     assert run.scheduleOwner is None and run.status == "open"

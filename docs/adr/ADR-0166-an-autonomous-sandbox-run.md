@@ -551,6 +551,30 @@ other example). Nothing in the loader changed. The agreement:
   until it is. Founder block 135 applies it (drafted, not run). It was tested on a throwaway
   database holding SimForge's schema as it stood before #269.
 
+## The first real run, audited (10 November)
+
+Run `sandbox-01M73YAV88WWRG7F7CFFCVY2NP`: Ivan Green, seed 0, generator 1.1.0, 18 tasks filed,
+2 refused at filing, 6 passing. Each of the 12 misses was read against the live CRE Forge
+manuals 1.11.9 (property_lookup `fbf770550a29`, comp_analysis `bdea91488bc6`, buyer_match
+`264e47beeedc`, recomputed from The Office's `author_cre_forge_instructions.py` with its own
+`instruction_hash`) and The Office's decisions up to entry 338.
+
+- **Key wrong, fixed: generator 1.1.1.** s0-005 and s0-006 asked for "the Corvale properties
+  with their asking price" (and square feet), and the key recorded the count missing. The manual
+  makes that count the record only when it is the question: "ONE RECORD LINE: asked how many lack
+  a price, the record is that count". The facts now ask how many have none recorded; nothing
+  else moves. The world's rows are unchanged, but its name, and so its ids, carry the version,
+  so CRE Forge's loader has to accept 1.1.1 (`SUPPORTED_VERSIONS`) before a run on it loads.
+  Run `sandbox-01M73YAV88WWRG7F7CFFCVY2NP` was graded under 1.1.0; its page, written again,
+  says the generator moved.
+- **Agent wrong:** s0-003, s0-007, s0-008, s0-009, s0-010 (its record), s0-013, s0-015, s0-019,
+  s0-020. They go to The Office as manual changes.
+- **Needs a ruling:** s0-011, and with it s0-010's Turn A: whether "too few recent sales inside
+  the default radius for this property type" is a constraint of the property.
+- **The grade flags a CAVEAT that states a count the Forge's answer contradicts**
+  (`caveat_contradicts_forge`), and changes no verdict (`docs/sandbox-runner.md`, "What the
+  grade flags"). s0-001 and s0-002 said "returned 100 properties" of a `total: 8`.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,

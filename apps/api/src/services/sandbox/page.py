@@ -5,7 +5,8 @@ One HTML page per `SandboxRun`, built from its `SandboxStep`s and nothing else:
 - **Totals** per module and per agent: tasks, tasks finished, tasks passing, the Turn A and
   Turn B verdicts and the Forge mismatches. The turn counts are the run's own totals, written
   when it closed (or counted the same way while it is open).
-- **Every task**, one line each: its result and a one-line why for each miss.
+- **Every task**, one line each: its result and a one-line why for each miss, and for each
+  CAVEAT flagged because it states a count the Forge's answer contradicts (no verdict changes).
 - **Refused at filing by The Office**: the seed's tasks the Office would not file (ruled 10
   November). Never filed, so no agent saw them; counted against no agent.
 - **Then every task step by step**: the facts filed, the claim, Turn A expected and given, the
@@ -36,6 +37,7 @@ from src.models.sandbox_run import STEPS, SandboxRun, SandboxStep
 from src.services.forges.deal_desk_world import READ_MODULES, Task, TurnKey
 from src.services.sandbox.record import (
     ACT_PROCEED,
+    REASON_CAVEAT_CONTRADICTS,
     REASON_FORGE_DIFFERS,
     REFUSED_AT_FILING,
     VERDICT_NOT_GRADED,
@@ -109,11 +111,28 @@ def _value(value: Any) -> str:
     return json.dumps(value, sort_keys=True) if not isinstance(value, str) else value
 
 
-def why(reason: str, key: TurnKey | None, payload: Mapping[str, Any], task: Task | None) -> str:
+def why(
+    reason: str,
+    key: TurnKey | None,
+    payload: Mapping[str, Any],
+    task: Task | None,
+    forge: Mapping[str, Any] | None = None,
+) -> str:
     """One reason as one plain line, with the values compared. An unknown reason is shown as its
     code: the page never invents a cause."""
     if reason == REASON_FORGE_DIFFERS:
         return "not graded: the Forge answered otherwise than predicted, so the key does not apply"
+    if reason.startswith(f"{REASON_CAVEAT_CONTRADICTS}:"):
+        stated = reason.split(":", 1)[1]
+        counts = ", ".join(
+            f"{k} {_value(v)}"
+            for k, v in sorted((forge or {}).items())
+            if k == "total" or k == "suppressed" or k.endswith("_null")
+        )
+        return (
+            f'flagged, not failed: a CAVEAT says "{stated}"; the Forge\'s answer gives '
+            f"{counts or 'no such count'}"
+        )
     if reason.startswith("forge_field_differs:"):
         field = reason.split(":", 1)[1]
         predicted = task.forge_answer.get(field) if task else None
@@ -161,22 +180,46 @@ def why(reason: str, key: TurnKey | None, payload: Mapping[str, Any], task: Task
     return lines.get(reason, reason)
 
 
-def _step_whys(step: SandboxStep, tasks: Mapping[str, Task] | None) -> list[str]:
+def _step_whys(
+    step: SandboxStep,
+    tasks: Mapping[str, Task] | None,
+    forge: Mapping[str, Any] | None = None,
+    *,
+    only_flags: bool = False,
+) -> list[str]:
     if not step.reasons:
         return []
     task = tasks.get(step.taskId) if tasks else None
     key = None
     if task is not None and step.step in ("turn_a", "turn_b"):
         key = task.turn_a if step.step == "turn_a" else task.turn_b
-    return [why(r, key, step.payload or {}, task) for r in step.reasons]
+    return [
+        why(r, key, step.payload or {}, task, forge)
+        for r in step.reasons
+        if not only_flags or is_flag(r)
+    ]
+
+
+def is_flag(reason: str) -> bool:
+    """A reason shown on the page that is no miss: it changed no verdict."""
+    return reason.startswith(f"{REASON_CAVEAT_CONTRADICTS}:")
+
+
+def _forge_before(steps: Sequence[SandboxStep], turn_b: SandboxStep) -> Mapping[str, Any] | None:
+    answers = [s for s in steps if s.step == "forge_answer" and s.seq < turn_b.seq]
+    return (answers[-1].payload or {}) if answers else None
 
 
 def task_why(steps: Sequence[SandboxStep], tasks: Mapping[str, Task] | None) -> str:
-    """The one line for a task that missed: each miss, by the step it happened at."""
+    """The one line for a task: each miss, by the step it happened at, and each flag."""
     parts = []
     for s in steps:
+        forge = _forge_before(steps, s) if s.step == "turn_b" else None
         if s.step in ("turn_a", "turn_b") and s.verdict in ("FAIL", VERDICT_NOT_GRADED):
-            parts.append(f"{_STEP_TITLES[s.step]}: " + "; ".join(_step_whys(s, tasks)))
+            parts.append(f"{_STEP_TITLES[s.step]}: " + "; ".join(_step_whys(s, tasks, forge)))
+        elif s.step == "turn_b" and any(is_flag(r) for r in s.reasons or ()):
+            flags = _step_whys(s, tasks, forge, only_flags=True)
+            parts.append(f"{_STEP_TITLES[s.step]}: " + "; ".join(flags))
         elif s.step == "forge_answer" and s.forgeMatches is False:
             parts.append("Forge: " + "; ".join(_step_whys(s, tasks)))
     if not task_ended(steps):
@@ -251,7 +294,12 @@ def _answer_text(payload: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _step_row(step: SandboxStep, task: Task | None, tasks: Mapping[str, Task] | None) -> str:
+def _step_row(
+    step: SandboxStep,
+    task: Task | None,
+    tasks: Mapping[str, Task] | None,
+    forge: Mapping[str, Any] | None = None,
+) -> str:
     payload = step.payload or {}
     expected = given = ""
     if step.step == "filed":
@@ -287,7 +335,7 @@ def _step_row(step: SandboxStep, task: Task | None, tasks: Mapping[str, Task] | 
         + f"</td><td>{escape(_when(step.at))}</td><td>{escape(step.actor)}</td>"
         f"<td>{expected}</td><td>{given}</td>"
         f"<td class='r {cls}'>{escape(result)}</td>"
-        f"<td>{escape('; '.join(_step_whys(step, tasks)))}</td>"
+        f"<td>{escape('; '.join(_step_whys(step, tasks, forge)))}</td>"
         "</tr>"
     )
 
@@ -418,7 +466,10 @@ def render_run_page(
             f"<td>{escape((verdict.get('turn_b') or '-').replace('_', ' '))}</td>"
             f"<td class=r>{escape(result)}</td><td>{escape(line)}</td></tr>"
         )
-        body = "".join(_step_row(s, task, tasks) for s in mine)
+        body = "".join(
+            _step_row(s, task, tasks, _forge_before(mine, s) if s.step == "turn_b" else None)
+            for s in mine
+        )
         if not task_ended(mine):
             done = mine[-1].step if mine else None
             nxt = STEPS[STEPS.index(done) + 1] if done else STEPS[0]
@@ -476,7 +527,7 @@ agent's.</div>
 {_counts_table(run, by_task, tally, module_of)}
 <h2>Every task</h2>
 <table><tr><th>task</th><th>agent</th><th>Turn A</th><th>Turn B</th><th>result</th>
-<th>why (each miss)</th></tr>{"".join(index_rows)}</table>
+<th>why (each miss, and each flag)</th></tr>{"".join(index_rows)}</table>
 {_refused_section(refused, tasks)}
 {detail}
 </body></html>

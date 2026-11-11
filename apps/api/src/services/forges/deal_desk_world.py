@@ -57,7 +57,7 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.1.0"
+GENERATOR_VERSION = "1.1.1"
 
 #: The task classes this generator writes, and the only ones.
 TASK_CLASSES: tuple[str, ...] = ("happy_path", "partial_failure", "malformed_input")
@@ -714,6 +714,10 @@ def _property_lookup_tasks(b: _Builder, world: World) -> None:
     # missing fields is over the whole result and needs no page caveat.
     rows = lookup_matches(world, city)
     assert len(rows) <= PAGE_SIZE_CAP
+    # The facts ask for the count the key records. property_lookup's manual makes the count the
+    # record only when that is the question ("asked how many lack a price, the record is that
+    # count"); 1.1.0 asked for the properties with their price, which the manual answers with
+    # `total` (sandbox run sandbox-01M73YAV88WWRG7F7CFFCVY2NP, s0-005 and s0-006).
     for fld, subject in (
         ("asking_price", "asking_price_not_recorded"),
         ("square_feet", "square_feet_not_recorded"),
@@ -722,7 +726,8 @@ def _property_lookup_tasks(b: _Builder, world: World) -> None:
         b.add(
             m,
             "partial_failure",
-            f"An analyst asks for the {city} properties with their {fld.replace('_', ' ')}.",
+            f"An analyst asks how many of the {city} properties have no "
+            f"{fld.replace('_', ' ')} recorded.",
             {"query": city, "page_size": PAGE_SIZE_CAP},
             {
                 "status": 200,
