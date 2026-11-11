@@ -5,16 +5,27 @@
 # this on medlink-wholesale's docker-compose.sandbox.yml: its own project, containers, image
 # tag, volume (project-scoped), token and port (8013, the throwaway port The Office's guard
 # allows). The runner takes it down with its volume at the end.
-
-name: sf-runner-forge
+#
+# The project is per runner home (`runner.home_tag`), passed as SF_RUNNER_FORGE_PROJECT with
+# `-p`: two homes once shared `sf-runner-forge`, so one run's `down -v` could remove another's
+# stack (11 November). Each container is labelled with the home that started it, so a start
+# from another home can name who holds the throwaway ports.
 
 services:
   sandbox-db:
-    container_name: sf-runner-forge-db
+    container_name: ${SF_RUNNER_FORGE_PROJECT:?the runner sets it}-db
+    labels:
+      simforge.sandbox.home: ${SF_RUNNER_HOME:?the runner sets it}
   sandbox-redis:
-    container_name: sf-runner-forge-redis
+    container_name: ${SF_RUNNER_FORGE_PROJECT:?the runner sets it}-redis
+    labels:
+      simforge.sandbox.home: ${SF_RUNNER_HOME:?the runner sets it}
   backend:
-    image: sf-runner-forge-backend
-    container_name: sf-runner-forge-backend
+    image: ${SF_RUNNER_FORGE_PROJECT:?the runner sets it}-backend
+    container_name: ${SF_RUNNER_FORGE_PROJECT:?the runner sets it}-backend
+    labels:
+      simforge.sandbox.home: ${SF_RUNNER_HOME:?the runner sets it}
   gateway:
-    container_name: sf-runner-forge-gateway
+    container_name: ${SF_RUNNER_FORGE_PROJECT:?the runner sets it}-gateway
+    labels:
+      simforge.sandbox.home: ${SF_RUNNER_HOME:?the runner sets it}

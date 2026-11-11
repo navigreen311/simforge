@@ -78,7 +78,7 @@ class Schedule:
 
     owner: str
     at: str  # "HH:MM", local time; the OS scheduler fires it, the runner checks it
-    tasks: int
+    tasks: int | None  # None: all of the seed's tasks, at most MAX_TASKS
     set_at: str
     enabled: bool = True
     stopped_at: str | None = None
@@ -91,6 +91,12 @@ class Schedule:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Schedule:
         return cls(**data)
+
+
+def all_tasks(seed_tasks: int) -> int:
+    """What a run files when no task count is given: every task of its seed, at most
+    MAX_TASKS. A seed's last task is never left out by a default (11 November)."""
+    return min(seed_tasks, MAX_TASKS)
 
 
 def check_schedule(schedule: Schedule) -> list[Refusal]:
@@ -107,7 +113,7 @@ def check_schedule(schedule: Schedule) -> list[Refusal]:
             )
     except ValueError:
         found.append(Refusal("schedule_time_unreadable", f"{schedule.at!r} is not HH:MM"))
-    if not 1 <= schedule.tasks <= MAX_TASKS:
+    if schedule.tasks is not None and not 1 <= schedule.tasks <= MAX_TASKS:
         found.append(Refusal("over_task_cap", f"{schedule.tasks} tasks; 1 to {MAX_TASKS}"))
     return found
 
@@ -122,6 +128,10 @@ class Measured:
     lock_held_by: str | None = None
     busy_ports: tuple[int, ...] = ()
     missing: tuple[str, ...] = ()  # config, checkouts, the sandbox tables
+    #: (port, who holds it, whether that is another runner home's throwaway stack), per busy port
+    port_holders: tuple[tuple[int, str, bool], ...] = ()
+    #: a throwaway only: who holds the machine's one throwaway slot, if another run does
+    throwaway_held_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -184,8 +194,26 @@ def check_start(request: StartRequest, measured: Measured) -> list[Refusal]:
         found.append(
             Refusal("another_run", f"a sandbox run is in progress ({measured.lock_held_by})")
         )
+    if measured.throwaway_held_by:
+        found.append(
+            Refusal(
+                "throwaway_held",
+                f"another throwaway run holds the throwaway stacks ({measured.throwaway_held_by})",
+            )
+        )
+    holders = {port: (who, other) for port, who, other in measured.port_holders}
     for port in measured.busy_ports:
-        found.append(Refusal("port_in_use", f"127.0.0.1:{port} is already listening"))
+        who, other = holders.get(port, ("", False))
+        if other:
+            found.append(
+                Refusal(
+                    "throwaway_held",
+                    f"127.0.0.1:{port} is held by another runner home's throwaway stack: {who}",
+                )
+            )
+        else:
+            held = f", held by {who}" if who else ""
+            found.append(Refusal("port_in_use", f"127.0.0.1:{port} is already listening{held}"))
     for what in measured.missing:
         found.append(Refusal("missing", what))
     return found

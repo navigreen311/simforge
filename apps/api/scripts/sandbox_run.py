@@ -18,10 +18,14 @@ overrides; never under OneDrive). It holds `runner.env` (the three checkouts and
 written by hand), the generated `office.env`, `schedule.json`, the lock, and `runs/<when>/`
 with each run's world file, tokens, logs, `summary.json` and page.
 
+`--tasks` defaults to all of the seed's tasks, at most 60.
+
 `--throwaway` runs the same code on a throwaway copy of every stack (CRE Forge on 8013, the
-Office's Postgres on 55443, both removed after). It requires `--simforge-db-file`, a file
+Office's Postgres on 55443, both removed after), under compose projects of its runner home's
+own, and one throwaway at a time on the machine. It requires `--simforge-db-file`, a file
 holding the URL of a throwaway SimForge database (so no password is on a command line): a
-throwaway run never writes to SimForge's own database.
+throwaway run never writes to SimForge's own database. It still reads the live one, read-only,
+for the exam check: phi4 is shared, so a throwaway never runs while a real exam is open.
 """
 
 from __future__ import annotations
@@ -46,6 +50,10 @@ def _throwaway_database_first() -> None:
     if "--throwaway" in argv and "--simforge-db-file" in argv:
         path = Path(argv[argv.index("--simforge-db-file") + 1])
         if path.is_file():
+            # The exam check still reads the live database (`runner.live_database_url`).
+            os.environ.setdefault(
+                "SIMFORGE_SANDBOX_DATABASE_URL_BEFORE_THROWAWAY", os.environ.get("DATABASE_URL", "")
+            )
             os.environ["DATABASE_URL"] = path.read_text(encoding="utf-8").strip()
 
 
@@ -125,7 +133,6 @@ async def _measure_and_check(
                 "SimForge's SandboxRun and SandboxStep tables (migration "
                 "20261109000000 is not applied)"
             )
-        exam = await runner.exam_open(db)
         seed = args.seed
         if seed is None:
             seed = (
@@ -134,6 +141,7 @@ async def _measure_and_check(
                 else (await runner.next_seed(db) if tables else 0)
             )
         today = await runner.scheduled_today(db, datetime.now()) if scheduled and tables else []
+    exam = await runner.live_exam_open()
     now = datetime.now()
     free = runner.free_gb()
     loaded = runner.phi4_loaded()
@@ -145,16 +153,21 @@ async def _measure_and_check(
         runner.stop_phi4()
         time.sleep(5)
         free = runner.free_gb()
+    seed_tasks = len(generate_tasks(generate_world(seed)))
     want = schedule.tasks if scheduled and schedule else args.tasks
+    if want is None:
+        want = rules.all_tasks(seed_tasks)
     request = rules.StartRequest(
         starter=starter or "",
         tasks=want,
-        seed_tasks=len(generate_tasks(generate_world(seed))),
+        seed_tasks=seed_tasks,
         scheduled=scheduled,
         schedule=schedule,
         scheduled_today=today,
     )
     busy = tuple(p for p in (targets.ports() if targets else ()) if runner.port_busy(p))
+    holders = tuple((p, *runner.port_holder(p, targets)) for p in busy)
+    throwaway = targets is not None and targets.throwaway
     measured = rules.Measured(
         now=now,
         free_gb=free,
@@ -162,6 +175,8 @@ async def _measure_and_check(
         lock_held_by=runner.Lock(state).holder(),
         busy_ports=busy,
         missing=tuple(missing),
+        port_holders=holders,
+        throwaway_held_by=runner.throwaway_lock().holder() if throwaway else None,
     )
     found += rules.check_start(request, measured)
     return found, {
@@ -205,6 +220,10 @@ async def _start(args: argparse.Namespace, *, scheduled: bool) -> int:
     targets: runner.Targets = facts["targets"]
     lock = runner.Lock(state)
     lock.take(f"seed {facts['seed']} by {facts['starter']}")
+    # One throwaway per machine: its ports are every home's (released in `finally` below).
+    slot = runner.throwaway_lock() if targets.throwaway else None
+    if slot is not None:
+        slot.take(f"seed {facts['seed']} by {facts['starter']}", home=state)
     run_dir = state / "runs" / f"{datetime.now():%Y%m%d-%H%M%S}-seed-{facts['seed']}"
     run_dir.mkdir(parents=True, exist_ok=True)
     stack = runner.ProcessStack(targets, log)
@@ -228,6 +247,7 @@ async def _start(args: argparse.Namespace, *, scheduled: bool) -> int:
                 budget=budget,
                 log=log,
                 schedule_owner=facts["starter"] if scheduled else None,
+                exam_is_open=runner.live_exam_open,
                 stop_requested=stop_requested,
             )
     except Exception as exc:  # noqa: BLE001 - report it, then stop everything
@@ -237,14 +257,13 @@ async def _start(args: argparse.Namespace, *, scheduled: bool) -> int:
         log("9. stopping everything this run started")
         for said in stack.stop():
             log(f"   {said}")
-        from src.services.sandbox.runner import exam_open
-
-        async with SessionLocal() as db:
-            exam = await exam_open(db)
+        exam = await runner.live_exam_open()
         if runner.phi4_loaded() and not exam and rules.in_sweep(datetime.now()) is None:
             runner.stop_phi4()
             log("   the phi4 rule: unloaded phi4 (no exam open, outside the sweeps)")
         lock.release()
+        if slot is not None:
+            slot.release()
         _stop_file().unlink(missing_ok=True)
         summary = {
             "outcome": outcome.as_dict() if outcome else None,
@@ -311,8 +330,9 @@ def _schedule(args: argparse.Namespace) -> int:
             ]
         )
     write_schedule(schedule)
+    many = "all of the seed's" if args.tasks is None else str(args.tasks)
     log(
-        f"schedule set by {args.as_}: business days at {args.at}, {args.tasks} tasks "
+        f"schedule set by {args.as_}: business days at {args.at}, {many} tasks "
         f"({home() / 'schedule.json'})"
     )
     _register(schedule, enable=True, registered=args.register)
@@ -358,13 +378,13 @@ def _register(schedule: rules.Schedule, *, enable: bool, registered: bool) -> No
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("check", "start"):
         p = sub.add_parser(name)
         p.add_argument("--as", dest="as_", required=True, choices=STARTERS)
-        p.add_argument("--tasks", type=int, default=20)
+        p.add_argument("--tasks", type=int, help="default: all of the seed's tasks, at most 60")
         p.add_argument("--seed", type=int)
     for p in (sub.choices["check"], sub.choices["start"], sub.add_parser("scheduled")):
         p.add_argument("--throwaway", action="store_true")
@@ -377,10 +397,14 @@ def main(argv: list[str] | None = None) -> int:
     sch.add_argument("action", choices=("set", "show", "stop"))
     sch.add_argument("--as", dest="as_")
     sch.add_argument("--at", default="10:05")
-    sch.add_argument("--tasks", type=int, default=20)
+    sch.add_argument("--tasks", type=int, help="default: all of the seed's tasks, at most 60")
     sch.add_argument("--seed", type=int)
     sch.add_argument("--register", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     if args.command == "stop":
         path = _stop_file()
@@ -400,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
         if (engine.url.host, engine.url.port) != (wanted.hostname, wanted.port):
             why = "SimForge's settings were read before the throwaway database was set"
             return _report([rules.Refusal("throwaway_database_not_in_use", why)])
-    for name, default in (("seed", None), ("tasks", 0), ("as_", None)):
+    for name, default in (("seed", None), ("tasks", None), ("as_", None)):
         if not hasattr(args, name):
             setattr(args, name, default)
     if args.command == "check":

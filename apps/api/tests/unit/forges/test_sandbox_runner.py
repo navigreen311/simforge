@@ -197,6 +197,7 @@ async def _drive(
         budget=budget or runner.Budget(max_ticks=40, max_minutes=60, poll_seconds=30),
         log=lambda _m: None,
         clock=clock or FakeClock([]),
+        exam_is_open=lambda: runner.exam_open(db),
         stop_requested=stop,
     )
 
