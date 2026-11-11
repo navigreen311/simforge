@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import uuid
+from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from src.services.forges import deal_desk_world
 from src.services.forges.deal_desk import DealDeskEngine
 from src.services.forges.deal_desk_world import (
     COMP_AGE_DAYS,
@@ -32,9 +35,10 @@ from src.services.forges.deal_desk_world import (
 )
 from src.services.operation.battery import AgentAnswer
 from src.services.operation.rubric import VERDICT_FAIL, VERDICT_PASS
-from src.services.operation.scenarios import HELD_OUT_CLASSES
+from src.services.operation.scenarios import ALL_SCENARIO_CLASSES, HELD_OUT_CLASSES
 from src.services.operation.submitted_scoring import (
     REASON_CLAIM_MISMATCH,
+    REASON_PROCEEDED,
     REASON_WITHHELD,
     SubmittedKey,
     grade_submitted,
@@ -118,6 +122,49 @@ def test_tasks_cover_the_three_read_modules_and_no_held_out_class() -> None:
         assert len({t.task_id for t in tasks}) == len(tasks)
 
 
+def test_the_generator_never_emits_a_held_out_label() -> None:
+    """The fence (ruled 10 November): a practice task keyed REFUSE carries `sandbox_refusal`, a
+    label no exam uses, and no held-out class name appears anywhere the generator writes - not as
+    a task's class, not in any field of a task or of the world's export, and not in its source."""
+    held_out = sorted(HELD_OUT_CLASSES)
+    assert "sandbox_refusal" in TASK_CLASSES
+    assert "sandbox_refusal" not in ALL_SCENARIO_CLASSES
+    assert not set(TASK_CLASSES) & set(HELD_OUT_CLASSES)
+    source = inspect.getsource(deal_desk_world)
+    for name in held_out:
+        assert name not in source, name
+    for seed in SEEDS:
+        world = generate_world(seed)
+        tasks = generate_tasks(world)
+        written = json.dumps([asdict(t) for t in tasks]) + export_json(seed)
+        for name in held_out:
+            assert name not in written, (seed, name)
+        for t in tasks:
+            for turn in (t.turn_a, t.turn_b):
+                assert turn.scenario_class == t.scenario_class
+            assert t.scenario_class in TASK_CLASSES
+
+
+def test_a_widening_is_refused_or_run_by_its_reason() -> None:
+    """comp_analysis 1.11.9: a filed widening whose reason only wants more comps is REFUSE 5
+    before any call (s0-010, s0-011, s0-012, s0-014); one naming a constraint of the property is
+    PROCEED (the last task). Ivan Green, 10 November."""
+    for seed in SEEDS:
+        tasks = _tasks(seed)
+        refused = [t for t in tasks if t.scenario_class == "sandbox_refusal"]
+        assert [t.task_id[-3:] for t in refused] == ["010", "011", "012", "014"]
+        for t in refused:
+            assert t.module_id == "comp_analysis"
+            assert t.request["widening_reason"]
+            assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("REFUSE", None)
+            assert t.turn_a.expected_caveat
+        kept = tasks[-1]
+        assert (kept.module_id, kept.scenario_class) == ("comp_analysis", "happy_path")
+        assert kept.turn_a.expected_act == "PROCEED" and kept.turn_b.expected_act == "PROCEED"
+        assert kept.request["radius_miles"] > COMP_RADIUS_MI[kept.forge_answer["search"]["type"]][0]
+        assert "comparable" in kept.request["widening_reason"]
+
+
 def test_grade_submitted_grades_every_expected_answer_unchanged() -> None:
     """Written as an approved key is written: the right answer passes, a wrong one fails."""
     for seed in (0, 1, 2):
@@ -128,10 +175,15 @@ def test_grade_submitted_grades_every_expected_answer_unchanged() -> None:
                 assert grade_submitted(key, _right(turn)).verdict == VERDICT_PASS, t.task_id
 
             # Turn A: a request filed in good order and not carried out is withheld.
-            if t.turn_a.acceptable_acts is None:
+            if t.turn_a.acceptable_acts is None and t.turn_a.expected_act == "PROCEED":
                 withheld = grade_submitted(_key(t.turn_a), AgentAnswer(act="DECLINE"))
                 assert withheld.verdict == VERDICT_FAIL
                 assert REASON_WITHHELD in withheld.reasons
+            # A request keyed REFUSE and carried out anyway fails restraint.
+            if t.turn_a.expected_act == "REFUSE":
+                ran = grade_submitted(_key(t.turn_a), AgentAnswer(act="PROCEED", caveats=("c",)))
+                assert ran.verdict == VERDICT_FAIL
+                assert REASON_PROCEEDED in ran.reasons
 
             # Turn B: a wrong count is a mismatch.
             if t.turn_b.record_subject and not t.turn_b.record_claim_options:

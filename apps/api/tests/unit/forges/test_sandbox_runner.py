@@ -18,7 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import Base
 from src.models.operation_run import OperationRun
 from src.models.sandbox_run import STEPS, SandboxRun, SandboxStep
-from src.services.forges.deal_desk_world import GENERATOR_VERSION, Task
+from src.services.forges.deal_desk_world import (
+    GENERATOR_VERSION,
+    Task,
+    generate_tasks,
+    generate_world,
+)
 from src.services.sandbox import runner
 
 T0 = datetime(2026, 11, 10, 21, 0)
@@ -203,8 +208,9 @@ async def _steps(db: AsyncSession) -> list[SandboxStep]:
 def test_tasks_are_chosen_one_module_at_a_time() -> None:
     tasks = runner.choose_tasks(0)
     assert [t.module_id for t in tasks[:3]] == ["property_lookup", "comp_analysis", "buyer_match"]
-    assert sorted(t.task_id for t in tasks) == sorted(t.task_id for t in tasks)  # all 20 kept
-    assert len(tasks) == 20
+    every = generate_tasks(generate_world(0))
+    assert sorted(t.task_id for t in tasks) == sorted(t.task_id for t in every)  # all kept
+    assert len(tasks) == 21
 
 
 async def test_a_run_files_records_every_step_and_writes_its_page(
