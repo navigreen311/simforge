@@ -41,7 +41,7 @@ import urllib.request
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Protocol
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
@@ -853,7 +853,7 @@ def _process_line(pid: int) -> str:
     words = done.stdout.strip().replace('"', "").split()
     if not words:
         return "a process"
-    shown = [Path(words[0]).name]
+    shown = [PureWindowsPath(words[0]).name]  # a Windows command line, wherever this runs
     if "-m" in words[1:-1]:
         shown += ["-m", words[words.index("-m", 1) + 1]]
     return " ".join(shown)
