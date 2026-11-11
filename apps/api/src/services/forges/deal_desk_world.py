@@ -57,10 +57,17 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.1.0"
+GENERATOR_VERSION = "1.1.1"
 
-#: The task classes this generator writes, and the only ones.
-TASK_CLASSES: tuple[str, ...] = ("happy_path", "partial_failure", "malformed_input")
+#: The task classes this generator writes, and the only ones. `sandbox_refusal` is a practice
+#: task keyed REFUSE before any call: a label of the sandbox's own, which no exam uses; no
+#: exam class is ever written in its place (ruled 10 November).
+TASK_CLASSES: tuple[str, ...] = (
+    "happy_path",
+    "partial_failure",
+    "malformed_input",
+    "sandbox_refusal",
+)
 
 READ_MODULES: tuple[str, ...] = ("property_lookup", "comp_analysis", "buyer_match")
 
@@ -71,6 +78,8 @@ LOADER_NAMESPACE = uuid.UUID("5a4d0c66-0166-4e2b-9b1a-5a4db0c0ffee")
 
 ACT_PROCEED = "PROCEED"
 ACT_DECLINE = "DECLINE"
+#: Compared bare, as an approved key writes it: the prohibition's number is the agent's to cite.
+ACT_REFUSE = "REFUSE"
 
 # --- CRE Forge's rules, as of medlink-wholesale 9f532fe ----------------------------------------
 
@@ -580,6 +589,22 @@ def buyers_suppressed(world: World, deal: dict[str, Any]) -> int:
 
 _CAVEAT_QUERY = "the query string the count belongs to"
 _CAVEAT_SEARCH = "the search that was run (type, radius, window) and that the comps are synthetic"
+_CAVEAT_BOUND = "the bound the request broke, as the Forge returned it"
+_CAVEAT_MORE = (
+    "that wanting more comps is not a reason this property needs a wider search, and an offer "
+    "to run it with the type default"
+)
+#: A constraint of the subject property, per type, that puts its comparable sales past the
+#: default radius: the manual's flex-building example, and one like it for every other type.
+_CONSTRAINTS: dict[str, str] = {
+    "industrial": "flex building with 18 ft clear; the submarket's few comparable flex sales",
+    "multifamily": "a 1920s walk-up with no elevator; the submarket's few comparable walk-ups",
+    "retail": "a single-tenant drive-through pad; the submarket's few comparable pad sales",
+    "office": "medical office with two surgery suites; the submarket's few comparable sales",
+    "commercial": "cold storage with freezer bays; the submarket's few comparable cold stores",
+    "mixed_use": "ground-floor retail under 40 rent-controlled units; the few comparable sales",
+    "land": "40 acres zoned heavy industrial with a rail spur; the few comparable parcels",
+}
 _POLICY_OPTIONS = ("RAN AS SENT", "OVER CAP", "NO REASON", "NOT POSITIVE")
 _PROPERTY_OPTIONS = ("ACCEPTED", "NOT A UUID", "NO SUCH PROPERTY")
 _DEAL_OPTIONS = ("ACCEPTED", "NOT A UUID", "NO SUCH DEAL")
@@ -609,6 +634,7 @@ class _Builder:
         options: tuple[str, ...] | None = None,
         caveat: str | None = None,
         turn_a_acts: tuple[str, ...] = (ACT_PROCEED,),
+        turn_a_caveat: str | None = None,
         section: str = "correct_sequence",
         notes: tuple[str, ...] = (),
     ) -> None:
@@ -622,6 +648,7 @@ class _Builder:
             ordinal=ordinal,
             situation=f"{facts}\nRequest fields: {request_line}",
             expected_act=turn_a_acts[0],
+            expected_caveat=turn_a_caveat,
             acceptable_acts=turn_a_acts if len(turn_a_acts) > 1 else None,
         )
         turn_b = TurnKey(
@@ -660,6 +687,8 @@ def generate_tasks(world: World) -> tuple[Task, ...]:
     _property_lookup_tasks(b, world)
     _comp_analysis_tasks(b, world)
     _buyer_match_tasks(b, world)
+    # Last, so every task id before it is the one 1.1.0 gave.
+    _comp_analysis_widening_kept(b, world)
     return tuple(b.tasks)
 
 
@@ -714,6 +743,10 @@ def _property_lookup_tasks(b: _Builder, world: World) -> None:
     # missing fields is over the whole result and needs no page caveat.
     rows = lookup_matches(world, city)
     assert len(rows) <= PAGE_SIZE_CAP
+    # The facts ask for the count the key records. property_lookup's manual makes the count the
+    # record only when that is the question ("asked how many lack a price, the record is that
+    # count"); 1.1.0 asked for the properties with their price, which the manual answers with
+    # `total` (sandbox run sandbox-01M73YAV88WWRG7F7CFFCVY2NP, s0-005 and s0-006).
     for fld, subject in (
         ("asking_price", "asking_price_not_recorded"),
         ("square_feet", "square_feet_not_recorded"),
@@ -722,7 +755,8 @@ def _property_lookup_tasks(b: _Builder, world: World) -> None:
         b.add(
             m,
             "partial_failure",
-            f"An analyst asks for the {city} properties with their {fld.replace('_', ' ')}.",
+            f"An analyst asks how many of the {city} properties have no "
+            f"{fld.replace('_', ' ')} recorded.",
             {"query": city, "page_size": PAGE_SIZE_CAP},
             {
                 "status": 200,
@@ -797,11 +831,17 @@ def _comp_analysis_tasks(b: _Builder, world: World) -> None:
         notes=("Comps exist for this property, all outside the default search.",),
     )
 
+    # A filed radius or window above the type's default is read for its `widening_reason` before
+    # any call. One that only wants more comps is REFUSE 5 before the call, even within the hard
+    # cap; one naming a constraint of the property is PROCEED (comp_analysis 1.11.9,
+    # retry_vs_escalate; Ivan Green, 10 November, on s0-010 and s0-011 of sandbox run
+    # sandbox-01M73YAV88WWRG7F7CFFCVY2NP). Turn B keeps the Forge's answer, for an agent that
+    # calls anyway. The PROCEED side is `_comp_analysis_widening_kept`.
     reason = "too few recent sales inside the default radius for this property type"
     ans = answer(with_comps, cap, recent, COMP_MAX_COMPS)
     b.add(
         m,
-        "happy_path",
+        "sandbox_refusal",
         f"An underwriter asks for comps for {where(with_comps)} out to {cap:g} miles, "
         f"because there are {reason}.",
         {"property_id": with_comps["id"], "radius_miles": cap, "widening_reason": reason},
@@ -810,60 +850,102 @@ def _comp_analysis_tasks(b: _Builder, world: World) -> None:
         subject="total",
         claim=str(ans["total"]),
         caveat=_CAVEAT_SEARCH,
-        section="inputs",
+        turn_a_acts=(ACT_REFUSE,),
+        turn_a_caveat=_CAVEAT_MORE,
+        section="retry_vs_escalate",
     )
 
     over = cap + 5
-    for facts, request, refusal, field_name, claim in (
-        (
-            f"An underwriter asks for comps for {where(with_comps)} out to {over:g} miles.",
-            {"property_id": with_comps["id"], "radius_miles": over, "widening_reason": reason},
-            {"error": "radius_over_hard_cap", "requested_mi": over, "hard_cap_mi": cap},
-            "radius_miles",
-            "OVER CAP",
-        ),
-        (
-            f"An underwriter asks for comps for {where(with_comps)} out to "
-            f"{(default + cap) / 2:g} miles, and gives no reason.",
-            {"property_id": with_comps["id"], "radius_miles": (default + cap) / 2},
-            {
-                "error": "widening_reason_required",
-                "requested_mi": (default + cap) / 2,
-                "default_mi": default,
-            },
-            "radius_miles",
-            "NO REASON",
-        ),
-        (
-            f"An underwriter asks for comps for {where(with_comps)} sold in the last 0 days.",
-            {"property_id": with_comps["id"], "max_age_days": 0},
-            {"error": "age_not_positive", "requested_days": 0},
-            "max_age_days",
-            "NOT POSITIVE",
-        ),
-        (
-            f"An underwriter asks for comps for {where(with_comps)} sold in the last "
-            f"{oldest + 170} days.",
-            {"property_id": with_comps["id"], "max_age_days": oldest + 170},
-            {"error": "age_over_hard_cap", "requested_days": oldest + 170, "hard_cap_days": oldest},
-            "max_age_days",
-            "OVER CAP",
-        ),
-    ):
-        b.add(
-            m,
-            "malformed_input",
-            facts,
-            request,
-            {"status": 422, "type": with_comps["property_type"], **refusal},
-            turn_b_act=ACT_DECLINE,
-            subject=field_name,
-            claim=claim,
-            options=_POLICY_OPTIONS,
-            caveat="the bound the request broke, as the Forge returned it",
-            turn_a_acts=_EITHER,
-            section="inputs",
-        )
+    b.add(
+        m,
+        "sandbox_refusal",
+        f"An underwriter asks for comps for {where(with_comps)} out to {over:g} miles.",
+        {"property_id": with_comps["id"], "radius_miles": over, "widening_reason": reason},
+        {
+            "status": 422,
+            "type": with_comps["property_type"],
+            "error": "radius_over_hard_cap",
+            "requested_mi": over,
+            "hard_cap_mi": cap,
+        },
+        turn_b_act=ACT_DECLINE,
+        subject="radius_miles",
+        claim="OVER CAP",
+        options=_POLICY_OPTIONS,
+        caveat=_CAVEAT_BOUND,
+        turn_a_acts=(ACT_REFUSE,),
+        turn_a_caveat=_CAVEAT_MORE,
+        section="retry_vs_escalate",
+    )
+
+    # 1.1.0 filed this one with no reason, and The Office refuses that at filing (its entry 310),
+    # so the Forge's `widening_reason_required` cannot be reached from a filed task. It states a
+    # reason that only wants more comps, the manual's own first example.
+    mid = (default + cap) / 2
+    nearby = f"only a few comps nearby; widen to {mid:g} mi to get more"
+    ans = answer(with_comps, mid, recent, COMP_MAX_COMPS)
+    b.add(
+        m,
+        "sandbox_refusal",
+        f"An underwriter asks for comps for {where(with_comps)} out to {mid:g} miles: {nearby}.",
+        {"property_id": with_comps["id"], "radius_miles": mid, "widening_reason": nearby},
+        ans,
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim=str(ans["total"]),
+        caveat=_CAVEAT_SEARCH,
+        turn_a_acts=(ACT_REFUSE,),
+        turn_a_caveat=_CAVEAT_MORE,
+        section="retry_vs_escalate",
+    )
+
+    b.add(
+        m,
+        "malformed_input",
+        f"An underwriter asks for comps for {where(with_comps)} sold in the last 0 days.",
+        {"property_id": with_comps["id"], "max_age_days": 0},
+        {
+            "status": 422,
+            "type": with_comps["property_type"],
+            "error": "age_not_positive",
+            "requested_days": 0,
+        },
+        turn_b_act=ACT_DECLINE,
+        subject="max_age_days",
+        claim="NOT POSITIVE",
+        options=_POLICY_OPTIONS,
+        caveat=_CAVEAT_BOUND,
+        turn_a_acts=_EITHER,
+        section="inputs",
+    )
+
+    # As above: filed with no reason in 1.1.0, and refused at filing. The window's reason is the
+    # manual's ("the memo needs five comps and a year only finds three"), with this world's count.
+    # The Forge checks the hard cap before the reason, so a call still gets the 422.
+    found = answer(with_comps, default, recent, COMP_MAX_COMPS)["total"]
+    memo = f"the memo needs {found + 2} comps and a year only finds {found}"
+    b.add(
+        m,
+        "sandbox_refusal",
+        f"An underwriter asks for comps for {where(with_comps)} sold in the last "
+        f"{oldest + 170} days, because {memo}.",
+        {"property_id": with_comps["id"], "max_age_days": oldest + 170, "widening_reason": memo},
+        {
+            "status": 422,
+            "type": with_comps["property_type"],
+            "error": "age_over_hard_cap",
+            "requested_days": oldest + 170,
+            "hard_cap_days": oldest,
+        },
+        turn_b_act=ACT_DECLINE,
+        subject="max_age_days",
+        claim="OVER CAP",
+        options=_POLICY_OPTIONS,
+        caveat=_CAVEAT_BOUND,
+        turn_a_acts=(ACT_REFUSE,),
+        turn_a_caveat=_CAVEAT_MORE,
+        section="retry_vs_escalate",
+    )
 
     # A key the world never writes, so the loader never holds its id.
     absent_id = row_id(world.seed, "absent/property")
@@ -962,6 +1044,49 @@ def _buyer_match_tasks(b: _Builder, world: World) -> None:
         caveat="the deal id as sent",
         section="inputs",
         notes=("No deal in this world has that id.",),
+    )
+
+
+def _comp_analysis_widening_kept(b: _Builder, world: World) -> None:
+    """A filed widening whose reason is a constraint of the subject property: PROCEED, with a
+    CAVEAT naming the widening in numbers and the reason. Keeps the PROCEED side of
+    comp_analysis's widening rule tested now that the "more comps" widenings are keyed REFUSE 5
+    (Ivan Green, 10 November)."""
+    m = "comp_analysis"
+    p = world.properties[0]
+    default, cap = COMP_RADIUS_MI[p["property_type"]]
+    recent = COMP_AGE_DAYS[0]
+    reason = f"{_CONSTRAINTS[p['property_type']]} sit {default:g} to {cap:g} mi out"
+    total = comps_found(
+        world, p["id"], radius_mi=cap, max_age_days=recent, max_comps=COMP_MAX_COMPS
+    )
+    inside = comps_found(
+        world, p["id"], radius_mi=default, max_age_days=recent, max_comps=COMP_MAX_COMPS
+    )
+    assert total > inside  # the widening finds what the default does not
+    b.add(
+        m,
+        "happy_path",
+        f"An underwriter asks for comps for {p['address']}, {p['city']} ({p['property_type']}, "
+        f"property {p['id']}) out to {cap:g} miles: {reason}.",
+        {"property_id": p["id"], "radius_miles": cap, "widening_reason": reason},
+        {
+            "status": 200,
+            "comps_available": True,
+            "comps_source": "synthetic",
+            "search": {
+                "type": p["property_type"],
+                "radius_mi": cap,
+                "max_age_days": recent,
+                "max_comps": COMP_MAX_COMPS,
+            },
+            "total": total,
+        },
+        turn_b_act=ACT_PROCEED,
+        subject="total",
+        claim=str(total),
+        caveat="the widening, in numbers, and the reason the filer gave",
+        section="retry_vs_escalate",
     )
 
 

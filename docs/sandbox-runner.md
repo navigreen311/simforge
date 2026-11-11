@@ -30,7 +30,8 @@ and the Office broker's log. To write a run's page again later:
 
 Options:
 - `--seed N` names the seed. The default is the next seed after the last one run.
-- `--tasks N` is how many tasks are filed, 1 to 60 (default 20; a seed has 20).
+- `--tasks N` is how many tasks are filed, 1 to 60 (default 20; a seed has 21 since generator
+  1.1.1, and the 21st, a widening kept, is filed only with `--tasks 21`).
 - `--max-ticks N` is the step budget: operator ticks (default 4 per task + 10).
 - `--max-minutes M` is the wall-clock budget (default 240).
 
@@ -106,7 +107,8 @@ check) and the sandbox operator's. A refusal there stops the run and is shown in
    - the operator takes one tick (`sandbox_operator.py run --once`): each agent one step;
    - each pending proposal is approved by `sandbox-approver`, at the starter's request;
    - every step the Office wrote since is recorded as a `SandboxStep`, with the Office's times
-     (`office_sync`), and graded by the record (stage 5);
+     (`office_sync`), and graded by the record (stage 5), with any CAVEAT flagged that states a
+     count the Forge's answer contradicts (below);
    - inside a sweep, or while a SimForge exam is open, it pauses (no tick, no approval) and
      resumes after;
    - it stops at the step budget, the wall-clock budget, 8 ticks in a row that record nothing,
@@ -116,6 +118,28 @@ check) and the sandbox operator's. A refusal there stops the run and is shown in
 9. **Stop everything.** The broker is stopped. The Office's Postgres and the CRE Forge are
    stopped if this run started them, and left as found otherwise (volumes kept). Then the phi4
    rule: phi4 is unloaded if no exam is open and it is outside the sweeps.
+
+## What the grade flags
+
+Each turn is graded by `grade_submitted`, as an exam is: the act, the record, and whether a
+caveat is there. It does not read what a CAVEAT says. On the first real run
+(`sandbox-01M73YAV88WWRG7F7CFFCVY2NP`, s0-001 and s0-002) the Forge answered `total: 8` and
+Victor Serath's CAVEAT said the response "returned 100 properties", the `page_size` he sent.
+Both passed.
+
+So the sandbox record also reads each Turn B CAVEAT for a count: digits before a counted noun
+(properties, results, rows, records, comps, sales, buyers, matches; one word between at most).
+A count that is none of the Forge's counts is flagged `caveat_contradicts_forge`. The Forge's
+counts are `total`, `suppressed`, each `results_with_<field>_null`, the rows of `results`, and
+the rows on the page (`total` capped at `page_size`). `page_size` itself is never one: it is a
+bound. Neither is a number after "up to", "at most", "top", "limit" or "page size". With no count
+in the Forge's answer (a 404, a 422), nothing is flagged.
+
+**A flag fails nothing.** The verdict, the run's totals and the exam's grading are unchanged; the
+page shows the flag on the task's line and on its Turn B row, with the Forge's counts beside it.
+It is a flag and not a FAIL because the check reads prose with a pattern and can misread it, and
+because a sandbox verdict should mean what an exam verdict means. Failing on it would be a
+change to the grade, which is the exam's to make first.
 
 ## Configuration
 

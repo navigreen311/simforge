@@ -48,8 +48,8 @@ CASES: dict[str, str] = {
     "s0-007": "pass",
     "s0-008": "no_caveat",
     "s0-009": "forge_differs",
-    "s0-011": "declined_at_turn_a",
-    "s0-012": "claim_not_offered",
+    "s0-013": "declined_at_turn_a",
+    "s0-015": "claim_not_offered",
     "s0-016": "pass",
     "s0-017": "wrong_subject",
     "s0-018": "unreadable",
@@ -121,7 +121,7 @@ async def record_demo_run(db: AsyncSession) -> SandboxRun:
         await step("filed", "Ivan Green", {"facts": task.facts, "request": task.request})
         await step("claimed", agent, minute=1)
         if case in ("withheld_at_turn_a", "declined_at_turn_a"):
-            # The same answer twice: s0-005's key expects PROCEED, s0-011's allows DECLINE.
+            # The same answer twice: s0-005's key expects PROCEED, s0-013's allows DECLINE.
             await step("turn_a", agent, {"act": "DECLINE", "caveats": []}, minute=2)
             continue
         await step("turn_a", agent, {"act": "PROCEED", "caveats": []}, minute=2)

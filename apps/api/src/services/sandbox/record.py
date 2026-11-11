@@ -15,7 +15,8 @@ task takes in the sandbox (`STEPS`) is recorded in order as a `SandboxStep`:
 - **turn_b**: the agent's ACT and RECORD on that answer, graded against the Turn B key. If the
   Forge answered something else than predicted, the key was written for an answer the agent never
   saw, so the turn is NOT_GRADED with `forge_answer_differs_from_prediction`: a miss on the
-  Forge's side, never the agent's.
+  Forge's side, never the agent's. A CAVEAT that states a count the Forge's answer contradicts
+  is flagged (`caveat_contradicts_forge`), whatever the verdict, and changes no verdict.
 
 The expected answers are the generator's (`deal_desk_world`), regenerated from the seed. A run
 records the generator version and both digests when it opens, and no turn is graded once the
@@ -32,6 +33,7 @@ Answers arrive structured, as The Office's task loop records them: an act, a rec
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -127,6 +129,64 @@ def read_answer(payload: Mapping[str, Any]) -> TurnAnswer | ProtocolViolation:
         pair = (str(record["subject"]), str(record["claim"]))
     caveats = tuple(str(c) for c in payload.get("caveats") or ())
     return TurnAnswer(act=act, record=pair, caveats=caveats)
+
+
+#: A Turn B reason that flags, and never fails: a CAVEAT gave a count the Forge's answer
+#: contradicts. `grade_submitted` does not read CAVEAT text, and the exam's grade is unchanged.
+REASON_CAVEAT_CONTRADICTS = "caveat_contradicts_forge"
+
+#: A count in a CAVEAT is a number followed (one word between at most) by one of these.
+_COUNTED = (
+    "properties|property|results|result|rows|row|records|record|comps|comp|comparables|"
+    "comparable|sales|sale|buyers|buyer|matches|match"
+)
+_COUNT = re.compile(rf"(?<![\w.$/-])(\d[\d,]*)\s+(?:[a-z-]+\s+)?(?:{_COUNTED})\b", re.IGNORECASE)
+#: A number after one of these is a bound the request set, not a count of what came back.
+_BOUND = re.compile(
+    r"(up to|at most|no more than|max(imum)?( of)?|limit( of)?|top|page[ _]size( of)?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def forge_counts(forge: Mapping[str, Any]) -> list[int]:
+    """The counts the Forge's answer gives, from the fields the task kept (`forge_fields`):
+    `total`, `suppressed`, each `results_with_<field>_null`, the rows of `results`, and the rows
+    on the page (`total` capped at `page_size`). Never `page_size` itself: it is a bound."""
+    counts: list[int] = []
+    for k, v in forge.items():
+        if isinstance(v, bool) or not isinstance(v, int):
+            continue
+        if k in ("total", "suppressed") or (k.startswith("results_with_") and k.endswith("_null")):
+            counts.append(v)
+    if isinstance(forge.get("results"), list):
+        counts.append(len(forge["results"]))
+    total, size = forge.get("total"), forge.get("page_size")
+    if isinstance(total, int) and isinstance(size, int):
+        counts.append(min(total, size))
+    return counts
+
+
+def caveat_contradictions(forge: Mapping[str, Any], caveats: Sequence[str]) -> list[str]:
+    """Each count a CAVEAT states that is none of the Forge's counts, as a flag reason.
+
+    Sandbox run sandbox-01M73YAV88WWRG7F7CFFCVY2NP, s0-001: `total: 8`, and the CAVEAT said
+    "the response returned 100 properties" (the `page_size` sent). The task passed, because the
+    grade reads the act, the record and whether a caveat is there, not what it says. Only digits
+    are read, and only before a counted noun; a number after "up to", "top", "page size" and the
+    like is a bound. With no count in the Forge's answer, nothing is flagged.
+    """
+    counts = forge_counts(forge)
+    if not counts:
+        return []
+    out: list[str] = []
+    for caveat in caveats:
+        for m in _COUNT.finditer(caveat):
+            if _BOUND.search(caveat[: m.start()]):
+                continue
+            stated = int(m.group(1).replace(",", ""))
+            if stated not in counts:
+                out.append(f"{REASON_CAVEAT_CONTRADICTS}:{m.group(0)}")
+    return out
 
 
 def tasks_of(run: SandboxRun) -> dict[str, Task]:
@@ -301,6 +361,8 @@ async def record_step(
         else:
             graded = grade_submitted(submitted_key(task.turn_b), answer)
             verdict, reasons = graded.verdict, list(graded.reasons)
+        if isinstance(answer, TurnAnswer):
+            reasons += caveat_contradictions(mine[-1].payload or {}, answer.caveats)
 
     row = SandboxStep(
         sandboxRunId=run.id,

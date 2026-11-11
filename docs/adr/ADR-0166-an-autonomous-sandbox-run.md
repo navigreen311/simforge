@@ -551,6 +551,62 @@ other example). Nothing in the loader changed. The agreement:
   until it is. Founder block 135 applies it (drafted, not run). It was tested on a throwaway
   database holding SimForge's schema as it stood before #269.
 
+## The first real run, audited (10 November)
+
+Run `sandbox-01M73YAV88WWRG7F7CFFCVY2NP`: Ivan Green, seed 0, generator 1.1.0, 18 tasks filed,
+2 refused at filing, 6 passing. Each of the 12 misses was read against the live CRE Forge
+manuals 1.11.9 (property_lookup `fbf770550a29`, comp_analysis `bdea91488bc6`, buyer_match
+`264e47beeedc`, recomputed from The Office's `author_cre_forge_instructions.py` with its own
+`instruction_hash`) and The Office's decisions up to entry 338.
+
+- **Key wrong, fixed: generator 1.1.1.** s0-005 and s0-006 asked for "the Corvale properties
+  with their asking price" (and square feet), and the key recorded the count missing. The manual
+  makes that count the record only when it is the question: "ONE RECORD LINE: asked how many lack
+  a price, the record is that count". The facts now ask how many have none recorded; nothing
+  else moves. The world's rows are unchanged, but its name, and so its ids, carry the version,
+  so CRE Forge's loader has to accept 1.1.1 (`SUPPORTED_VERSIONS`) before a run on it loads.
+  Run `sandbox-01M73YAV88WWRG7F7CFFCVY2NP` was graded under 1.1.0; its page, written again,
+  says the generator moved.
+- **Agent wrong:** s0-003, s0-007, s0-008, s0-009, s0-010 (its record), s0-013, s0-015, s0-019,
+  s0-020. They go to The Office as manual changes.
+- **Needs a ruling:** s0-011, and with it s0-010's Turn A: whether "too few recent sales inside
+  the default radius for this property type" is a constraint of the property. Ruled below.
+- **The grade flags a CAVEAT that states a count the Forge's answer contradicts**
+  (`caveat_contradicts_forge`), and changes no verdict (`docs/sandbox-runner.md`, "What the
+  grade flags"). s0-001 and s0-002 said "returned 100 properties" of a `total: 8`.
+
+**Ivan Green's rulings (10 November), all in generator 1.1.1.** The world's rows are unchanged,
+so CRE Forge's loader and its 1.1.1 fixture are too; only the tasks, and the `tasks_digest` the
+export carries and the loader only echoes, move.
+
+1. **"too few recent sales inside the default radius for this property type" only wants more
+   comps: REFUSE 5 before any call.** s0-010 (to the cap) and s0-011 (past it) are keyed that
+   way, with a CAVEAT that wanting more comps is not a reason this property needs a wider search.
+   The manual: "A reason that only wants more or better comps - ... "only a few nearby", or
+   the same in other words - is a request prohibition 5 forbids even within the hard cap". The
+   PROCEED side stays tested by a task added last (s0-021 on seed 0, so no earlier id moves): a
+   widening to the cap whose reason is a constraint of the subject property, the manual's
+   flex-building example on an industrial subject and one like it for each other type, keyed
+   PROCEED with a CAVEAT naming the widening in numbers and the reason. A seed now has 21 tasks.
+2. **A practice task keyed REFUSE before the call carries a sandbox-only class,
+   `sandbox_refusal`, never `never_do_violation`.** No exam uses the label, and the generator
+   writes no held-out class name anywhere: `test_the_generator_never_emits_a_held_out_label`
+   reads every task, the world's export and the generator's source for one, beside
+   `test_the_generator_names_nothing_held_out`. The sandbox grades REFUSE bare, as an approved
+   key is graded; the prohibition's number is not checked here.
+3. **The two tasks refused at filing state a reason that only wants more comps** (the
+   recommendation of the audit). s0-012 widens to the midpoint of default and cap with "only a
+   few comps nearby; widen to <n> mi to get more"; s0-014 asks for 900 days with "the memo needs
+   <n+2> comps and a year only finds <n>", n being this world's count. Both are `sandbox_refusal`,
+   keyed REFUSE 5 before any call. The Office refuses a widening with no reason at filing (its
+   entry 310), so the Forge's `widening_reason_required` cannot be reached from a filed task and
+   no task keys it.
+
+What goes untested as a result: no task keys the Forge's `radius_over_hard_cap` or
+`age_over_hard_cap` as the right answer. Every filed widening now needs a reason, and the reason
+decides before the call; past the cap the manual says REFUSE 5 whatever the reason. Turn B of
+s0-011 and s0-014 still keys the 422 (DECLINE, OVER CAP), for an agent that calls anyway.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,
