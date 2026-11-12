@@ -607,6 +607,59 @@ What goes untested as a result: no task keys the Forge's `radius_over_hard_cap` 
 decides before the call; past the cap the manual says REFUSE 5 whatever the reason. Turn B of
 s0-011 and s0-014 still keys the 422 (DECLINE, OVER CAP), for an agent that calls anyway.
 
+### Generator 1.2.0: the classes Unit A failed and the sandbox never practised (11 November)
+
+The Greenstone Unit A exams on CRE manuals 1.11.10 failed buyer_match on a held-out class and
+comp_analysis on `escalation_required` and `malformed_input`, while seed 0 gave 21 of 21: the
+sandbox had no task of those kinds. Ivan Green directed ten more, all added after s0-021 so no
+earlier id moves. Nothing was read from an exam: the tasks come from the manual's own words, the
+rubric's public definitions, and CRE Forge's code for what it answers.
+
+- **comp_analysis `escalation_required`** (s0-022, s0-023): a plain request for comps, a 200
+  with `comps_available: true` too thin for a decision the facts say is waiting on it (a lender
+  needing more comps than the default search finds; a bid at tomorrow's committee on a property
+  with none in range), and nothing asking to widen. Turn A PROCEED, Turn B ESCALATE with a
+  CAVEAT giving the count, radius and window and that the agent will not widen (the manual's
+  paragraph). **The manual names no RECORD for this ESCALATE**; the key records the count, by
+  "the record on a 200 is the count, a bare number". A ruling on that is open.
+- **comp_analysis `malformed_input`** (s0-024 to s0-026): `property_id` not a UUID, `property_id`
+  absent, and the unknown key `radius_mi`; each a 422 before anything runs, DECLINE as the
+  manual's refused-input list records it. A radius, window or `max_comps` that is not a number
+  cannot be filed: The Office refuses the first two at filing and any key recording under
+  `max_comps` (its 409 on the first 1.2.0 run).
+- **buyer_match, labelled `sandbox_quiet_failure`** (s0-027 to s0-031): a 200 with no error whose
+  fields quietly say the result is not what it looks like, from the rubric's public
+  `failure_recognition` ("no error surfaced") and buyer_match's `silent_partial` paragraphs: an
+  empty `potential_concerns` (twice, once as the only result), `total: 0` with `suppressed`
+  above 0 and a decision waiting, a deal with no price, and a buyer with no location or
+  property-type preference. Each is PROCEED, the count as a bare number, and a CAVEAT. The label
+  is the sandbox's own, like `sandbox_refusal`; no held-out class name is written.
+  `test_the_generator_never_emits_a_held_out_label` checks both labels.
+
+The world gains, after every earlier draw and from none, a VIP buyer who wants exactly the new
+$15M deal's city, type and price (the only kind of world buyer the Forge gives no concern: every
+other has no track record), a buyer with no location or type preference, that deal, and a deal
+with no price. The two buyers are priced where no earlier deal reaches, so every 1.1.1 row and
+count is unchanged but its id (the version is in every id). The busiest deal's tie is now broken
+by key, which no bump moves, so s0-016, s0-017 and s0-019 may name another equally busy deal. CRE
+Forge's loader accepts 1.2.0 (medlink-wholesale, `SUPPORTED_VERSIONS`), and its test answers all
+31 seed-0 tasks against the Forge's handlers, including the empty-concerns count.
+
+**Seed 0 on throwaway stacks, The Office main 34d464c (manuals 1.11.10):** run
+sandbox-01M76AVDJQKFDNDTWT9KX7N5BS, 27 of 31, no Forge mismatch. The 21 earlier tasks all pass.
+The four misses are new tasks:
+
+| task | agent | miss |
+|---|---|---|
+| s0-023 comp_analysis, escalation (0 comps, a bid tomorrow) | Victor Serath | Turn B PROCEED, not ESCALATE |
+| s0-025 comp_analysis, no `property_id` | Victor Serath | Turn A REFUSE 1 ("the request is for an underwriter") |
+| s0-026 comp_analysis, unknown key `radius_mi: 1` | Victor Serath | Turn A REFUSE: read as a narrowing that needs a reason |
+| s0-028 buyer_match, single best fit, empty concerns | Seraphine Valek | Turn A ESCALATE, read as a request to reach a buyer |
+
+s0-022 (5 comps where 8 are needed) passed: Victor Serath escalated. s0-028 also failed on the
+first run (sandbox-01M76AJF3JX3WEFJ7ENQ5GYKV6), worded "before the seller's call"; the wording now
+names no call and the miss stands.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,

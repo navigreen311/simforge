@@ -31,7 +31,7 @@ and the Office broker's log. To write a run's page again later:
 Options:
 - `--seed N` names the seed. The default is the next seed after the last one run.
 - `--tasks N` is how many tasks are filed, 1 to 60. The default is all of the seed's tasks, at
-  most 60 (21 since generator 1.1.1), so a default run never leaves out the seed's last task.
+  most 60 (31 since generator 1.2.0), so a default run never leaves out the seed's last task.
   A schedule set without `--tasks` files all of each seed's tasks too.
 - `--max-ticks N` is the step budget: operator ticks (default 4 per task + 10).
 - `--max-minutes M` is the wall-clock budget (default 240).
