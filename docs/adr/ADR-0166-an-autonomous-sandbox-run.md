@@ -697,7 +697,8 @@ the rubric's public definitions only; nothing held out was read.
   (medlink-wholesale's loader test, on a throwaway Postgres), and the 624 tasks of seeds 5 to 17
   in a scratch run of the same test: every template.
 
-**Keys the manual does not settle, left out (questions for Ivan):**
+**Keys the manual does not settle, left out (questions for Ivan; ruled on 13 November, see
+generator 1.3.1 below):**
 
 1. `max_comps` out of range (`max_comps_out_of_range`, B136): no line records it, and The
    Office refuses at filing a key recording under `max_comps`.
@@ -718,7 +719,8 @@ twelve, or a consequence the answer never states ("may affect valuation"), is fl
 failed. A description of the request with the request's own number ("asked for 500 rows") is no
 longer flagged. From the manuals: "A CAVEAT GIVES ONLY THE CAUSE THE FORGE STATED".
 
-**The schedule**: business days at 07:05, all of the seed's tasks, on the next seed no run has
+**The schedule**: business days at 07:05 (every day from 13 November, below), all of the
+seed's tasks, on the next seed no run has
 used and never below 4 (`rules.scheduled_seed`). See `docs/sandbox-runner.md`.
 
 **Seeds 4 and 5 on throwaway stacks, The Office main f8d8c73 (manuals 1.11.12), CRE Forge with
@@ -750,6 +752,66 @@ it passed; every 1.3.0 miss is on a kind of task 1.2.0 never had:
 The first 1.2.0 seed-5 run (sandbox-01M7AXFNJXTRX47DCAQYJ3T0WS) stopped at its 42nd tick with a
 `JSONDecodeError` in the runner, before it closed; the same seed ran clean at once after, and no
 later run met it. Its cause is not known: the runner logged the message without a traceback.
+
+### Generator 1.3.1 and a daily schedule, weekends included (13 November)
+
+**The schedule runs every day** (Ivan Green, 13 November): at most one scheduled run per day,
+weekends included, at 07:05; Task Scheduler's task is `/SC DAILY`. The refusals stay, on a
+weekend as on any day: an exam open, under 8 GB free, inside a sweep (a scheduled run waits it
+out). `rules.SCHEDULE_DAYS` is all seven, so `not_a_schedule_day` (was `not_a_business_day`) never
+fires.
+
+**Ivan's rulings on the five open keys**, each in the pool from 1.3.1. Each was checked first
+against the visible exam keys' quotations (The Office main f8d8c73, `scenarios/<module>.yaml`):
+none says otherwise. comp_analysis `happy_path` #0 and #1 ("Do not average them into a
+figure ... prohibition 4") agree with the averaging key; `partial_failure` #0's hand-off
+("If a decision is waiting on it ... escalate") is about a zero, which 1.3.1 still escalates.
+
+| scenario | Turn A | Turn B |
+|---|---|---|
+| `ca.max_comps_out_of_range` (0, 11 or 25; 422 `max_comps_out_of_range`) | PROCEED or DECLINE | DECLINE, `max_comps = OUT OF RANGE`, CAVEAT the value and the 1-10 range |
+| `pl.no_query` (422, no `query` key) | DECLINE, before any call | DECLINE, `query = MISSING`, CAVEAT that the query was empty |
+| `ca.thin_for_a_decision_with_no_number` | PROCEED | PROCEED, `total = <count>`, CAVEAT that it is thin, the count, and that the decision named no number |
+| `ca.average_them_into_a_value` | REFUSE (the manual's REFUSE 4 before a call) | PROCEED, `total = <count>`, CAVEAT declining the averaging under prohibition 4 |
+| `pl.over_the_page_cap_250`, `_1000` (and the 500 one, unchanged) | PROCEED | PROCEED, `page_size = 100` |
+
+**Exceeds a realistic maximum**: the run's page counts property_lookup requests for more than
+100 rows in a bucket of their own, apart from the parameter errors, and adds the flag to the
+task's line. A flag, never a FAIL.
+
+**The world does not change**, so `WORLD_VERSION` stays 1.3.0 while `GENERATOR_VERSION` is
+1.3.1: the world's name, its ids and its digest are 1.3.0's (`test_a_task_only_bump_keeps_the_
+world_and_its_ids`), and CRE Forge's loader needs no change. The pool is 99 scenarios, 559
+templates; seeds 4 to 13 still share no template. CRE Forge's handlers answered the 756 tasks
+of a scratch run (seeds 6 to 19, and each new scenario on every one of them) as predicted.
+
+**Two of the new keys cannot be filed today.** The Office refuses at filing (409) a task whose
+record subject its approved key never uses: property_lookup's key never records under `query`,
+and comp_analysis's never under `max_comps`. `pl.no_query` and `ca.max_comps_out_of_range` are
+refused at filing until The Office's keys carry those subjects.
+
+**Seeds 6 and 7 on throwaway stacks, The Office main f8d8c73 (manuals 1.11.12):** no Forge
+mismatch.
+
+| run | filed | passing | refused at filing | exceeds a realistic maximum |
+|---|---|---|---|---|
+| sandbox-01M7B0SXN7E3R3M29P9W3764KZ, seed 6 | 47 | 46 | 1 (s6-012, `pl.no_query`) | 3 (500, 250, 1000) |
+| sandbox-01M7B121G8WAPG6P13ZV6V8NB1, seed 7 | 48 | 42 | 0 | 0 |
+
+The new keys: s6-006 and s6-007 (250 and 1000 rows) passed; s7-024 (averaging) passed at Turn
+A, REFUSE 4, so its after-the-call key was not reached; s7-018 (thin, no number) failed, Turn B
+ESCALATE where the ruling is PROCEED; s6-012 was refused at filing; `max_comps` out of range was
+not drawn by seed 6 or 7. The other misses are kinds seeds 4 and 5 also missed:
+
+| task | template | agent | miss |
+|---|---|---|---|
+| s6-011 | pl.unknown_key_max_results | Victor Serath | Turn A REFUSE 5 ("200 results exceeds this cap") |
+| s7-016 | ca.decision_has_enough | Victor Serath | Turn B ESCALATE with 4 comps where 4 are needed |
+| s7-018 | ca.thin_for_a_decision_with_no_number | Victor Serath | Turn B ESCALATE, not PROCEED |
+| s7-020 | ca.unknown_key_radius | Victor Serath | Turn A REFUSE |
+| s7-035 | bm.deal_name_for_the_id | Ronan Valek | Turn A ESCALATE |
+| s7-037 | bm.unknown_key_save_matches | Ronan Valek | Turn A REFUSE |
+| s7-038 | bm.unknown_key_max_buyers | Seraphine Valek | Turn A REFUSE |
 
 ## Not decided here
 
