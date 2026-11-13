@@ -31,7 +31,7 @@ and the Office broker's log. To write a run's page again later:
 Options:
 - `--seed N` names the seed. The default is the next seed after the last one run.
 - `--tasks N` is how many tasks are filed, 1 to 60. The default is all of the seed's tasks, at
-  most 60 (31 since generator 1.2.0), so a default run never leaves out the seed's last task.
+  most 60 (48 since generator 1.3.0), so a default run never leaves out the seed's last task.
   A schedule set without `--tasks` files all of each seed's tasks too.
 - `--max-ticks N` is the step budget: operator ticks (default 4 per task + 10).
 - `--max-minutes M` is the wall-clock budget (default 240).
@@ -51,13 +51,36 @@ The run stops after its current tick. It finishes the Office's run, closes the `
 ## The schedule
 
 ```
-.venv/Scripts/python -m scripts.sandbox_run schedule set  --as "Ira Green" --at 10:05 --tasks 20 --register
-.venv/Scripts/python -m scripts.sandbox_run schedule show
-.venv/Scripts/python -m scripts.sandbox_run schedule stop --as "Ira Green" --register
+cd ~/Projects/simforge-runner/apps/api
+~/Projects/simforge/apps/api/.venv/Scripts/python -m scripts.sandbox_run schedule set --as "Ivan Green" --register
+~/Projects/simforge/apps/api/.venv/Scripts/python -m scripts.sandbox_run schedule show
+~/Projects/simforge/apps/api/.venv/Scripts/python -m scripts.sandbox_run schedule stop --as "Ivan Green" --register
 ```
+
+Set it from the runner's own checkout (`~/Projects/simforge-runner`, never the live
+`~/Projects/simforge`): `scheduled-run.cmd` runs `scripts.sandbox_run scheduled` from the
+checkout and with the python that set it.
 
 - A schedule has one owner, Ivan or Ira, a time outside the sweeps and at most 60 tasks. Only
   its owner stops it or replaces it.
+- **Daily practice (generator 1.3.0).** The defaults are a business-day run at **07:05**, all of
+  the seed's tasks (48), on **the next seed no run has used**: one more than the highest seed in
+  `SandboxRun`, and never below the schedule's `--seed` (default 4: seeds 0 to 3 were run by
+  hand on 1.2.0). Each seed draws its own tasks from the pool, so day after day the tasks
+  differ. 07:05 is outside the sweeps and before the exams: over the 45 days to 13 November,
+  the hours 00:00 to 07:59 held an open exam on 8 run-hours each (one long run), 08:00 on 33,
+  and 09:00 to 17:00 on 62 to 127 each. A 48-task run took 4 to 5 minutes on throwaway stacks
+  (13 November), and a run waits out the :17-:24 sweep if it meets it, so it ends before 08:00.
+- `schedule show` prints the schedule, Task Scheduler's next run time (`schtasks /Query`), and
+  the seed the next run will take.
+- Each day's run appends to `scheduled.log` in the runner's directory, and writes its page to
+  `runs/<YYYYmmdd-HHMMSS>-seed-<n>/sandbox-run-<runRef>.html` there, beside `summary.json`.
+- To pause it without losing it: `schtasks /Change /TN "SimForge sandbox run" /DISABLE` (and
+  `/ENABLE` to resume), or `schedule stop --as <owner> --register`, which also marks the
+  schedule stopped. To remove it: `schtasks /Delete /TN "SimForge sandbox run" /F`, then
+  `schedule stop`. The task runs only while its owner is logged on to this machine; a run it
+  fires while an exam is open, or with under 8 GB free, is refused for the day (the start rules)
+  and the next business day takes the same seed.
 - `--register` creates (or disables) the Windows scheduled task `SimForge sandbox run`,
   Monday to Friday at that time, which runs `python -m scripts.sandbox_run scheduled`.
   Without `--register` it prints the `schtasks` line it would run.
