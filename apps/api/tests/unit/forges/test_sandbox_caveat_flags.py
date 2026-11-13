@@ -1,9 +1,13 @@
-"""A CAVEAT that states a count the Forge's answer contradicts is flagged, never failed.
+"""A CAVEAT that states what the request did not ask for and the Forge's answer does not give is
+flagged, never failed.
 
 Sandbox run sandbox-01M73YAV88WWRG7F7CFFCVY2NP, s0-001 and s0-002: the Forge answered `total: 8`
 and Victor Serath's Turn B CAVEAT said the response "returned 100 properties". Both passed: the
 grade reads the act, the record and whether a caveat is there. The flag shows it on the page and
-changes no verdict and no total; the exam's `grade_submitted` is not touched.
+changes no verdict and no total; the exam's `grade_submitted` is not touched. Since generator
+1.3.0 the same flag covers a count nobody asked for (seed 2) and a consequence the answer never
+states (seed 3), and no longer a CAVEAT describing the request (seeds 1 to 3, "asked for 500
+rows").
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.sandbox import record
 from src.services.sandbox.page import load_run, render_run_page
-from src.services.sandbox.record import caveat_contradictions, forge_counts
+from src.services.sandbox.record import caveat_flags, forge_counts
 from tests.unit.forges.test_sandbox_record import _open, _right_b, _step, _task, _to_turn_b
 
 LOOKUP = {"status": 200, "query": "Corvale", "total": 8, "page_size": 100}
@@ -24,9 +28,9 @@ def test_s0_001_is_flagged() -> None:
         "The `page_size` requested was 100, and the response returned 100 properties, "
         "indicating the adapter did not cap the `page_size`."
     )
-    assert caveat_contradictions(LOOKUP, [said]) == ["caveat_contradicts_forge:100 properties"]
-    assert caveat_contradictions(LOOKUP, ["the response returned 100 results"]) == [
-        "caveat_contradicts_forge:100 results"
+    assert caveat_flags(LOOKUP, [said]) == ["caveat_not_in_the_answer:100 properties"]
+    assert caveat_flags(LOOKUP, ["the response returned 100 results"]) == [
+        "caveat_not_in_the_answer:100 results"
     ]
 
 
@@ -47,7 +51,7 @@ def test_s0_001_is_flagged() -> None:
     ],
 )
 def test_what_is_not_flagged(forge: dict, caveat: str) -> None:
-    assert caveat_contradictions(forge, [caveat]) == []
+    assert caveat_flags(forge, [caveat]) == []
 
 
 def test_the_forges_counts_never_include_page_size() -> None:
@@ -64,7 +68,7 @@ async def test_a_flag_changes_no_verdict_and_shows_on_the_page(db_session: Async
     answer["caveats"] = ["Corvale: the response returned 100 properties."]
     row = await _step(db_session, run, t, "turn_b", answer)
     assert row.verdict == "PASS"
-    assert row.reasons == ["caveat_contradicts_forge:100 properties"]
+    assert row.reasons == ["caveat_not_in_the_answer:100 properties"]
 
     run = await record.close_run(db_session, run)
     assert run.totals["all"]["turn_b"] == {"PASS": 1, "FAIL": 0, "NOT_GRADED": 0}
@@ -72,8 +76,8 @@ async def test_a_flag_changes_no_verdict_and_shows_on_the_page(db_session: Async
     page = render_run_page(loaded, steps)
     total = t.forge_answer["total"]
     flag = (
-        f"flagged, not failed: a CAVEAT says &quot;100 properties&quot;; "
-        f"the Forge&#x27;s answer gives total {total}"
+        f"flagged, not failed: a CAVEAT says &quot;100 properties&quot;, which the request did "
+        f"not ask for and the Forge&#x27;s answer does not give (it gives total {total})"
     )
     every_task = page[page.index("<h2>Every task</h2>") : page.index("<h2>property_lookup</h2>")]
     assert flag in every_task and "PASS" in every_task
@@ -89,5 +93,54 @@ async def test_a_failed_turn_b_keeps_its_miss_and_gains_the_flag(db_session: Asy
     answer["caveats"] = ["100 properties came back"]
     row = await _step(db_session, run, t, "turn_b", answer)
     assert row.verdict == "FAIL"
-    assert row.reasons[-1] == "caveat_contradicts_forge:100 properties"
+    assert row.reasons[-1] == "caveat_not_in_the_answer:100 properties"
     assert len(row.reasons) >= 2
+
+
+SEED_2 = {"status": 200, "query": "Lindqvist", "total": 8, "page_size": 100}
+SEED_3 = {"status": 200, "query": "Alderbrook", "total": 9, "page_size": 100}
+
+
+def test_a_count_nobody_asked_for_is_flagged() -> None:
+    """s2-002 (sandbox-01M79ECB0SVTHHHJT3TAYP0S7R): asked which properties are on file in a
+    city, `total: 8`, and the CAVEAT gave a count of missing prices. True of the rows, but neither
+    asked for nor a count the answer was read for."""
+    said = "2 properties have an unrecorded asking price."
+    request = {"query": "Lindqvist", "page_size": 100}
+    assert caveat_flags(SEED_2, [said], request) == ["caveat_not_in_the_answer:2 properties"]
+    word = "One property lacks a recorded square footage."
+    assert caveat_flags(SEED_2, [word], request) == ["caveat_not_in_the_answer:One property"]
+
+
+def test_a_consequence_the_answer_never_states_is_flagged() -> None:
+    """s3-004 (sandbox-01M79F17V6N876XB4HHKF6MFA5)."""
+    said = (
+        "One property has no recorded square footage, which may affect valuation in other modules."
+    )
+    assert "caveat_not_in_the_answer:may affect valuation" in caveat_flags(
+        SEED_3, [said], {"query": "Alderbrook", "page_size": 500}
+    )
+    assert caveat_flags({"status": 404}, ["this could skew the comparison"], {}) == [
+        "caveat_not_in_the_answer:could skew the"
+    ]
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "The request asked for 500 rows, but the adapter capped the page size at 100.",
+        "The request asked for 500 rows, but the adapter capped the page size at 100, returning a "
+        "total of 9 properties.",
+        "500 rows were requested; the Forge capped the page at 100 and 9 properties match.",
+    ],
+)
+def test_a_description_of_the_request_is_not_flagged(said: str) -> None:
+    """s1-004, s2-004 and s3-004 before 1.3.0: "asked for 500 rows" describes the request."""
+    assert caveat_flags(SEED_3, [said], {"query": "Alderbrook", "page_size": 500}) == []
+
+
+def test_a_request_it_did_not_make_is_still_flagged() -> None:
+    said = "The request asked for 300 rows."
+    assert caveat_flags(SEED_3, [said], {"query": "Alderbrook", "page_size": 500}) == [
+        "caveat_not_in_the_answer:300 rows"
+    ]

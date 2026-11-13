@@ -51,9 +51,9 @@ def test_no_task_count_means_all_of_the_seeds(argv: list[str]) -> None:
 def test_all_of_the_seeds_tasks_includes_its_last_and_stays_under_the_cap() -> None:
     tasks = generate_tasks(generate_world(0))
     want = rules.all_tasks(len(tasks))
-    assert want == len(tasks) == 31
+    assert want == len(tasks) == 48
     chosen = runner.choose_tasks(0)[:want]
-    assert "s0-031" in {t.task_id for t in chosen}
+    assert "s0-048" in {t.task_id for t in chosen}
     assert rules.all_tasks(70) == rules.MAX_TASKS == 60
 
 

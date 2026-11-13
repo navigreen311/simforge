@@ -33,6 +33,8 @@ from src.services.sandbox.record import MAX_TASKS, STARTERS
 #: SimForge's sweeps, by minute of the hour, both ends inside.
 SWEEPS: tuple[tuple[int, int], ...] = ((17, 24), (47, 54))
 MIN_FREE_GB = 8.0
+#: The first seed a schedule uses: seeds 0 to 3 were run by hand on generator 1.2.0.
+FIRST_SCHEDULED_SEED = 4
 #: Monday to Friday. No holiday calendar: a holiday is a business day here (not ruled).
 BUSINESS_DAYS = frozenset({0, 1, 2, 3, 4})
 
@@ -83,7 +85,9 @@ class Schedule:
     enabled: bool = True
     stopped_at: str | None = None
     stopped_by: str | None = None
-    seed: int | None = None  # None: the next seed after the last one run
+    #: The first seed it may use. Each run takes the next seed no run has used, never below it
+    #: (`first_seed`); None (a schedule set before generator 1.3.0) is `FIRST_SCHEDULED_SEED`.
+    seed: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -91,6 +95,19 @@ class Schedule:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Schedule:
         return cls(**data)
+
+
+def first_seed(schedule: Schedule | None) -> int:
+    """The lowest seed a scheduled run may take."""
+    if schedule is None or schedule.seed is None:
+        return FIRST_SCHEDULED_SEED
+    return schedule.seed
+
+
+def scheduled_seed(schedule: Schedule | None, next_unused: int) -> int:
+    """The seed a scheduled run takes: the next one no run has used (`next_unused`, one more than
+    the highest recorded), and never one below the schedule's first."""
+    return max(first_seed(schedule), next_unused)
 
 
 def all_tasks(seed_tasks: int) -> int:

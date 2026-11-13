@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from scripts import sandbox_run
+from src.services.sandbox import rules
 
 
 @pytest.fixture
@@ -70,3 +71,40 @@ def test_stop_asks_the_run_in_progress_to_stop(home: Path) -> None:
 def test_a_throwaway_run_needs_its_own_database(home: Path) -> None:
     code = sandbox_run.main(["start", "--as", "Ivan Green", "--throwaway"])
     assert code == sandbox_run.REFUSED
+
+
+def test_a_schedule_runs_at_07_05_from_seed_4_by_default(home: Path) -> None:
+    """Generator 1.3.0: each scheduled run takes the next seed no run has used, from 4 (seeds 0
+    to 3 were run by hand on 1.2.0), at 07:05 unless told otherwise: before the morning's exams,
+    and outside the sweeps."""
+    assert sandbox_run.main(["schedule", "set", "--as", "Ivan Green"]) == 0
+    written = _schedule(home)
+    assert (written["at"], written["seed"], written["tasks"]) == ("07:05", 4, None)
+    schedule = sandbox_run.read_schedule()
+    assert rules.scheduled_seed(schedule, 0) == 4
+    assert rules.scheduled_seed(schedule, 4) == 4
+    assert rules.scheduled_seed(schedule, 9) == 9
+    later = rules.Schedule(owner="Ivan Green", at="07:05", tasks=None, set_at="x", seed=20)
+    assert rules.scheduled_seed(later, 9) == 20
+    # A schedule written before 1.3.0 has no first seed: it starts at 4 too.
+    assert (
+        rules.first_seed(rules.Schedule(owner="Ivan Green", at="07:05", tasks=None, set_at="x"))
+        == 4
+    )
+
+
+def test_show_gives_the_next_run_time_and_the_next_seed(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sandbox_run.main(["schedule", "set", "--as", "Ivan Green"])
+    monkeypatch.setattr(sandbox_run, "_next_run_time", lambda: "11/16/2026 7:05:00 AM")
+
+    async def next_seed(_schedule: object) -> int:
+        return 6
+
+    monkeypatch.setattr(sandbox_run, "_next_scheduled_seed", next_seed)
+    capsys.readouterr()
+    assert sandbox_run.main(["schedule", "show"]) == 0
+    out = capsys.readouterr().out
+    assert "next run (Task Scheduler): 11/16/2026 7:05:00 AM" in out
+    assert "next seed: 6" in out

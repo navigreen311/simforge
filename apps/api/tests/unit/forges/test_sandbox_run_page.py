@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.forges.deal_desk_world import generate_tasks, generate_world
 from src.services.sandbox import demo, record
 from src.services.sandbox.page import (
     RESULT_FAIL,
@@ -21,32 +22,43 @@ from src.services.sandbox.page import (
     task_result,
 )
 
-EXPECTED_RESULTS = {
-    "s0-001": RESULT_PASS,
-    "s0-002": RESULT_FAIL,
-    "s0-003": RESULT_PASS,
-    "s0-005": RESULT_FAIL,
-    "s0-007": RESULT_PASS,
-    "s0-008": RESULT_FAIL,
-    "s0-009": RESULT_NOT_GRADED,
-    "s0-013": RESULT_PASS,
-    "s0-015": RESULT_FAIL,
-    "s0-016": RESULT_PASS,
-    "s0-017": RESULT_FAIL,
-    "s0-018": RESULT_FAIL,
-    "s0-020": RESULT_UNFINISHED,
+#: The result each staged case gives (`demo.STAGED`).
+RESULT_OF = {
+    "pass": RESULT_PASS,
+    "wrong_count": RESULT_FAIL,
+    "withheld_at_turn_a": RESULT_FAIL,
+    "no_caveat": RESULT_FAIL,
+    "forge_differs": RESULT_NOT_GRADED,
+    "declined_at_turn_a": RESULT_PASS,
+    "claim_not_offered": RESULT_FAIL,
+    "wrong_subject": RESULT_FAIL,
+    "unreadable": RESULT_FAIL,
+    "waiting_for_approval": RESULT_UNFINISHED,
 }
-#: The one-line why for each miss, as the page writes it.
-EXPECTED_WHY = {
-    "s0-002": "Turn B: recorded 9 for total; the key expects 8",
-    "s0-005": "Turn A: acted DECLINE where the key expects PROCEED",
-    "s0-008": "Turn B: gave no caveat; the key expects one",
-    "s0-009": "the Forge's status was 503, predicted 200",
-    "s0-015": "Turn B: recorded TOO FAR, which is not one of",
-    "s0-017": "Turn B: recorded under suppressed; the key expects total",
-    "s0-018": "the answer broke the protocol (answered_with_more_than_one_act_line)",
-    "s0-020": "unfinished: nothing recorded after proposed; next was approved",
-}
+TASKS = {t.task_id: t for t in generate_tasks(generate_world(demo.SEED))}
+CASES = demo.staged_cases(tuple(TASKS.values()))
+EXPECTED_RESULTS = {task_id: RESULT_OF[case] for task_id, case in CASES.items()}
+
+
+def _why(task_id: str, case: str) -> str | None:
+    """The one-line why for each miss, as the page writes it."""
+    key = TASKS[task_id].turn_b
+    if case == "wrong_count":
+        claim = int(key.record_claim or 0)
+        return f"Turn B: recorded {claim + 1} for total; the key expects {claim}"
+    return {
+        "withheld_at_turn_a": "Turn A: acted DECLINE where the key expects PROCEED",
+        "no_caveat": "Turn B: gave no caveat; the key expects one",
+        "forge_differs": "the Forge's status was 503, predicted 200",
+        "claim_not_offered": "Turn B: recorded TOO FAR, which is not one of",
+        "wrong_subject": "Turn B: recorded under suppressed; the key expects total",
+        "unreadable": "the answer broke the protocol (answered_with_more_than_one_act_line)",
+        "waiting_for_approval": "unfinished: nothing recorded after proposed; next was approved",
+    }.get(case)
+
+
+EXPECTED_WHY = {t: why for t, case in CASES.items() if (why := _why(t, case))}
+WAITING = next(t for t, case in CASES.items() if case == "waiting_for_approval")
 
 
 def _text(page: str) -> str:
@@ -147,4 +159,4 @@ def test_the_script_writes_the_demo_page(tmp_path: Path) -> None:
 
     assert main(["--demo", "--out", str(tmp_path)]) == 0
     page = (tmp_path / "sandbox-run-demo.html").read_text(encoding="utf-8")
-    assert "FAKE RUN" in page and "s0-020" in page
+    assert "FAKE RUN" in page and WAITING in page

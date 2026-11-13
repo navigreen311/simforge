@@ -211,7 +211,7 @@ def test_tasks_are_chosen_one_module_at_a_time() -> None:
     assert [t.module_id for t in tasks[:3]] == ["property_lookup", "comp_analysis", "buyer_match"]
     every = generate_tasks(generate_world(0))
     assert sorted(t.task_id for t in tasks) == sorted(t.task_id for t in every)  # all kept
-    assert len(tasks) == 31
+    assert len(tasks) == 48  # generator 1.3.0: every (module, class) of the pool, 48 in all
 
 
 async def test_a_run_files_records_every_step_and_writes_its_page(

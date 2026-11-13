@@ -22,6 +22,7 @@ The cases, on seed 0 (one agent per module, as on shift):
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -39,22 +40,62 @@ AGENTS = {
     "comp_analysis": "fake-agent-2",
     "buyer_match": "fake-agent-3",
 }
-#: task id -> what is staged. Anything not named answers exactly as the key expects.
-CASES: dict[str, str] = {
-    "s0-001": "pass",
-    "s0-002": "wrong_count",
-    "s0-003": "pass",
-    "s0-005": "withheld_at_turn_a",
-    "s0-007": "pass",
-    "s0-008": "no_caveat",
-    "s0-009": "forge_differs",
-    "s0-013": "declined_at_turn_a",
-    "s0-015": "claim_not_offered",
-    "s0-016": "pass",
-    "s0-017": "wrong_subject",
-    "s0-018": "unreadable",
-    "s0-020": "waiting_for_approval",
-}
+_ANY: Callable[[Task], bool] = lambda t: True  # noqa: E731
+
+
+def _counts(t: Task) -> bool:
+    return t.turn_b.record_subject == "total"
+
+
+def _proceed_only(t: Task) -> bool:
+    return t.turn_a.expected_act == "PROCEED" and t.turn_a.acceptable_acts is None
+
+
+#: What is staged, and on which task: the first of the seed's tasks in that module and class that
+#: fits, in task order, and not staged already. Since generator 1.3.0 a seed draws its own tasks,
+#: so they are found by what they are, not by number. Anything else answers as the key expects.
+STAGED: tuple[tuple[str, str, str, Callable[[Task], bool]], ...] = (
+    ("pass", "property_lookup", "happy_path", _ANY),
+    ("wrong_count", "property_lookup", "happy_path", _counts),
+    ("pass", "property_lookup", "partial_failure", _ANY),
+    ("withheld_at_turn_a", "property_lookup", "partial_failure", _proceed_only),
+    ("pass", "comp_analysis", "happy_path", _ANY),
+    ("no_caveat", "comp_analysis", "happy_path", lambda t: bool(t.turn_b.expected_caveat)),
+    ("forge_differs", "comp_analysis", "partial_failure", _ANY),
+    (
+        "declined_at_turn_a",
+        "comp_analysis",
+        "malformed_input",
+        lambda t: "DECLINE" in (t.turn_a.acceptable_acts or ()),
+    ),
+    (
+        "claim_not_offered",
+        "comp_analysis",
+        "malformed_input",
+        lambda t: bool(t.turn_b.record_claim_options),
+    ),
+    ("pass", "buyer_match", "happy_path", _ANY),
+    ("wrong_subject", "buyer_match", "happy_path", _counts),
+    ("unreadable", "buyer_match", "partial_failure", _ANY),
+    ("waiting_for_approval", "buyer_match", "malformed_input", _ANY),
+)
+
+
+def staged_cases(tasks: tuple[Task, ...]) -> dict[str, str]:
+    """Task id -> what is staged on it, in task order."""
+    chosen: dict[str, str] = {}
+    for case, module, scenario_class, fits in STAGED:
+        task = next(
+            t
+            for t in tasks
+            if (t.module_id, t.scenario_class) == (module, scenario_class)
+            and t.task_id not in chosen
+            and fits(t)
+        )
+        chosen[task.task_id] = case
+    return dict(sorted(chosen.items()))
+
+
 FAKE_NOTE = (
     "<b>FAKE RUN, recorded for the demo.</b> No agent answered and no Forge was called: the "
     "answers are scripted (<code>src/services/sandbox/demo.py</code>) and the Forge's answer is "
@@ -85,11 +126,13 @@ def _turn_b(task: Task, case: str) -> dict[str, Any]:
 
 async def record_demo_run(db: AsyncSession) -> SandboxRun:
     """Open, record and close the fake run. Returns the closed run."""
-    tasks = {t.task_id: t for t in generate_tasks(generate_world(SEED))}
+    every = generate_tasks(generate_world(SEED))
+    tasks = {t.task_id: t for t in every}
+    cases = staged_cases(every)
     run = await record.open_run(
-        db, venture="greenstone", seed=SEED, started_by="Ivan Green", task_ids=list(CASES)
+        db, venture="greenstone", seed=SEED, started_by="Ivan Green", task_ids=list(cases)
     )
-    for n, (task_id, case) in enumerate(CASES.items()):
+    for n, (task_id, case) in enumerate(cases.items()):
         task = tasks[task_id]
         agent = AGENTS[task.module_id]
         at = T0 + timedelta(minutes=10 * n)
@@ -121,7 +164,7 @@ async def record_demo_run(db: AsyncSession) -> SandboxRun:
         await step("filed", "Ivan Green", {"facts": task.facts, "request": task.request})
         await step("claimed", agent, minute=1)
         if case in ("withheld_at_turn_a", "declined_at_turn_a"):
-            # The same answer twice: s0-005's key expects PROCEED, s0-013's allows DECLINE.
+            # The same answer twice: one key expects PROCEED, the other allows DECLINE.
             await step("turn_a", agent, {"act": "DECLINE", "caveats": []}, minute=2)
             continue
         await step("turn_a", agent, {"act": "PROCEED", "caveats": []}, minute=2)
