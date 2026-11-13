@@ -6,7 +6,8 @@ One HTML page per `SandboxRun`, built from its `SandboxStep`s and nothing else:
   Turn B verdicts and the Forge mismatches. The turn counts are the run's own totals, written
   when it closed (or counted the same way while it is open).
 - **Every task**, one line each: its result and a one-line why for each miss, and for each
-  CAVEAT flagged because it states a count the Forge's answer contradicts (no verdict changes).
+  CAVEAT flagged because it states what the request did not ask for and the Forge's answer does
+  not give (no verdict changes).
 - **Refused at filing by The Office**: the seed's tasks the Office would not file (ruled 10
   November). Never filed, so no agent saw them; counted against no agent.
 - **Then every task step by step**: the facts filed, the claim, Turn A expected and given, the
@@ -38,6 +39,7 @@ from src.services.forges.deal_desk_world import READ_MODULES, Task, TurnKey
 from src.services.sandbox.record import (
     ACT_PROCEED,
     REASON_CAVEAT_CONTRADICTS,
+    REASON_CAVEAT_NOT_IN_ANSWER,
     REASON_FORGE_DIFFERS,
     REFUSED_AT_FILING,
     VERDICT_NOT_GRADED,
@@ -122,16 +124,21 @@ def why(
     code: the page never invents a cause."""
     if reason == REASON_FORGE_DIFFERS:
         return "not graded: the Forge answered otherwise than predicted, so the key does not apply"
-    if reason.startswith(f"{REASON_CAVEAT_CONTRADICTS}:"):
+    if is_flag(reason):
         stated = reason.split(":", 1)[1]
         counts = ", ".join(
             f"{k} {_value(v)}"
             for k, v in sorted((forge or {}).items())
-            if k == "total" or k == "suppressed" or k.endswith("_null")
+            if k == "total" or k == "suppressed" or k.endswith(("_null", "_empty"))
         )
+        if reason.startswith(f"{REASON_CAVEAT_CONTRADICTS}:"):
+            return (
+                f'flagged, not failed: a CAVEAT says "{stated}"; the Forge\'s answer gives '
+                f"{counts or 'no such count'}"
+            )
         return (
-            f'flagged, not failed: a CAVEAT says "{stated}"; the Forge\'s answer gives '
-            f"{counts or 'no such count'}"
+            f'flagged, not failed: a CAVEAT says "{stated}", which the request did not ask for '
+            f"and the Forge's answer does not give (it gives {counts or 'no count'})"
         )
     if reason.startswith("forge_field_differs:"):
         field = reason.split(":", 1)[1]
@@ -202,7 +209,7 @@ def _step_whys(
 
 def is_flag(reason: str) -> bool:
     """A reason shown on the page that is no miss: it changed no verdict."""
-    return reason.startswith(f"{REASON_CAVEAT_CONTRADICTS}:")
+    return reason.startswith((f"{REASON_CAVEAT_CONTRADICTS}:", f"{REASON_CAVEAT_NOT_IN_ANSWER}:"))
 
 
 def _forge_before(steps: Sequence[SandboxStep], turn_b: SandboxStep) -> Mapping[str, Any] | None:

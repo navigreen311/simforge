@@ -15,8 +15,9 @@ task takes in the sandbox (`STEPS`) is recorded in order as a `SandboxStep`:
 - **turn_b**: the agent's ACT and RECORD on that answer, graded against the Turn B key. If the
   Forge answered something else than predicted, the key was written for an answer the agent never
   saw, so the turn is NOT_GRADED with `forge_answer_differs_from_prediction`: a miss on the
-  Forge's side, never the agent's. A CAVEAT that states a count the Forge's answer contradicts
-  is flagged (`caveat_contradicts_forge`), whatever the verdict, and changes no verdict.
+  Forge's side, never the agent's. A CAVEAT that states what the request did not ask for and the
+  Forge's answer does not give is flagged (`caveat_not_in_the_answer`), whatever the verdict,
+  and changes no verdict.
 
 The expected answers are the generator's (`deal_desk_world`), regenerated from the seed. A run
 records the generator version and both digests when it opens, and no turn is graded once the
@@ -132,31 +133,65 @@ def read_answer(payload: Mapping[str, Any]) -> TurnAnswer | ProtocolViolation:
 
 
 #: A Turn B reason that flags, and never fails: a CAVEAT gave a count the Forge's answer
-#: contradicts. `grade_submitted` does not read CAVEAT text, and the exam's grade is unchanged.
+#: contradicts. Written by runs before generator 1.3.0; kept so their pages still read.
 REASON_CAVEAT_CONTRADICTS = "caveat_contradicts_forge"
+#: Since 1.3.0, the flag: a CAVEAT states something the request did not ask for and the Forge's
+#: answer, as the task reads it, does not give - a count none of its counts is, or a consequence
+#: the answer never states. "A CAVEAT GIVES ONLY THE CAUSE THE FORGE STATED ... Never add a cause
+#: the response does not give" (every CRE read module's manual, 1.11.12). `grade_submitted` does
+#: not read CAVEAT text, and no verdict changes.
+REASON_CAVEAT_NOT_IN_ANSWER = "caveat_not_in_the_answer"
 
-#: A count in a CAVEAT is a number followed (one word between at most) by one of these.
+#: A count in a CAVEAT is a number, in digits or as a word, followed (one word between at most)
+#: by one of these.
 _COUNTED = (
     "properties|property|results|result|rows|row|records|record|comps|comp|comparables|"
     "comparable|sales|sale|buyers|buyer|matches|match"
 )
-_COUNT = re.compile(rf"(?<![\w.$/-])(\d[\d,]*)\s+(?:[a-z-]+\s+)?(?:{_COUNTED})\b", re.IGNORECASE)
+_WORDS = {
+    w: n
+    for n, w in enumerate(
+        "zero one two three four five six seven eight nine ten eleven twelve".split()
+    )
+}
+_COUNT = re.compile(
+    rf"(?<![\w.$/-])(\d[\d,]*|{'|'.join(_WORDS)})\s+(?:[a-z-]+\s+)?(?:{_COUNTED})\b",
+    re.IGNORECASE,
+)
 #: A number after one of these is a bound the request set, not a count of what came back.
 _BOUND = re.compile(
     r"(up to|at most|no more than|max(imum)?( of)?|limit( of)?|top|page[ _]size( of)?)\s*$",
+    re.IGNORECASE,
+)
+#: A number after one of these describes the request ("The request asked for 500 rows"), and is
+#: not flagged when the request carries that number.
+_ASKED = re.compile(
+    r"\b(asked for|asks for|asking for|requested|request(ed)? (of|for)|sent|filed)\s*$",
+    re.IGNORECASE,
+)
+_ASKED_AFTER = re.compile(r"^\s*(?:were |was )?(?:requested|asked for|sent)\b", re.IGNORECASE)
+#: A consequence the CAVEAT draws that no Forge answer states: "which may affect valuation".
+_CONSEQUENCE = re.compile(
+    r"\b(?:may|might|could|would|can|will|is likely to|are likely to)\s+(?:also\s+|well\s+|"
+    r"potentially\s+|significantly\s+)?(?:affect|impact|influence|skew|distort|reduce|lower|"
+    r"raise|inflate|understate|overstate|bias|mislead|delay|hinder|complicate|undermine)"
+    r"(?:\s+[\w-]+)?",
     re.IGNORECASE,
 )
 
 
 def forge_counts(forge: Mapping[str, Any]) -> list[int]:
     """The counts the Forge's answer gives, from the fields the task kept (`forge_fields`):
-    `total`, `suppressed`, each `results_with_<field>_null`, the rows of `results`, and the rows
-    on the page (`total` capped at `page_size`). Never `page_size` itself: it is a bound."""
+    `total`, `suppressed`, each `results_with_<field>_null` and `_empty`, the rows of `results`,
+    and the rows on the page (`total` capped at `page_size`). Never `page_size` itself: it is a
+    bound."""
     counts: list[int] = []
     for k, v in forge.items():
         if isinstance(v, bool) or not isinstance(v, int):
             continue
-        if k in ("total", "suppressed") or (k.startswith("results_with_") and k.endswith("_null")):
+        if k in ("total", "suppressed") or (
+            k.startswith("results_with_") and k.endswith(("_null", "_empty"))
+        ):
             counts.append(v)
     if isinstance(forge.get("results"), list):
         counts.append(len(forge["results"]))
@@ -166,26 +201,59 @@ def forge_counts(forge: Mapping[str, Any]) -> list[int]:
     return counts
 
 
-def caveat_contradictions(forge: Mapping[str, Any], caveats: Sequence[str]) -> list[str]:
-    """Each count a CAVEAT states that is none of the Forge's counts, as a flag reason.
+def _request_numbers(request: Mapping[str, Any] | None) -> set[int]:
+    out: set[int] = set()
+    for v in (request or {}).values():
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, int | float) and float(v).is_integer():
+            out.add(int(v))
+    return out
 
-    Sandbox run sandbox-01M73YAV88WWRG7F7CFFCVY2NP, s0-001: `total: 8`, and the CAVEAT said
-    "the response returned 100 properties" (the `page_size` sent). The task passed, because the
-    grade reads the act, the record and whether a caveat is there, not what it says. Only digits
-    are read, and only before a counted noun; a number after "up to", "top", "page size" and the
-    like is a bound. With no count in the Forge's answer, nothing is flagged.
+
+def _stated(text: str) -> int:
+    word = text.lower()
+    return _WORDS[word] if word in _WORDS else int(text.replace(",", ""))
+
+
+def caveat_flags(
+    forge: Mapping[str, Any],
+    caveats: Sequence[str],
+    request: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """Each thing a CAVEAT states that the request did not ask for and the Forge's answer does
+    not give, as a flag reason. Flags only: no verdict reads them.
+
+    - A count (digits, or a number word up to twelve, before a counted noun) that none of the
+      answer's counts is. Sandbox run sandbox-01M73YAV88WWRG7F7CFFCVY2NP, s0-001: `total: 8`, and
+      "the response returned 100 properties". Seed 2's s2-002 (sandbox-01M79ECB0SVTHHHJT3TAYP0S7R):
+      a lookup by city, `total: 8`, and "2 properties have an unrecorded asking price" - true of
+      the rows, but asked by nobody and no count the answer was read for.
+    - A consequence the CAVEAT draws: seed 3's s3-004 (sandbox-01M79F17V6N876XB4HHKF6MFA5), "One
+      property has no recorded square footage, which may affect valuation in other modules".
+
+    Not flagged: a bound the request set ("up to 10 comps", "the top 50"), and a description of
+    the request that gives the request's own number ("The request asked for 500 rows",
+    s1-004 and s2-004 before 1.3.0). With no count in the answer, no count is flagged.
     """
     counts = forge_counts(forge)
-    if not counts:
-        return []
+    asked = _request_numbers(request)
     out: list[str] = []
     for caveat in caveats:
-        for m in _COUNT.finditer(caveat):
-            if _BOUND.search(caveat[: m.start()]):
-                continue
-            stated = int(m.group(1).replace(",", ""))
-            if stated not in counts:
-                out.append(f"{REASON_CAVEAT_CONTRADICTS}:{m.group(0)}")
+        if counts:
+            for m in _COUNT.finditer(caveat):
+                before = caveat[: m.start()]
+                if _BOUND.search(before):
+                    continue
+                stated = _stated(m.group(1))
+                said_asked = _ASKED.search(before) or _ASKED_AFTER.search(caveat[m.end() :])
+                if said_asked and stated in asked:
+                    continue
+                if stated not in counts:
+                    out.append(f"{REASON_CAVEAT_NOT_IN_ANSWER}:{m.group(0)}")
+        out += [
+            f"{REASON_CAVEAT_NOT_IN_ANSWER}:{m.group(0)}" for m in _CONSEQUENCE.finditer(caveat)
+        ]
     return out
 
 
@@ -362,7 +430,7 @@ async def record_step(
             graded = grade_submitted(submitted_key(task.turn_b), answer)
             verdict, reasons = graded.verdict, list(graded.reasons)
         if isinstance(answer, TurnAnswer):
-            reasons += caveat_contradictions(mine[-1].payload or {}, answer.caveats)
+            reasons += caveat_flags(mine[-1].payload or {}, answer.caveats, task.request)
 
     row = SandboxStep(
         sandboxRunId=run.id,

@@ -4,8 +4,8 @@
     python -m scripts.sandbox_run check    --as "Ivan Green" [--tasks N] [--seed S]
     python -m scripts.sandbox_run start    --as "Ivan Green" [--tasks N] [--seed S]
     python -m scripts.sandbox_run stop     --as "Ivan Green"
-    python -m scripts.sandbox_run schedule set  --as "Ira Green" --at 10:05 --tasks 40 [--register]
-    python -m scripts.sandbox_run schedule show
+    python -m scripts.sandbox_run schedule set  --as "Ivan Green" --at 07:05 [--seed 4] [--register]
+    python -m scripts.sandbox_run schedule show     # the schedule, its next run time, next seed
     python -m scripts.sandbox_run schedule stop --as "Ira Green"
     python -m scripts.sandbox_run scheduled      # what the OS scheduler runs
 
@@ -19,6 +19,13 @@ written by hand), the generated `office.env`, `schedule.json`, the lock, and `ru
 with each run's world file, tokens, logs, `summary.json` and page.
 
 `--tasks` defaults to all of the seed's tasks, at most 60.
+
+A scheduled run files all of its seed's tasks unless the schedule says how many, on the next
+seed no run has used: one more than the highest seed in `SandboxRun`, and never below the
+schedule's `--seed` (default 4, the first seed after the four run by hand on generator 1.2.0).
+`--register` creates the Windows scheduled task `SimForge sandbox run` (Task Scheduler,
+`schtasks`), Monday to Friday at `--at`, running `scheduled-run.cmd` in the runner's directory;
+each day's output is appended to `scheduled.log` there and its page is in `runs/<when>-seed-<n>/`.
 
 `--throwaway` runs the same code on a throwaway copy of every stack (CRE Forge on 8013, the
 Office's Postgres on 55443, both removed after), under compose projects of its runner home's
@@ -134,12 +141,13 @@ async def _measure_and_check(
                 "20261109000000 is not applied)"
             )
         seed = args.seed
-        if seed is None:
-            seed = (
-                schedule.seed
-                if schedule and schedule.seed is not None
-                else (await runner.next_seed(db) if tables else 0)
-            )
+        if seed is None and scheduled:
+            # A scheduled run takes the next seed no run has used, and never one below the
+            # schedule's first (generator 1.3.0: every seed draws its own tasks).
+            unused = await runner.next_seed(db) if tables else 0
+            seed = rules.scheduled_seed(schedule, unused)
+        elif seed is None:
+            seed = await runner.next_seed(db) if tables else 0
         today = await runner.scheduled_today(db, datetime.now()) if scheduled and tables else []
     exam = await runner.live_exam_open()
     now = datetime.now()
@@ -287,6 +295,9 @@ def _schedule(args: argparse.Namespace) -> int:
     current = read_schedule()
     if args.action == "show":
         print(json.dumps(current.as_dict() if current else None, indent=2))
+        if current is not None:
+            print(f"next run (Task Scheduler): {_next_run_time() or 'not registered'}")
+            print(f"next seed: {asyncio.run(_next_scheduled_seed(current))}")
         return 0
     if args.as_ not in STARTERS:
         return _report([rules.Refusal("not_a_starter", f"{args.as_} is not Ivan or Ira")])
@@ -315,7 +326,7 @@ def _schedule(args: argparse.Namespace) -> int:
         at=args.at,
         tasks=args.tasks,
         set_at=datetime.now().isoformat(timespec="seconds"),
-        seed=args.seed,
+        seed=rules.FIRST_SCHEDULED_SEED if args.seed is None else args.seed,
     )
     found = rules.check_schedule(schedule)
     if found:
@@ -337,6 +348,36 @@ def _schedule(args: argparse.Namespace) -> int:
     )
     _register(schedule, enable=True, registered=args.register)
     return 0
+
+
+def _next_run_time() -> str | None:
+    """The registered task's "Next Run Time", as Task Scheduler reports it, or None."""
+    try:
+        done = subprocess.run(
+            ["schtasks", "/Query", "/TN", TASK_NAME, "/FO", "LIST"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    for line in done.stdout.splitlines():
+        if line.lower().startswith("next run time:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+async def _next_scheduled_seed(schedule: rules.Schedule) -> int | str:
+    from src.db import SessionLocal
+    from src.services.sandbox import runner
+
+    try:
+        async with SessionLocal() as db:
+            if not await runner.sandbox_tables_exist(db):
+                return rules.first_seed(schedule)
+            return rules.scheduled_seed(schedule, await runner.next_seed(db))
+    except Exception as exc:  # noqa: BLE001 - shown, not fatal
+        return f"unknown ({type(exc).__name__})"
 
 
 def _register(schedule: rules.Schedule, *, enable: bool, registered: bool) -> None:
@@ -396,7 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
     sch = sub.add_parser("schedule")
     sch.add_argument("action", choices=("set", "show", "stop"))
     sch.add_argument("--as", dest="as_")
-    sch.add_argument("--at", default="10:05")
+    sch.add_argument("--at", default="07:05")
     sch.add_argument("--tasks", type=int, help="default: all of the seed's tasks, at most 60")
     sch.add_argument("--seed", type=int)
     sch.add_argument("--register", action="store_true")

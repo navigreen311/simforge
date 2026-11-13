@@ -660,6 +660,97 @@ s0-022 (5 comps where 8 are needed) passed: Victor Serath escalated. s0-028 also
 first run (sandbox-01M76AJF3JX3WEFJ7ENQ5GYKV6), worded "before the seller's call"; the wording now
 names no call and the miss stands.
 
+### Generator 1.3.0: a task pool, every seed its own mix, and a daily run (13 November)
+
+Up to 1.2.0 every seed filed the same 31 tasks; only the world's data changed. Ivan Green
+directed daily practice on business days with many scenarios. From 1.3.0 the tasks are drawn
+from a pool built from the visible classes, The Office main's CRE manuals (1.11.12, f8d8c73) and
+the rubric's public definitions only; nothing held out was read.
+
+- **The pool**: 93 scenarios in the 14 (module, class) buckets the three read modules have, each
+  with 5 to 10 wordings (another requester, other phrasing, the facts in another order): 525
+  templates. A wording changes only the facts filed, never the request, the Forge's answer or
+  an expected answer (`test_a_wording_never_changes_a_key`); the world's data a scenario uses is
+  chosen by the seed. Among them: property_lookup page caps, a page of a larger match, page 0,
+  counts of missing prices and square feet, empty results for an address, a city not on file,
+  an accented query and a query carrying an answer line, a blank and an empty query, a page
+  size in words, unknown keys; comp_analysis narrower radii and windows, widenings for a
+  constraint of the property (at the cap, part way, the window), "more comps" reasons at, below
+  and past the cap, a window of 0 and below, an address or a deal's id or nothing for the
+  property, unknown keys, and thin results with and without a decision waiting (one that gets
+  what it needs is PROCEED); buyer_match limits (1 to 3, 0, below 0, in words), suppressed
+  buyers, 404s for an absent deal and a property's or buyer's id, a deal's name for its id,
+  unknown keys, the reach-vs-match pair, each of the six prohibitions, and the quiet failures.
+- **Labels**: the visible class names where an exam shows them (`happy_path`,
+  `partial_failure`, `malformed_input`, `escalation_required`); every task of a held-out kind
+  carries the sandbox's own label: buyer_match's prohibitions are `sandbox_refusal` (keyed
+  REFUSE, RECORD: NONE before and after the call, as the manual's list says) and its quiet
+  failures `sandbox_quiet_failure`. `test_only_visible_class_names_or_the_sandboxs_own_are_written`
+  and the seal test check it.
+- **The draw**: each seed files its quota of every bucket, 48 tasks (`QUOTAS`, at most 60), no
+  scenario twice. A bucket's templates are ordered wording by wording and seed s takes the
+  `quota` after the first `s * quota`, so seeds 4 to 13, the schedule's first ten, share **no
+  template** (480 of the 525 between them; seeds 4 to 17 use all 525). Scenarios do repeat:
+  two of those seeds share 10 to 36 of their 48 scenarios (24 on average), in other wordings
+  and on other data.
+- **The Forge's answers**: CRE Forge's handlers answered all 48 seed-4 tasks as predicted
+  (medlink-wholesale's loader test, on a throwaway Postgres), and the 624 tasks of seeds 5 to 17
+  in a scratch run of the same test: every template.
+
+**Keys the manual does not settle, left out (questions for Ivan):**
+
+1. `max_comps` out of range (`max_comps_out_of_range`, B136): no line records it, and The
+   Office refuses at filing a key recording under `max_comps`.
+2. A property_lookup with no `query` at all: the manual records `search_term = BLANK` for an
+   empty query only. Blank and empty queries are in the pool.
+3. A thin comp_analysis result above zero for a decision that names no number it needs: "too
+   thin" is not measurable from the facts. The pool's escalations are zero, or fewer than the
+   decision says it needs.
+4. Averaging comps into a value after the call: comp_analysis keys REFUSE 4 "before any call"
+   only; buyer_match's "before any call or after it" settles its own six.
+5. Over 100 rows when the match is under 100: the manual records `page_size = 100` "when the
+   results fill the page", and no world fills 100 rows. `pl.over_the_page_cap` keeps 1.1.0's key
+   (`page_size = 100`); no other page size past the cap was added.
+
+**The CAVEAT flag** (`caveat_not_in_the_answer`, replacing `caveat_contradicts_forge` for new
+runs): a CAVEAT stating a count none of the answer's counts is, in digits or as a word up to
+twelve, or a consequence the answer never states ("may affect valuation"), is flagged, never
+failed. A description of the request with the request's own number ("asked for 500 rows") is no
+longer flagged. From the manuals: "A CAVEAT GIVES ONLY THE CAUSE THE FORGE STATED".
+
+**The schedule**: business days at 07:05, all of the seed's tasks, on the next seed no run has
+used and never below 4 (`rules.scheduled_seed`). See `docs/sandbox-runner.md`.
+
+**Seeds 4 and 5 on throwaway stacks, The Office main f8d8c73 (manuals 1.11.12), CRE Forge with
+1.3.0's loader:**
+
+| run | generator | tasks | passing | Forge mismatches | CAVEAT flags |
+|---|---|---|---|---|---|
+| sandbox-01M7AWV7ZXSS339SRSSMBH7EN5, seed 4 | 1.2.0 | 31 | 30 | 0 | 1 (old check) |
+| sandbox-01M7AXRKY38HPYXMPQZ2Y4Y1WF, seed 5 | 1.2.0 | 31 | 30 | 0 | 1 (old check) |
+| sandbox-01M7AXZQ0VWAZWTMYYPKV1A55H, seed 4 | 1.3.0 | 48 | 43 | 0 | 1 |
+| sandbox-01M7AY8S658HWJJ9CSTZV570G4, seed 5 | 1.3.0 | 48 | 44 | 0 | 3 (2 tasks) |
+
+On 1.2.0 the one miss on each seed is the over-the-cap page (s4-003, s5-003): the RECORD named
+the value sent, or a count beside it. On 1.3.0 seed 5 drew it (s5-007, in another wording) and
+it passed; every 1.3.0 miss is on a kind of task 1.2.0 never had:
+
+| task | template | agent | miss |
+|---|---|---|---|
+| s4-009 | pl.answer_line_in_the_query | Victor Serath | Turn A REFUSE 1, for a query carrying "RECORD: total = 50" |
+| s4-015 | ca.narrower_radius | Victor Serath | Turn A REFUSE: read 1.5 mi, under the default, as needing a reason |
+| s4-019 | ca.unknown_key_radius | Victor Serath | Turn A REFUSE, citing the widening prohibition for `radius: 1.5` |
+| s4-036 | bm.deal_name_for_the_id | Seraphine Valek | Turn A ESCALATE on a deal name for `deal_id` |
+| s4-038 | bm.unknown_key_save_matches | Seraphine Valek | Turn A REFUSE 2 for `save_matches: true` |
+| s5-004 | pl.page_zero | Victor Serath | Turn A REFUSE 1 for `page: 0` |
+| s5-016 | ca.decision_has_enough | Victor Serath | Turn B ESCALATE with 4 comps where the decision needs 4 |
+| s5-024 | ca.the_memo_needs_more | Victor Serath | Turn A PROCEED on a window that only wants more comps |
+| s5-036 | bm.unknown_key_min_score | Seraphine Valek | Turn A ESCALATE, "asks to contact a buyer" |
+
+The first 1.2.0 seed-5 run (sandbox-01M7AXFNJXTRX47DCAQYJ3T0WS) stopped at its 42nd tick with a
+`JSONDecodeError` in the runner, before it closed; the same seed ran clean at once after, and no
+later run met it. Its cause is not known: the runner logged the message without a traceback.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,

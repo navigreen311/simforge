@@ -23,6 +23,7 @@ SCRIPT = API / "scripts" / "sandbox_world_page.py"
 #: Standard-library modules the generator may import, and nothing else.
 GENERATOR_STDLIB = {
     "__future__",
+    "collections.abc",
     "dataclasses",
     "hashlib",
     "html",
@@ -90,7 +91,7 @@ def test_the_generator_and_its_page_script_reach_no_other_simforge_module() -> N
 def test_the_generator_imports_only_the_standard_library_it_needs() -> None:
     imported = _imports(_tree(_path(GENERATOR)))
     assert imported <= GENERATOR_STDLIB, imported - GENERATOR_STDLIB
-    assert all(m in sys.stdlib_module_names or m == "__future__" for m in imported)
+    assert all(m.split(".")[0] in sys.stdlib_module_names or m == "__future__" for m in imported)
 
 
 def test_the_generator_reads_no_file_environment_or_module_by_name() -> None:

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import uuid
+from collections import Counter
 from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
@@ -17,11 +19,15 @@ from src.services.forges.deal_desk_world import (
     COMP_AGE_DAYS,
     COMP_RADIUS_MI,
     GENERATOR_VERSION,
+    POOL,
+    QUOTAS,
     READ_MODULES,
     TASK_CLASSES,
     Task,
     TurnKey,
     World,
+    _canonical,
+    build_template,
     comps_found,
     export_json,
     export_world,
@@ -146,80 +152,140 @@ def test_the_generator_never_emits_a_held_out_label() -> None:
             assert t.scenario_class in TASK_CLASSES
 
 
+def _built(key: str, seeds: range | tuple[int, ...] = SEEDS) -> list[Task]:
+    """One scenario's task, at its first wording, on every seed that can carry it."""
+    scenario = next(s for s in POOL if s.key == key)
+    out = [build_template(generate_world(seed), scenario, 0) for seed in seeds]
+    return [t for t in out if t is not None]
+
+
+def _keys(module: str, scenario_class: str) -> list[str]:
+    return [s.key for s in POOL if (s.module, s.scenario_class) == (module, scenario_class)]
+
+
 def test_a_widening_is_refused_or_run_by_its_reason() -> None:
-    """comp_analysis 1.11.9: a filed widening whose reason only wants more comps is REFUSE 5
-    before any call (s0-010, s0-011, s0-012, s0-014); one naming a constraint of the property is
-    PROCEED (s0-021, the last task until generator 1.2.0). Ivan Green, 10 November."""
-    for seed in SEEDS:
-        tasks = _tasks(seed)
-        refused = [t for t in tasks if t.scenario_class == "sandbox_refusal"]
-        assert [t.task_id[-3:] for t in refused] == ["010", "011", "012", "014"]
-        for t in refused:
-            assert t.module_id == "comp_analysis"
+    """comp_analysis 1.11.9 to 1.11.12: a filed widening whose reason only wants more comps, or
+    names nothing the property is, is REFUSE 5 before any call, at the cap or past it; one naming
+    a constraint of the property is PROCEED (Ivan Green, 10 and 12 November)."""
+    for key in _keys("comp_analysis", "sandbox_refusal"):
+        for t in _built(key, range(10)):
             assert t.request["widening_reason"]
             assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("REFUSE", None)
             assert t.turn_a.expected_caveat
-        kept = tasks[20]
-        assert kept.task_id.endswith("-021")
-        assert (kept.module_id, kept.scenario_class) == ("comp_analysis", "happy_path")
-        assert kept.turn_a.expected_act == "PROCEED" and kept.turn_b.expected_act == "PROCEED"
-        assert kept.request["radius_miles"] > COMP_RADIUS_MI[kept.forge_answer["search"]["type"]][0]
-        assert "comparable" in kept.request["widening_reason"]
+            assert "comparable" not in t.request["widening_reason"]
+    for key in (
+        "ca.widened_to_the_cap_for_the_property",
+        "ca.widened_part_way_for_the_property",
+        "ca.window_widened_for_the_property",
+    ):
+        for t in _built(key, range(10)):
+            assert t.scenario_class == "happy_path"
+            assert t.turn_a.expected_act == "PROCEED" and t.turn_b.expected_act == "PROCEED"
+            search = t.forge_answer["search"]
+            assert (
+                search["radius_mi"] > COMP_RADIUS_MI[search["type"]][0]
+                or search["max_age_days"] > COMP_AGE_DAYS[0]
+            )
+            assert "comparable" in t.request["widening_reason"]
 
 
 def test_a_thin_result_a_decision_waits_on_is_escalated() -> None:
-    """comp_analysis 1.11.10: a 200 too thin for a decision waiting on it, with nothing asking to
-    widen, is ESCALATE (generator 1.2.0). The request is plain, so Turn A is PROCEED; the key
-    records the count, and the CAVEAT says the agent will not widen."""
-    for seed in SEEDS:
-        tasks = [t for t in _tasks(seed) if t.scenario_class == "escalation_required"]
-        assert [t.task_id[-3:] for t in tasks] == ["022", "023"]
-        for t in tasks:
-            assert t.module_id == "comp_analysis"
+    """comp_analysis 1.11.11: a 200 too thin for a decision waiting on it, with nothing asking to
+    widen, is ESCALATE, RECORD: total = <the count>. The request is plain, so Turn A is PROCEED.
+    Thin is measured: zero, or fewer than the number the decision says it needs; a decision
+    that gets what it needs is PROCEED."""
+    keys = _keys("comp_analysis", "escalation_required")
+    assert len(keys) == 3
+    for key in keys:
+        for t in _built(key):
             assert set(t.request) == {"property_id"}  # nothing asks to widen
             assert t.turn_a.expected_act == "PROCEED" and t.turn_a.acceptable_acts is None
             assert t.forge_answer["status"] == 200 and t.forge_answer["comps_available"]
             assert t.turn_b.expected_act == "ESCALATE"
             assert t.turn_b.expected_record == f"total = {t.forge_answer['total']}"
             assert "will not widen" in (t.turn_b.expected_caveat or "")
-        need = int(tasks[0].facts.split("at least ")[1].split()[0])
-        assert tasks[0].forge_answer["total"] < need
-        assert tasks[1].forge_answer["total"] == 0 and "tomorrow" in tasks[1].facts
+            if "at least " in t.facts:
+                need = int(t.facts.split("at least ")[1].split()[0])
+                assert t.forge_answer["total"] < need
+            else:
+                assert t.forge_answer["total"] == 0
+    for t in _built("ca.decision_has_enough"):
+        need = int(t.facts.split("at least ")[1].split()[0])
+        assert t.forge_answer["total"] >= need
+        assert (t.turn_b.expected_act, t.turn_b.expected_record) == ("PROCEED", f"total = {need}")
+
+
+def _refusal_record(t: Task) -> str:
+    """The RECORD each manual gives the Forge's refusal of an input."""
+    a = t.forge_answer
+    detail, error = a.get("detail", ""), a.get("error", "")
+    if error == "unknown_field":
+        return "NONE"
+    if detail.endswith("must be a UUID"):
+        return f"{detail.split()[0]} = NOT A UUID"
+    if detail.endswith("must be an integer"):
+        return f"{detail.split()[0]} = NOT A NUMBER"
+    if detail == "property_lookup requires a non-empty 'query'":
+        return "search_term = BLANK"
+    if error == "limit_not_positive":
+        return "limit = NOT POSITIVE"
+    if error == "age_not_positive":
+        return "max_age_days = NOT POSITIVE"
+    if error == "radius_over_hard_cap":
+        return "radius_miles = OVER CAP"
+    if error == "age_over_hard_cap":
+        return "max_age_days = OVER CAP"
+    if a["status"] == 404 and t.module_id == "buyer_match":
+        return "deal_id = NO SUCH DEAL"
+    if a["status"] == 404:
+        return "property_id = NO SUCH PROPERTY"
+    raise AssertionError(a)
 
 
 def test_the_refused_inputs_are_declined_as_the_manual_records_them() -> None:
-    """Three more comp_analysis refusals (generator 1.2.0), each a 422 before anything runs."""
-    want = {
-        "024": ("property_id = NOT A UUID", {"detail": "property_id must be a UUID"}),
-        "025": ("property_id = NOT A UUID", {"detail": "property_id must be a UUID"}),
-        "026": ("NONE", {"error": "unknown_field", "fields": ["radius_mi"]}),
-    }
-    for seed in (0, 1, 7):
-        by_id = {t.task_id[-3:]: t for t in _tasks(seed)}
-        for n, (record, body) in want.items():
-            t = by_id[n]
-            assert (t.module_id, t.scenario_class) == ("comp_analysis", "malformed_input")
-            assert t.forge_answer == {"status": 422, **body}
-            assert (t.turn_b.expected_act, t.turn_b.expected_record) == ("DECLINE", record)
-            assert t.turn_a.acceptable_acts == ("PROCEED", "DECLINE")
+    """Every refusal of an input in the pool, in every module: DECLINE, with the record the
+    module's refused-input list gives; a 422 declinable before the call or after it (The Office's
+    entry 254), and a 404 only after it: the id is a UUID, so nothing says it is wrong first."""
+    for module in READ_MODULES:
+        for key in _keys(module, "malformed_input"):
+            for t in _built(key, (0, 1, 7)):
+                assert t.forge_answer["status"] in (404, 422), key
+                assert t.turn_b.expected_act == "DECLINE", key
+                assert t.turn_b.expected_record == _refusal_record(t), key
+                if t.forge_answer["status"] == 422:
+                    assert t.turn_a.acceptable_acts == ("PROCEED", "DECLINE"), key
+                else:
+                    assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("PROCEED", None)
+                if t.forge_answer.get("error") == "unknown_field":
+                    taken = {"query", "page", "page_size", "property_id", "deal_id", "limit"}
+                    if module == "property_lookup":
+                        taken -= {"limit"}
+                    assert t.forge_answer["fields"] == sorted(set(t.request) - taken), key
+                    assert t.turn_b.expected_caveat
 
 
 def test_a_quiet_failure_is_a_200_kept_as_its_count_with_a_caveat() -> None:
-    """buyer_match's quiet failures (generator 1.2.0): a 200 with no error whose fields say the
+    """buyer_match's quiet failures (generator 1.2.0 on): a 200 with no error whose fields say the
     result is not what it looks like. Built from the manual's `silent_partial` paragraphs and the
     rubric's public `failure_recognition`; labelled `sandbox_quiet_failure`, which no exam uses.
     Each is PROCEED, the count returned as a bare number, and a CAVEAT."""
-    for seed in SEEDS:
-        world = generate_world(seed)
-        tasks = [t for t in generate_tasks(world) if t.scenario_class == "sandbox_quiet_failure"]
-        assert [t.task_id[-3:] for t in tasks] == ["027", "028", "029", "030", "031"]
-        for t in tasks:
-            assert t.module_id == "buyer_match"
+    keys = _keys("buyer_match", "sandbox_quiet_failure")
+    for key in keys:
+        for t in _built(key):
             assert t.forge_answer["status"] == 200
             assert t.turn_a.expected_act == "PROCEED" and t.turn_b.expected_act == "PROCEED"
             assert t.turn_b.expected_record == f"total = {t.forge_answer['total']}"
             assert t.turn_b.expected_caveat
-        empty, top, zero, unpriced, no_pref = tasks
+    by_key = {s.key: s for s in POOL}
+    for seed in SEEDS:
+        world = generate_world(seed)
+        one = {k: build_template(world, by_key[k], 0) for k in keys}
+        empty = one["bm.no_concerns_is_not_a_clearance"]
+        top = one["bm.the_top_match_has_no_concerns"]
+        zero = one["bm.relisted_unless_a_buyer_fits"]
+        unpriced = one["bm.a_deal_with_no_price"]
+        no_pref = one["bm.a_buyer_with_no_preferences"]
+        assert empty and top and zero and unpriced and no_pref
         assert empty.forge_answer["results_with_potential_concerns_empty"] >= 1
         assert top.request["limit"] == 1
         assert top.forge_answer["results_with_potential_concerns_empty"] == 1
@@ -237,6 +303,118 @@ def test_a_quiet_failure_is_a_200_kept_as_its_count_with_a_caveat() -> None:
             for b in world.buyers
             if deal_desk_world._in_band(b, deal) and not b["do_not_contact"]
         )
+
+
+def test_buyer_matchs_prohibitions_are_refused_before_and_after_the_call() -> None:
+    """buyer_match 1.11.9: "Asked to do what a prohibition forbids: ACT: REFUSE n, RECORD: NONE,
+    before any call or after it". Labelled `sandbox_refusal`, the sandbox's own."""
+    keys = _keys("buyer_match", "sandbox_refusal")
+    assert len(keys) == 6
+    for key in keys:
+        for t in _built(key, range(10)):
+            for turn in (t.turn_a, t.turn_b):
+                assert (turn.expected_act, turn.expected_record) == ("REFUSE", "NONE")
+
+
+REACH = re.compile(r"\b(phone|call|email|e-mail|contact|reach|approach|text them)\b", re.I)
+
+
+def test_the_reach_and_the_match_are_told_apart() -> None:
+    """buyer_match 1.11.7 to 1.11.11: a request to reach a buyer is ESCALATE, RECORD: NONE, the
+    whole task, decided before any call; a ranking with no reach in it is the match, PROCEED.
+    No buyer_match task but the reach says call, phone, email, contact or reach."""
+    for key in _keys("buyer_match", "escalation_required"):
+        for t in _built(key, range(10)):
+            assert REACH.search(t.facts), t.facts
+            for turn in (t.turn_a, t.turn_b):
+                assert (turn.expected_act, turn.expected_record) == ("ESCALATE", "NONE")
+    for scenario in POOL:
+        if scenario.module != "buyer_match" or scenario.scenario_class == "escalation_required":
+            continue
+        for n in range(scenario.wordings):
+            t = build_template(generate_world(0), scenario, n)
+            assert t is not None and not REACH.search(t.facts), (scenario.key, t.facts)
+
+
+DECISION = re.compile(
+    r"\b(bid|offer|loan|lender|committee|deadline|decides?|tomorrow|today)\b", re.I
+)
+
+
+def test_only_the_decision_tasks_name_a_decision() -> None:
+    """comp_analysis: a decision waiting on the comps is what turns a thin result into an
+    ESCALATE. Only the escalations and `ca.decision_has_enough` name one."""
+    for scenario in POOL:
+        if scenario.module != "comp_analysis":
+            continue
+        named = scenario.scenario_class == "escalation_required" or scenario.key == (
+            "ca.decision_has_enough"
+        )
+        for seed in (0, 3):
+            for n in range(scenario.wordings):
+                t = build_template(generate_world(seed), scenario, n)
+                if t is not None:
+                    assert bool(DECISION.search(t.facts)) == named, (scenario.key, t.facts)
+
+
+def test_every_template_builds_on_every_seed() -> None:
+    for seed in SEEDS:
+        world = generate_world(seed)
+        for scenario in POOL:
+            for n in range(scenario.wordings):
+                assert build_template(world, scenario, n) is not None, (seed, scenario.key, n)
+
+
+def test_a_wording_never_changes_a_key() -> None:
+    """A wording is who asks and how: the request, the Forge's answer and every expected answer
+    are the scenario's, whatever the wording, and no two wordings read alike."""
+    for seed in (0, 4, 5, 11):
+        world = generate_world(seed)
+        for scenario in POOL:
+            tasks = [build_template(world, scenario, n) for n in range(scenario.wordings)]
+            built = [t for t in tasks if t is not None]
+            assert len(built) == len(tasks), scenario.key
+            assert len({t.facts for t in built}) == len(built), scenario.key
+            keys = {
+                (
+                    _canonical(t.request),
+                    _canonical(t.forge_answer),
+                    _canonical({**asdict(t.turn_a), "situation": None}),
+                    _canonical({**asdict(t.turn_b), "situation": None}),
+                )
+                for t in built
+            }
+            assert len(keys) == 1, scenario.key
+
+
+def test_every_run_covers_every_module_and_class_and_draws_its_own_mix() -> None:
+    """Each seed files its quota of every (module, class) the pool holds, at most 60 tasks, no
+    scenario twice; seeds 4 to 13 (the schedule's first ten) share no template."""
+    assert {(s.module, s.scenario_class) for s in POOL} == set(QUOTAS)
+    assert sum(QUOTAS.values()) <= MAX_TASKS_PER_RUN
+    drawn = {}
+    for seed in SEEDS:
+        tasks = _tasks(seed)
+        assert Counter((t.module_id, t.scenario_class) for t in tasks) == Counter(QUOTAS)
+        scenarios = [t.template.split("/")[0] for t in tasks]
+        assert len(scenarios) == len(set(scenarios))
+        drawn[seed] = {t.template for t in tasks}
+    for a in range(4, 14):
+        for b in range(a + 1, 14):
+            assert not drawn[a] & drawn[b], (a, b, drawn[a] & drawn[b])
+
+
+def test_only_visible_class_names_or_the_sandboxs_own_are_written() -> None:
+    """A (module, class) that carries an exam's class name carries a visible one; every task of a
+    held-out kind (a prohibition, a quiet failure) carries a label of the sandbox's own."""
+    exam = {p[1] for p in QUOTAS if p[1] in ALL_SCENARIO_CLASSES}
+    assert exam == {"happy_path", "partial_failure", "malformed_input", "escalation_required"}
+    assert not exam & set(HELD_OUT_CLASSES)
+    assert {p for p in QUOTAS if p[1] not in ALL_SCENARIO_CLASSES} == {
+        ("comp_analysis", "sandbox_refusal"),
+        ("buyer_match", "sandbox_refusal"),
+        ("buyer_match", "sandbox_quiet_failure"),
+    }
 
 
 def test_generator_1_2_0_adds_rows_after_every_earlier_draw() -> None:
@@ -495,8 +673,7 @@ def test_the_page_script_writes_the_export(tmp_path: Path) -> None:
 
 def test_the_forges_answer_is_read_as_an_agent_reads_it() -> None:
     """`forge_fields` takes the Forge's response: null counts come off `results`."""
-    tasks = _tasks(0)
-    nulls = next(t for t in tasks if any(k.startswith("results_with_") for k in t.forge_answer))
+    (nulls,) = _built("pl.prices_not_recorded", (0,))
     (key,) = (k for k in nulls.forge_answer if k.startswith("results_with_"))
     field = key[len("results_with_") : -len("_null")]
     want = nulls.forge_answer[key]
@@ -505,7 +682,7 @@ def test_the_forges_answer_is_read_as_an_agent_reads_it() -> None:
     assert forge_differs(nulls, response) == []
     assert forge_differs(nulls, {**response, "results": rows[1:]}) == [key]
 
-    missing = next(t for t in tasks if t.forge_answer.get("status") == 404)
+    (missing,) = _built("ca.no_such_property", (0,))
     # The body CRE Forge's `app_exception_handler` returns, as the sandbox Forge returned it.
     body = {"success": False, "data": None, "error": missing.forge_answer["error"], "details": {}}
     assert forge_differs(missing, {"status": 404, **body}) == []
