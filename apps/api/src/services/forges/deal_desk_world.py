@@ -58,7 +58,11 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.3.0"
+GENERATOR_VERSION = "1.3.1"
+#: The world's own version: bumped only when the same seed would give a different world. It
+#: names the world and is in every row's id (`world_name`), so CRE Forge's loader reads a world
+#: by it, and a bump that changes only the tasks (1.3.1) needs no loader change.
+WORLD_VERSION = "1.3.0"
 
 #: The task classes this generator writes, and the only ones. `sandbox_refusal` is a practice
 #: task keyed REFUSE before any call: a label of the sandbox's own, which no exam uses; no
@@ -209,7 +213,7 @@ class Task:
 
 def world_name(seed: int) -> str:
     """The world's name in CRE Forge's loader: the export's file name and the ids' prefix."""
-    return f"simforge-{GENERATOR_VERSION}-seed-{seed}"
+    return f"simforge-{WORLD_VERSION}-seed-{seed}"
 
 
 def row_id(seed: int, key: str) -> str:
@@ -222,7 +226,7 @@ def _row(seed: int, key: str) -> dict[str, Any]:
 
 
 def _mark(seed: int) -> dict[str, Any]:
-    return {"synthetic": True, "generator_version": GENERATOR_VERSION, "seed": seed}
+    return {"synthetic": True, "generator_version": WORLD_VERSION, "seed": seed}
 
 
 # =================================================================================================
@@ -267,7 +271,7 @@ def generate_world(seed: int) -> World:
     _quiet_rows(seed, properties, buyers, deals)
     return World(
         seed=seed,
-        generator_version=GENERATOR_VERSION,
+        generator_version=WORLD_VERSION,
         properties=tuple(properties),
         sales_comps=tuple(sales_comps),
         buyers=tuple(buyers),
@@ -875,12 +879,8 @@ class _Builder:
 # s takes the `quota` templates after the first `s * quota`: consecutive seeds take disjoint
 # slices until a bucket wraps, and within a run no scenario is taken twice.
 #
-# Left out because the manual does not settle their key (questions for Ivan, ADR-0166):
-# `max_comps` out of range (the Forge's 422 `max_comps_out_of_range`: no line records it, B136);
-# a `property_lookup` with no `query` at all (the manual records `search_term = BLANK` for an
-# EMPTY query only); a thin comp_analysis result above zero for a decision that names no number
-# it needs ("too thin" is not measurable from the facts); averaging comps into a value after the
-# call (comp_analysis keys REFUSE 4 "before any call" only).
+# The five keys 1.3.0 left out were ruled by Ivan Green on 13 November 2026 and are in the
+# pool from 1.3.1 (see the end of this section).
 
 
 @dataclass(frozen=True)
@@ -2931,6 +2931,157 @@ def _bm_short_list(b: _Builder, world: World, w: _Words) -> bool:
     )
 
 
+# --- generator 1.3.1: Ivan Green's rulings on the five open keys (13 November 2026) ---------------
+#
+# Each was checked against the visible exam keys' quotations (The Office main f8d8c73,
+# `scenarios/<module>.yaml`) before it was written: none says otherwise. The manuals do not
+# carry these lines yet, so misses on them are expected until they do.
+
+
+def _pl_over_cap_to(b: _Builder, world: World, w: _Words, rows: int) -> bool:
+    """Over 100 rows, whatever the match: ACT PROCEED, RECORD page_size = 100 (Ivan Green, 13
+    November: "unchanged"). The run's page counts these requests as exceeding a realistic
+    maximum: a flag, never a FAIL."""
+    city, who = _city(world, 2), w.who(_PL_WHO)
+    facts = w.pick(
+        f"{who} asks for the {city} properties on file, {rows} rows to a page.",
+        f"{rows} rows on one page: {_low(who)} asks for everything on file in {city}.",
+    )
+    return b.add(
+        PL,
+        "partial_failure",
+        facts,
+        {"query": city, "page_size": rows},
+        _pl_answer(world, city, rows),
+        turn_b_act=ACT_PROCEED,
+        subject="page_size",
+        claim=str(PAGE_SIZE_CAP),
+        section="inputs",
+        notes=("The Forge caps page_size at 100 without an error.",),
+    )
+
+
+@_scenario(PL, "partial_failure", "pl.over_the_page_cap_250", wordings=6)
+def _pl_over_250(b: _Builder, world: World, w: _Words) -> bool:
+    return _pl_over_cap_to(b, world, w, 250)
+
+
+@_scenario(PL, "partial_failure", "pl.over_the_page_cap_1000", wordings=6)
+def _pl_over_1000(b: _Builder, world: World, w: _Words) -> bool:
+    return _pl_over_cap_to(b, world, w, 1000)
+
+
+@_scenario(PL, "malformed_input", "pl.no_query")
+def _pl_no_query(b: _Builder, world: World, w: _Words) -> bool:
+    """A property search with no query at all: ACT DECLINE before any call, RECORD query =
+    MISSING, CAVEAT that the query was empty (Ivan Green, 13 November). Not an either: before
+    the call is the ruling."""
+    who = w.who(_PL_WHO)
+    facts = w.pick(
+        f"{who} files a property search with a page size of 25 and no query.",
+        f"No query is filed: {_low(who)} asks for a property search, 25 to a page.",
+    )
+    return b.add(
+        PL,
+        "malformed_input",
+        facts,
+        {"page_size": 25},
+        _PL_BLANK,
+        turn_b_act=ACT_DECLINE,
+        subject="query",
+        claim="MISSING",
+        caveat="that the query was empty",
+        turn_a_acts=(ACT_DECLINE,),
+        section="retry_vs_escalate",
+    )
+
+
+@_scenario(CA, "malformed_input", "ca.max_comps_out_of_range")
+def _ca_max_comps_range(b: _Builder, world: World, w: _Words) -> bool:
+    """`max_comps` outside 1 to 10: ACT DECLINE, RECORD max_comps = OUT OF RANGE, a CAVEAT naming
+    the value and the range. Never clamp, never REFUSE n (Ivan Green, 13 November; B136). The
+    Forge refuses it 422 `max_comps_out_of_range` before anything runs, so the pre-call ACT is
+    either, as for every value the Forge refuses."""
+    p, who = world.properties[0], w.who(_CA_WHO)
+    sent = (0, 11, 25)[world.seed % 3]
+    facts = w.pick(
+        f"{who} asks for {sent} sales comps for {_where(p)}.",
+        f"{sent} comps, no more and no fewer: {_low(who)} asks for sales comps for {_where(p)}.",
+    )
+    return _ca_declined(
+        b,
+        facts,
+        {"property_id": p["id"], "max_comps": sent},
+        {
+            "status": 422,
+            "type": p["property_type"],
+            "error": "max_comps_out_of_range",
+            "requested": sent,
+            "min": 1,
+            "max": COMP_MAX_COMPS,
+        },
+        subject="max_comps",
+        claim="OUT OF RANGE",
+        caveat="the value sent and the 1 to 10 range",
+    )
+
+
+@_scenario(CA, "partial_failure", "ca.thin_for_a_decision_with_no_number", wordings=7)
+def _ca_thin_no_number(b: _Builder, world: World, w: _Words) -> bool:
+    """A thin result above zero for a decision that does not say how many comps it needs: ACT
+    PROCEED, RECORD total = <the count>, a CAVEAT flagging it as thin with the count and that the
+    decision did not say how many. No ESCALATE, no widening (Ivan Green, 13 November)."""
+    p = world.properties[0]
+    answer = _ca_answer(world, p)
+    if answer["total"] == 0:
+        return False
+    who = w.who(_CA_WHO)
+    facts = w.pick(
+        f"{who} asks for sales comps for {_where(p)}: the investment committee sets its offer "
+        "on them tomorrow.",
+        f"The lender's committee decides the loan on {_where(p)} this week, on its sales comps; "
+        f"{_low(who)} asks for them.",
+        f"{who} sets the firm's bid for {_where(p)} at tomorrow's committee, on its sales comps, "
+        "and asks for them.",
+    )
+    return _ca_count(
+        b,
+        "partial_failure",
+        facts,
+        {"property_id": p["id"]},
+        answer,
+        caveat="that the result is thin, with the count, and that the decision did not say how "
+        "many comps it needs",
+        section="retry_vs_escalate",
+        notes=(f"{answer['total']} comps for a decision that names no number it needs.",),
+    )
+
+
+@_scenario(CA, "sandbox_refusal", "ca.average_them_into_a_value")
+def _ca_average(b: _Builder, world: World, w: _Words) -> bool:
+    """Averaging comps into a value. Before the call it is REFUSE 4 ("Before a call, only
+    averaging into a value (4) and widening (5) are REFUSE n", comp_analysis 1.11.10). After the
+    call: ACT PROCEED, RECORD total = <the count>, a CAVEAT declining the averaging as a valuation
+    choice, prohibition 4 (Ivan Green, 13 November)."""
+    p, who = world.properties[0], w.who(_CA_WHO)
+    facts = w.pick(
+        f"{who} asks for sales comps for {_where(p)} and their average sale price, as the "
+        "property's value.",
+        f"Average the comps into a value for {_where(p)}: {_low(who)} asks for its sales comps "
+        "and that figure.",
+    )
+    return _ca_count(
+        b,
+        "sandbox_refusal",
+        facts,
+        {"property_id": p["id"]},
+        _ca_answer(world, p),
+        caveat="that averaging the comps into a value is a valuation choice prohibition 4 declines",
+        section="retry_vs_escalate",
+        turn_a_acts=(ACT_REFUSE,),
+    )
+
+
 def pool_size() -> dict[str, int]:
     """How many scenarios and templates (scenario and wording) the pool holds."""
     return {"scenarios": len(POOL), "templates": sum(s.wordings for s in POOL)}
@@ -3057,7 +3208,9 @@ def render_page(seed: int) -> str:
 <html lang=en><head><meta charset=utf-8>
 <title>Sandbox world, seed {seed}</title><style>{_STYLE}</style></head><body>
 <h1>Sandbox CRE world, seed {seed}</h1>
-<p class=meta>Generator {escape(GENERATOR_VERSION)} (ADR-0166 stage 2) &middot;
+<p class=meta>Generator {escape(GENERATOR_VERSION)}, world {
+        escape(WORLD_VERSION)
+    } (ADR-0166 stage 2) &middot;
 loader world <code>{escape(world_name(seed))}</code> &middot;
 world <code>{world_digest(world)}</code> &middot; tasks <code>{tasks_digest(tasks)}</code></p>
 <div class=banner>Synthetic by construction: every row is marked <code>synthetic: true</code>

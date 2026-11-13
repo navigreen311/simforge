@@ -160,3 +160,33 @@ def test_the_script_writes_the_demo_page(tmp_path: Path) -> None:
     assert main(["--demo", "--out", str(tmp_path)]) == 0
     page = (tmp_path / "sandbox-run-demo.html").read_text(encoding="utf-8")
     assert "FAKE RUN" in page and WAITING in page
+
+
+def test_requests_past_a_realistic_maximum_are_counted_apart_and_never_failed() -> None:
+    """Ivan Green, 13 November: a property_lookup asking for more than 100 rows is PROCEED,
+    page_size = 100, unchanged; the page counts these per run, apart from parameter errors."""
+    from src.services.forges.deal_desk_world import POOL, build_template
+    from src.services.sandbox.page import exceeds_realistic_max
+
+    world = generate_world(4)
+    for scenario in POOL:
+        task = build_template(world, scenario, 0)
+        flagged = exceeds_realistic_max(task)
+        size = task.request.get("page_size") if task else None
+        over = (
+            task is not None
+            and task.module_id == "property_lookup"
+            and (isinstance(size, int) and size > 100)
+        )
+        assert bool(flagged) == over, scenario.key
+        if over:
+            assert task.scenario_class == "partial_failure"  # not a parameter error
+            assert task.turn_b.expected_record == "page_size = 100"
+
+
+async def test_the_page_has_the_realistic_maximum_bucket(db_session: AsyncSession) -> None:
+    from src.services.sandbox.page import exceeds_realistic_max
+
+    run, _steps, page = await _demo(db_session)
+    over = [t for t in run.taskIds if exceeds_realistic_max(TASKS[t])]
+    assert f"<h2>Exceeds a realistic maximum ({len(over)})</h2>" in page

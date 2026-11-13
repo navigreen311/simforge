@@ -110,11 +110,24 @@ def test_the_phi4_rule(free: float, loaded: bool, exam: bool, minute: int, stop:
     assert rules.stop_phi4_first(free_gb=free, phi4_loaded=loaded, exam_open=exam, now=now) is stop
 
 
-def test_a_scheduled_run_is_its_owners_on_a_business_day_once() -> None:
+def test_a_scheduled_run_is_its_owners_once_a_day_weekends_included() -> None:
+    """Ivan Green, 13 November: every day, weekends included; at most once a day."""
     req = _hand(starter="Ira Green", scheduled=True, schedule=_schedule())
     assert rules.check_start(req, OK) == []
+    for day in (14, 15):  # Saturday and Sunday
+        weekend = rules.Measured(now=datetime(2026, 11, day, 10, 5), free_gb=12, exam_open=False)
+        assert rules.check_start(req, weekend) == []
     saturday = rules.Measured(now=datetime(2026, 11, 14, 10, 5), free_gb=12, exam_open=False)
-    assert _codes(rules.check_start(req, saturday)) == {"not_a_business_day"}
+    again_saturday = _hand(
+        starter="Ira Green",
+        scheduled=True,
+        schedule=_schedule(),
+        scheduled_today=[datetime(2026, 11, 14, 7, 5)],
+    )
+    assert _codes(rules.check_start(again_saturday, saturday)) == {"scheduled_run_already_today"}
+    # The refusals stay, on a weekend as on any day.
+    busy = rules.Measured(now=datetime(2026, 11, 15, 10, 20), free_gb=6, exam_open=True)
+    assert _codes(rules.check_start(req, busy)) == {"inside_a_sweep", "exam_open", "memory"}
     again = _hand(
         starter="Ira Green",
         scheduled=True,

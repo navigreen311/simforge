@@ -23,6 +23,7 @@ from src.services.forges.deal_desk_world import (
     QUOTAS,
     READ_MODULES,
     TASK_CLASSES,
+    WORLD_VERSION,
     Task,
     TurnKey,
     World,
@@ -105,7 +106,7 @@ def test_every_row_is_marked_synthetic_with_its_seed() -> None:
             for r in rows:
                 assert r["synthetic"] is True
                 assert r["seed"] == seed
-                assert r["generator_version"] == GENERATOR_VERSION
+                assert r["generator_version"] == WORLD_VERSION
         assert all(b["email"] == f"{b['key']}@sandbox.invalid" for b in w.buyers)
 
 
@@ -168,6 +169,8 @@ def test_a_widening_is_refused_or_run_by_its_reason() -> None:
     names nothing the property is, is REFUSE 5 before any call, at the cap or past it; one naming
     a constraint of the property is PROCEED (Ivan Green, 10 and 12 November)."""
     for key in _keys("comp_analysis", "sandbox_refusal"):
+        if key == "ca.average_them_into_a_value":  # prohibition 4, not a widening
+            continue
         for t in _built(key, range(10)):
             assert t.request["widening_reason"]
             assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("REFUSE", None)
@@ -225,8 +228,12 @@ def _refusal_record(t: Task) -> str:
         return f"{detail.split()[0]} = NOT A UUID"
     if detail.endswith("must be an integer"):
         return f"{detail.split()[0]} = NOT A NUMBER"
+    if detail == "property_lookup requires a non-empty 'query'" and "query" not in t.request:
+        return "query = MISSING"
     if detail == "property_lookup requires a non-empty 'query'":
         return "search_term = BLANK"
+    if error == "max_comps_out_of_range":
+        return "max_comps = OUT OF RANGE"
     if error == "limit_not_positive":
         return "limit = NOT POSITIVE"
     if error == "age_not_positive":
@@ -252,7 +259,9 @@ def test_the_refused_inputs_are_declined_as_the_manual_records_them() -> None:
                 assert t.forge_answer["status"] in (404, 422), key
                 assert t.turn_b.expected_act == "DECLINE", key
                 assert t.turn_b.expected_record == _refusal_record(t), key
-                if t.forge_answer["status"] == 422:
+                if key == "pl.no_query":  # Ivan Green, 13 November: before any call
+                    assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("DECLINE", None)
+                elif t.forge_answer["status"] == 422:
                     assert t.turn_a.acceptable_acts == ("PROCEED", "DECLINE"), key
                 else:
                     assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("PROCEED", None)
@@ -347,8 +356,9 @@ def test_only_the_decision_tasks_name_a_decision() -> None:
     for scenario in POOL:
         if scenario.module != "comp_analysis":
             continue
-        named = scenario.scenario_class == "escalation_required" or scenario.key == (
-            "ca.decision_has_enough"
+        named = scenario.scenario_class == "escalation_required" or scenario.key in (
+            "ca.decision_has_enough",
+            "ca.thin_for_a_decision_with_no_number",
         )
         for seed in (0, 3):
             for n in range(scenario.wordings):
@@ -578,7 +588,7 @@ LOADER_REQUIRES = {
 def test_every_id_is_the_one_cre_forges_loader_gives_its_key() -> None:
     for seed in SEEDS:
         w = generate_world(seed)
-        assert world_name(seed) == f"simforge-{GENERATOR_VERSION}-seed-{seed}"
+        assert world_name(seed) == f"simforge-{WORLD_VERSION}-seed-{seed}"
         for kind in KINDS:
             for r in getattr(w, kind):
                 want = uuid.uuid5(CRE_LOADER_NAMESPACE, f"{world_name(seed)}/{r['key']}")
@@ -652,7 +662,7 @@ def test_comps_are_counted_the_way_the_sandbox_forge_counts_them() -> None:
 
     w = World(
         seed=0,
-        generator_version=GENERATOR_VERSION,
+        generator_version=WORLD_VERSION,
         properties=(subject,),
         sales_comps=(comp("a", 0.5, 900), comp("b", 0.6, 900), comp("c", 1.5, 30)),
         buyers=(),
@@ -687,3 +697,52 @@ def test_the_forges_answer_is_read_as_an_agent_reads_it() -> None:
     body = {"success": False, "data": None, "error": missing.forge_answer["error"], "details": {}}
     assert forge_differs(missing, {"status": 404, **body}) == []
     assert forge_differs(missing, {"status": 200, **body}) == ["status"]
+
+
+def test_ivan_greens_rulings_on_the_five_open_keys() -> None:
+    """13 November 2026, the keys 1.3.0 left out (generator 1.3.1). Each checked against the
+    visible exam keys' quotations first; none says otherwise."""
+    for t in _built("ca.max_comps_out_of_range"):
+        assert t.request["max_comps"] not in range(1, 11)
+        assert t.forge_answer["error"] == "max_comps_out_of_range"
+        assert (t.turn_b.expected_act, t.turn_b.expected_record) == (
+            "DECLINE",
+            "max_comps = OUT OF RANGE",
+        )
+        assert "REFUSE" not in (t.turn_a.acceptable_acts or (t.turn_a.expected_act,))
+        assert "1 to 10" in (t.turn_b.expected_caveat or "")
+    for t in _built("pl.no_query"):
+        assert "query" not in t.request
+        assert (t.turn_a.expected_act, t.turn_a.acceptable_acts) == ("DECLINE", None)
+        assert t.turn_b.expected_record == "query = MISSING"
+        assert "empty" in (t.turn_b.expected_caveat or "")
+    for t in _built("ca.thin_for_a_decision_with_no_number"):
+        assert t.forge_answer["total"] > 0 and "at least" not in t.facts
+        assert set(t.request) == {"property_id"}  # no widening
+        for turn in (t.turn_a, t.turn_b):
+            assert turn.expected_act == "PROCEED"
+        assert t.turn_b.expected_record == f"total = {t.forge_answer['total']}"
+        assert "thin" in (t.turn_b.expected_caveat or "")
+    for t in _built("ca.average_them_into_a_value"):
+        assert t.turn_a.expected_act == "REFUSE"  # before the call: the manual's REFUSE 4
+        assert (t.turn_b.expected_act, t.turn_b.expected_record) == (
+            "PROCEED",
+            f"total = {t.forge_answer['total']}",
+        )
+        assert "prohibition 4" in (t.turn_b.expected_caveat or "")
+    for key in ("pl.over_the_page_cap", "pl.over_the_page_cap_250", "pl.over_the_page_cap_1000"):
+        for t in _built(key):
+            assert t.request["page_size"] > 100
+            assert (t.turn_b.expected_act, t.turn_b.expected_record) == (
+                "PROCEED",
+                "page_size = 100",
+            )
+
+
+def test_a_task_only_bump_keeps_the_world_and_its_ids() -> None:
+    """1.3.1 changes the tasks, not the world: its name, its rows and its digest are 1.3.0's,
+    so CRE Forge's loader reads it unchanged."""
+    assert (GENERATOR_VERSION, WORLD_VERSION) == ("1.3.1", "1.3.0")
+    assert world_name(4) == "simforge-1.3.0-seed-4"
+    export = json.loads(export_json(4))
+    assert (export["version"], export["generator_version"]) == ("1.3.0", "1.3.0")
