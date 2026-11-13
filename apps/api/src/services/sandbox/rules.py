@@ -18,7 +18,8 @@ The rulings (Ivan Green, 8 and 9 November 2026):
   - Not with under 8 GB of free memory. The phi4 rule (standing, 4 November): if phi4 is
     loaded, no SimForge exam is open and it is outside the sweeps, `ollama stop phi4` first,
     then measure again.
-- **How much.** At most 60 tasks per run; at most one scheduled run per business day.
+- **How much.** At most 60 tasks per run; at most one scheduled run per day, every day of
+  the week (Ivan Green, 13 November: weekends included).
 """
 
 from __future__ import annotations
@@ -35,8 +36,9 @@ SWEEPS: tuple[tuple[int, int], ...] = ((17, 24), (47, 54))
 MIN_FREE_GB = 8.0
 #: The first seed a schedule uses: seeds 0 to 3 were run by hand on generator 1.2.0.
 FIRST_SCHEDULED_SEED = 4
-#: Monday to Friday. No holiday calendar: a holiday is a business day here (not ruled).
-BUSINESS_DAYS = frozenset({0, 1, 2, 3, 4})
+#: The days a schedule runs: all seven (Ivan Green, 13 November 2026, "every day, weekends
+#: included"). It was Monday to Friday until then.
+SCHEDULE_DAYS = frozenset(range(7))
 
 
 @dataclass(frozen=True)
@@ -64,8 +66,8 @@ def sweep_ends(now: datetime) -> datetime:
     return now.replace(minute=window[1], second=0, microsecond=0) + timedelta(minutes=1)
 
 
-def is_business_day(day: date) -> bool:
-    return day.weekday() in BUSINESS_DAYS
+def is_schedule_day(day: date) -> bool:
+    return day.weekday() in SCHEDULE_DAYS
 
 
 def stop_phi4_first(*, free_gb: float, phi4_loaded: bool, exam_open: bool, now: datetime) -> bool:
@@ -191,8 +193,8 @@ def check_start(request: StartRequest, measured: Measured) -> list[Refusal]:
                 )
             if request.starter != request.schedule.owner:
                 found.append(Refusal("not_the_schedule_owner", request.starter))
-        if not is_business_day(measured.now.date()):
-            found.append(Refusal("not_a_business_day", measured.now.strftime("%A")))
+        if not is_schedule_day(measured.now.date()):
+            found.append(Refusal("not_a_schedule_day", measured.now.strftime("%A")))
         if request.scheduled_today:
             first = min(request.scheduled_today)
             found.append(Refusal("scheduled_run_already_today", f"one started at {first:%H:%M}"))

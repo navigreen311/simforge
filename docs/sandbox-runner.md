@@ -63,8 +63,8 @@ checkout and with the python that set it.
 
 - A schedule has one owner, Ivan or Ira, a time outside the sweeps and at most 60 tasks. Only
   its owner stops it or replaces it.
-- **Daily practice (generator 1.3.0).** The defaults are a business-day run at **07:05**, all of
-  the seed's tasks (48), on **the next seed no run has used**: one more than the highest seed in
+- **Daily practice (generator 1.3.0).** The defaults are a run **every day, weekends included**
+  (Ivan Green, 13 November), at **07:05**, at most once a day, all of the seed's tasks (48), on **the next seed no run has used**: one more than the highest seed in
   `SandboxRun`, and never below the schedule's `--seed` (default 4: seeds 0 to 3 were run by
   hand on 1.2.0). Each seed draws its own tasks from the pool, so day after day the tasks
   differ. 07:05 is outside the sweeps and before the exams: over the 45 days to 13 November,
@@ -80,12 +80,13 @@ checkout and with the python that set it.
   schedule stopped. To remove it: `schtasks /Delete /TN "SimForge sandbox run" /F`, then
   `schedule stop`. The task runs only while its owner is logged on to this machine; a run it
   fires while an exam is open, or with under 8 GB free, is refused for the day (the start rules)
-  and the next business day takes the same seed.
+  and the next day takes the same seed. Those refusals hold on a weekend as on any day: an
+  exam open, under 8 GB free, inside a sweep (a scheduled run waits the sweep out).
 - `--register` creates (or disables) the Windows scheduled task `SimForge sandbox run`,
-  Monday to Friday at that time, which runs `python -m scripts.sandbox_run scheduled`.
+  every day at that time (`schtasks /SC DAILY`), which runs `python -m scripts.sandbox_run scheduled`.
   Without `--register` it prints the `schtasks` line it would run.
 - `scheduled` starts the run as the owner, with `SandboxRun.scheduleOwner` set, so the page
-  names the owner. It refuses on a weekend, after a scheduled run already started today, when
+  names the owner. It refuses after a scheduled run already started today, when
   the schedule is stopped, or on any start rule. Fired inside a sweep, it waits for the sweep to
   close. There is no holiday calendar.
 
@@ -104,7 +105,7 @@ Every rule is checked and every reason reported. `check` runs them alone.
 | `port_in_use` | 127.0.0.1:9212 already listening (a throwaway: 8013, 9213 or 55443), with who holds it |
 | `throwaway_held` | a throwaway only: another runner home's throwaway stack holds 8013, 9213 or 55443, or another throwaway run holds the machine's one throwaway slot; both name the home |
 | `missing` | `runner.env`, a checkout, a python, the CRE Forge's env, a loader without `--replace`, or SimForge's sandbox tables (migration 20261109000000) |
-| `not_a_business_day`, `scheduled_run_already_today`, `schedule_stopped`, `no_schedule`, `not_the_schedule_owner` | `scheduled` only |
+| `not_a_schedule_day` (never, with all seven days), `scheduled_run_already_today`, `schedule_stopped`, `no_schedule`, `not_the_schedule_owner` | `scheduled` only |
 
 Each piece also has its own start-up refusals, which the runner does not repeat: the sandbox
 CRE Forge's (`SANDBOX_MODE`), the sandbox Office's (`OFFICE_SANDBOX`, including the simulation

@@ -8,6 +8,8 @@ One HTML page per `SandboxRun`, built from its `SandboxStep`s and nothing else:
 - **Every task**, one line each: its result and a one-line why for each miss, and for each
   CAVEAT flagged because it states what the request did not ask for and the Forge's answer does
   not give (no verdict changes).
+- **Exceeds a realistic maximum**: the run's property_lookup requests for more than 100 rows,
+  counted apart from the parameter errors (Ivan Green, 13 November). A flag, never a FAIL.
 - **Refused at filing by The Office**: the seed's tasks the Office would not file (ruled 10
   November). Never filed, so no agent saw them; counted against no agent.
 - **Then every task step by step**: the facts filed, the claim, Turn A expected and given, the
@@ -35,7 +37,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.sandbox_run import STEPS, SandboxRun, SandboxStep
-from src.services.forges.deal_desk_world import READ_MODULES, Task, TurnKey
+from src.services.forges.deal_desk_world import PAGE_SIZE_CAP, READ_MODULES, Task, TurnKey
 from src.services.sandbox.record import (
     ACT_PROCEED,
     REASON_CAVEAT_CONTRADICTS,
@@ -210,6 +212,19 @@ def _step_whys(
 def is_flag(reason: str) -> bool:
     """A reason shown on the page that is no miss: it changed no verdict."""
     return reason.startswith((f"{REASON_CAVEAT_CONTRADICTS}:", f"{REASON_CAVEAT_NOT_IN_ANSWER}:"))
+
+
+def exceeds_realistic_max(task: Task | None) -> str | None:
+    """Why a task's request exceeds a realistic maximum, or None: a property_lookup asking for
+    more than the 100 rows the Forge ever serves (Ivan Green, 13 November). Counted per run
+    apart from the parameter errors, which the Forge refuses: the Forge runs this one, capped.
+    A flag, never a FAIL: no verdict reads it."""
+    if task is None or task.module_id != "property_lookup":
+        return None
+    size = task.request.get("page_size")
+    if isinstance(size, bool) or not isinstance(size, int) or size <= PAGE_SIZE_CAP:
+        return None
+    return f"page_size {size} exceeds a realistic maximum (the Forge serves {PAGE_SIZE_CAP})"
 
 
 def _forge_before(steps: Sequence[SandboxStep], turn_b: SandboxStep) -> Mapping[str, Any] | None:
@@ -393,6 +408,27 @@ def _counts_table(
     return f"<table>{head}{''.join(rows)}</table>"
 
 
+def _realistic_max_section(run: SandboxRun, tasks: Mapping[str, Task] | None) -> str:
+    """The run's requests that exceed a realistic maximum: their own bucket, apart from the
+    parameter errors, and never a miss."""
+    over = [(t, why) for t in run.taskIds if (why := exceeds_realistic_max((tasks or {}).get(t)))]
+    rows = "".join(
+        f"<tr><td><a href='#task-{escape(t)}'><b>{escape(t)}</b></a></td><td>{escape(why)}</td>"
+        "</tr>"
+        for t, why in over
+    )
+    return (
+        f"<h2>Exceeds a realistic maximum ({len(over)})</h2>"
+        "<p class=s>Requests the Forge runs, capped, that ask for more than it ever serves: "
+        "counted here apart from the parameter errors it refuses. Flagged, never failed.</p>"
+        + (
+            "<table><tr><th>task</th><th>flag</th></tr>" + rows + "</table>"
+            if over
+            else "<p>None in this run.</p>"
+        )
+    )
+
+
 def _refused_section(refused: Sequence[Mapping[str, Any]], tasks: Mapping[str, Task] | None) -> str:
     """The tasks The Office refused at filing: shown, and counted against no agent."""
     if not refused:
@@ -463,6 +499,9 @@ def render_run_page(
         verdict = {s.step: s.verdict for s in mine if s.step in ("turn_a", "turn_b")}
         cls = _ROW_CLASS[result]
         line = task_why(mine, tasks)
+        over = exceeds_realistic_max(task)
+        if over:
+            line = " / ".join(x for x in (line, f"flagged, not failed: {over}") if x)
         anchor = f"task-{escape(task_id)}"
         klass = f" ({escape(task.scenario_class)})" if task else ""
         index_rows.append(
@@ -535,6 +574,7 @@ agent's.</div>
 <h2>Every task</h2>
 <table><tr><th>task</th><th>agent</th><th>Turn A</th><th>Turn B</th><th>result</th>
 <th>why (each miss, and each flag)</th></tr>{"".join(index_rows)}</table>
+{_realistic_max_section(run, tasks)}
 {_refused_section(refused, tasks)}
 {detail}
 </body></html>

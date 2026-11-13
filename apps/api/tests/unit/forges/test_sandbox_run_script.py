@@ -59,7 +59,7 @@ def test_without_register_nothing_is_registered(
     sandbox_run.main(["schedule", "set", "--as", "Ira Green", "--at", "10:05"])
     out = capsys.readouterr().out
     assert "not registered with Windows" in out and "schtasks /Create" in out
-    assert "MON,TUE,WED,THU,FRI" in out
+    assert "/SC DAILY" in out and "MON,TUE" not in out
     assert (home / "scheduled-run.cmd").is_file()
 
 

@@ -983,7 +983,7 @@ async def scheduled_today(db: AsyncSession, now: datetime) -> list[datetime]:
     ).scalars()
     out = []
     for started in rows:
-        # The record stores naive UTC; the business day is the local one.
+        # The record stores naive UTC; the day is the local one.
         local = started.replace(tzinfo=UTC).astimezone().replace(tzinfo=None)
         if local.date() == now.date():
             out.append(local)

@@ -24,7 +24,7 @@ A scheduled run files all of its seed's tasks unless the schedule says how many,
 seed no run has used: one more than the highest seed in `SandboxRun`, and never below the
 schedule's `--seed` (default 4, the first seed after the four run by hand on generator 1.2.0).
 `--register` creates the Windows scheduled task `SimForge sandbox run` (Task Scheduler,
-`schtasks`), Monday to Friday at `--at`, running `scheduled-run.cmd` in the runner's directory;
+`schtasks`), every day at `--at`, running `scheduled-run.cmd` in the runner's directory;
 each day's output is appended to `scheduled.log` there and its page is in `runs/<when>-seed-<n>/`.
 
 `--throwaway` runs the same code on a throwaway copy of every stack (CRE Forge on 8013, the
@@ -343,7 +343,7 @@ def _schedule(args: argparse.Namespace) -> int:
     write_schedule(schedule)
     many = "all of the seed's" if args.tasks is None else str(args.tasks)
     log(
-        f"schedule set by {args.as_}: business days at {args.at}, {many} tasks "
+        f"schedule set by {args.as_}: every day at {args.at}, {many} tasks "
         f"({home() / 'schedule.json'})"
     )
     _register(schedule, enable=True, registered=args.register)
@@ -381,7 +381,7 @@ async def _next_scheduled_seed(schedule: rules.Schedule) -> int | str:
 
 
 def _register(schedule: rules.Schedule, *, enable: bool, registered: bool) -> None:
-    """The Windows scheduled task that runs `scheduled` on business days. Only with --register."""
+    """The Windows scheduled task that runs `scheduled` every day. Only with --register."""
     from src.services.sandbox.runner import home
 
     cmd = home() / "scheduled-run.cmd"
@@ -396,9 +396,7 @@ def _register(schedule: rules.Schedule, *, enable: bool, registered: bool) -> No
         "/TN",
         TASK_NAME,
         "/SC",
-        "WEEKLY",
-        "/D",
-        "MON,TUE,WED,THU,FRI",
+        "DAILY",
         "/ST",
         schedule.at,
         "/TR",
