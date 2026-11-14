@@ -1,7 +1,7 @@
 # ADR-0167 — A re-certification is one command, and the only stops are the humans'
 
-**Status:** proposed (accepted when Ivan Green approves it) · **Asked by:** Ivan Green, 2026-11-13 ·
-**Not built.** Builds on [ADR-0050](ADR-0050-no-credential-fetches-the-held-out-set.md) (no request puts a held-out probe, so the sweeps are scheduler-only),
+**Status:** accepted · **Decided by:** Ivan Green, 2026-11-14 (asked 2026-11-13) · **Not built.**
+ Builds on [ADR-0050](ADR-0050-no-credential-fetches-the-held-out-set.md) (no request puts a held-out probe, so the sweeps are scheduler-only),
 [ADR-0154](ADR-0154-author-and-sealer-authenticate.md),
 [ADR-0162](ADR-0162-a-partition-records-its-roster.md),
 [ADR-0163](ADR-0163-one-sealed-partition-per-venture-and-forge.md) and
@@ -37,6 +37,16 @@ came before it:
 
 Most of the time was spent waiting for a clock, a confirmation, or a review the run had already
 voided. Very little of it was human judgment.
+
+## The ruling (Ivan Green, 14 November 2026)
+
+> Ivan approves ADR-0167, including stage 3: at Gate 4 he reviews both the current artifacts
+> and the artifacts as they'll look if the exams land as planned; Gate 10 binds only if the full
+> current hash equals one of the two; anything else falls back to block 159's re-review.
+
+So stage 3 is ruled as worded in section 3 and needs no further ruling before it is built. Stage 1
+starts now. Stages 2 to 5 wait, and the 1.11.13 re-certification runs the old way, by founder
+blocks.
 
 ## The decision
 
@@ -379,8 +389,8 @@ each), so a cycle that moves three modules adds roughly 16 min.
 2. **The Office: the plan and the freeze.** `plan_recertification`, `venture_recertification` and
    `recertification_open`, with tests. `plan` works alone and read-only from this stage.
 3. **The Office: one review that holds.** Projected artifacts, the review's hash list,
-   `review_binding`, and the console panel. This amends entries 228 and 333's binding, so it
-   needs Ivan's ruling as worded here before it is built.
+   `review_binding`, and the console panel. This amends entries 228 and 333's binding. Ivan Green
+   ruled it as worded here on 14 November.
 4. **The Office: `scripts.recertify`.** `run`, `seal`, `sign` and `abandon`, each step a port of
    its block with that block's refusals, plus the journal and the dry run.
 5. **Rehearsal.** End to end on a scratch Office database and throwaway SimForge and Forge stacks,
