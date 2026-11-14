@@ -611,7 +611,7 @@ class ProcessStack:
 
     def snapshot(self, office_run_id: str) -> list[dict[str, Any]]:
         sql = office_sync.OFFICE_TASK_SQL.format(run_id=office_run_id.replace("'", ""))
-        return [json.loads(line) for line in self._psql(sql).splitlines() if line.strip()]
+        return office_sync.rows(self._psql(sql))
 
     # -- the operator
     def operator_setup_args(self, run_dir: Path, tokens: Path) -> list[str]:
