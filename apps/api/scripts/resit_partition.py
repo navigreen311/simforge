@@ -8,8 +8,9 @@ whatever they last read, as a new sitting. New rows only: nothing written
 before is touched. Gate 9.5 then reads the weakest sitting, not the latest.
 
 Not a route, by design (ADR-0050): no request puts a held-out probe. It
-holds the partition sweep's own lock, so it never grades beside a
-scheduled pass. It prints counts and per-agent verdicts, never a probe.
+holds the partition sweep's own lock and the examiner's model lock
+(ADR-0167), so it never grades beside a scheduled pass or another exam.
+It prints counts and per-agent verdicts, never a probe.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import sys
 
 from src.db import SessionLocal
 from src.models.held_out_partition import HeldOutPartition
+from src.services.agent_runtime.exam_model_lock import exam_model_lock
 from src.services.operation import partition_grading
 from src.services.village.reader import VillageReaderError
 from src.workers.partition_sweep import build_runtime, partition_sweep_lock
@@ -54,15 +56,18 @@ async def resit(
     async with partition_sweep_lock(lock_session) as acquired:
         if not acquired:
             raise ResitRefused("a partition pass holds the lock; try again when it ends.")
-        out = await partition_grading.grade_partition(
-            session,
-            partition_id,
-            runtime=examiner,
-            seeds=(seed,),
-            only_agents=agents,
-            resit=True,
-            budget_seconds=partition_grading.PARTITION_AGENT_BUDGET_SECONDS,
-        )
+        async with exam_model_lock(lock_session) as model_free:
+            if not model_free:
+                raise ResitRefused("another exam holds the model; try again when it ends.")
+            out = await partition_grading.grade_partition(
+                session,
+                partition_id,
+                runtime=examiner,
+                seeds=(seed,),
+                only_agents=agents,
+                resit=True,
+                budget_seconds=partition_grading.PARTITION_AGENT_BUDGET_SECONDS,
+            )
     return {
         "partition_id": partition_id,
         "seed": seed,

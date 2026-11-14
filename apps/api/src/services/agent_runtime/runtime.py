@@ -60,6 +60,23 @@ def build_agent_runtime(village_reader: VillageReader) -> AgentRuntime:
     return AgentRuntime(village_reader=village_reader, provider=get_agent_llm())
 
 
+def begin_exam(provider: LLMProvider) -> None:
+    """ADR-0167. A new exam starts here: forget any earlier exam's watch on Ollama's request log.
+    A provider that watches nothing (a scripted or cloud one) has nothing to forget."""
+    reset = getattr(provider, "reset_exam", None)
+    if reset is not None:
+        reset()
+
+
+async def end_exam(provider: LLMProvider) -> None:
+    """ADR-0167. The exam's last model call is behind it: raise `AnotherPhi4Caller` if any other
+    model request reached Ollama between its first call and now. Nothing for a provider that
+    watches nothing."""
+    end = getattr(provider, "end_exam", None)
+    if end is not None:
+        await end()
+
+
 def build_exam_runtime(village_reader: VillageReader) -> AgentRuntime:
     """A runtime pinned to the EXAMINER, which is not the same thing as the agent runtime.
 
