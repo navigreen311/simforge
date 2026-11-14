@@ -31,6 +31,7 @@ from src.services.agent_runtime.runtime import AgentRuntime, build_exam_runtime
 from src.services.operation import partition_grading
 from src.services.village.reader import VillageReader, VillageReaderError
 from src.telemetry.logging import get_logger
+from src.workers.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 
 log = get_logger("partition_sweep")
 
@@ -153,7 +154,11 @@ async def run_partition_pass(session: AsyncSession, lock_session: AsyncSession) 
     async with partition_sweep_lock(lock_session) as acquired:
         if not acquired:
             return {"job": JOB_NAME, "skipped": SKIP_LOCKED}
-        outcome = await sweep_sealed_partitions(session, runtime=runtime)
+        # ADR-0167. And the model, which a battery pass or `grade_now` may hold.
+        async with exam_model_lock(lock_session) as model_free:
+            if not model_free:
+                return {"job": JOB_NAME, "skipped": SKIP_MODEL_HELD}
+            outcome = await sweep_sealed_partitions(session, runtime=runtime)
     result = {
         "job": JOB_NAME,
         "examiner": provider_label(runtime.provider),

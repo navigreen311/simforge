@@ -575,6 +575,8 @@ class _Ledger:
     venture_id: str
     digest: str
     recorded: int = 0
+    #: ADR-0167. The examiner's record, written on every row this ledger appends.
+    model_identity: dict | None = None
 
     async def append(
         self,
@@ -607,6 +609,8 @@ class _Ledger:
             sittingId=sitting_id,
             # ADR-0143. Written on the sitting row; the row's verdict is never rewritten.
             slipCount=slips,
+            # ADR-0167. Which examiner graded it, as a battery-graded run records.
+            agentModelIdentity=self.model_identity,
             decidedAt=at,
         )
         self.session.add(row)
@@ -854,6 +858,11 @@ async def grade_partition(
     if wanted is None or runtime.exam_settings().get("temperature") != wanted:
         log.warning("partition_examiner_not_at_this_forge", partition=pid, forge=forge)
         return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_NOT_AT_THIS_FORGE)
+
+    # ADR-0167. The examiner `examiner_runtime` checked, asked once - after every refusal that
+    # puts nothing - and kept on every row this pass writes.
+    identity = await runtime.model_identity()
+    ledger.model_identity = identity.as_record() if identity else None
 
     agents = await agents_for_partition(session, partition)
 

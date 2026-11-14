@@ -62,6 +62,7 @@ from src.services.forges.deal_desk_world import (
 )
 from src.services.sandbox import office_sync, record, rules
 from src.services.sandbox.page import load_run, render_run_page
+from src.workers.exam_model_lock import model_lock_held
 
 VENTURE = "greenstone"
 TERMINAL = frozenset({"answered", "refused", "declined", "escalated", "failed"})
@@ -941,16 +942,22 @@ def _open_exams() -> Any:
 
 
 async def live_exam_open() -> bool:
-    """Whether a SimForge exam is open, read from the live database in a READ ONLY transaction:
-    the check every run makes, throwaway or not, at its start and before every tick."""
+    """Whether a SimForge exam is open or being graded, read from the live database in a READ
+    ONLY transaction: the check every run makes, throwaway or not, at its start and before every
+    tick.
+
+    Being graded is the examiner's model lock (ADR-0167): a partition being graded writes no
+    `OperationRun`, so the open-run count alone never saw it. The lock is read from `pg_locks`,
+    never taken."""
     url = Settings.model_construct(database_url=live_database_url()).sqlalchemy_url
     engine = create_async_engine(url, poolclass=NullPool)
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SET TRANSACTION READ ONLY"))
             count = (await conn.execute(_open_exams())).scalar_one()
+            grading = await model_lock_held(conn)
             await conn.rollback()
-        return bool(count)
+        return bool(count) or grading
     finally:
         await engine.dispose()
 

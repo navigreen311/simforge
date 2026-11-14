@@ -42,51 +42,34 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from pathlib import Path
 
-from src.config import get_settings
 from src.db import SessionLocal
-from src.services.agent_runtime.llm_client import resolve_provider
-from src.services.agent_runtime.runtime import AgentRuntime
+from src.services.agent_runtime.runtime import build_exam_runtime
 from src.services.village.reader import VillageReader
 from src.workers.battery_sweep import battery_sweep_lock, sweep_unscored_runs
-
-
-def _provider_or_die(name: str):
-    """The examiner is named, never resolved. ADR-0054.
-
-    `auto` resolves to Ollama-if-reachable-else-stub and never to Anthropic, so a sweep launched on
-    `auto` would certify agents against whichever local model happened to be running. It is refused
-    here rather than warned about, because the resulting certifications look exactly like real ones.
-    """
-    if name == "auto":
-        raise SystemExit(
-            "LLM_PROVIDER=auto is not a valid examiner. It resolves to ollama or stub and never "
-            "to anthropic. Set LLM_PROVIDER=anthropic (ADR-0054)."
-        )
-    if resolve_provider(name) != name:
-        raise SystemExit(f"provider {name!r} does not resolve to itself; name it explicitly")
-    from src.services.agent_runtime.llm_client import get_llm_provider
-
-    return get_llm_provider()
+from src.workers.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 
 
 async def main_async(limit: int, seed: int) -> int:
-    settings = get_settings()
-    provider = _provider_or_die(settings.llm_provider)
-    runtime = AgentRuntime(
-        village_reader=VillageReader(village_data_path=Path(settings.village_data_path)),
-        provider=provider,
-    )
+    # The EXAMINER (ADR-0061, ADR-0167), as the scheduled sweep builds it: `get_exam_llm()` names
+    # its own pinned model and starts every call from a clean cache (B135). This script used to
+    # build its provider from LLM_PROVIDER, which skipped the clean-cache unload.
+    runtime = build_exam_runtime(VillageReader.from_settings())
 
-    async with SessionLocal() as session:
-        async with battery_sweep_lock(session) as acquired:
+    # The locks on their OWN session, as `jobs.battery_sweep` holds them: a failed run's
+    # rollback hands the swept session's connection back, and the unlock needs it.
+    async with SessionLocal() as session, SessionLocal() as lock_session:
+        async with battery_sweep_lock(lock_session) as acquired:
             if not acquired:
                 print(json.dumps({"skipped": "another battery sweep holds the lock"}))
                 return 0
-            outcome = await sweep_unscored_runs(
-                session, runtime=runtime, limit=limit, seed=seed
-            )
+            async with exam_model_lock(lock_session) as model_free:
+                if not model_free:
+                    print(json.dumps({"skipped": SKIP_MODEL_HELD}))
+                    return 0
+                outcome = await sweep_unscored_runs(
+                    session, runtime=runtime, limit=limit, seed=seed
+                )
 
     print(
         json.dumps(

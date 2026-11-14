@@ -181,6 +181,10 @@ class HeldOutPartitionVerdict(Base):
     #: ADR-0143. The sitting's slips when every FAIL in it is one; null when any FAIL is hard,
     #: on IN_PROGRESS / TIMEOUT / NOT_RUN rows, and on rows written before the column.
     slipCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ADR-0167. The examiner that graded the row - model, digest, settings, fingerprint
+    #: (`examiner.as_record()`), as a battery-graded `OperationRun` keeps. Checked before
+    #: grading, and now kept. Null on rows written before the column: not backfilled.
+    agentModelIdentity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     decidedAt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

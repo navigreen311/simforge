@@ -204,7 +204,9 @@ def check_start(request: StartRequest, measured: Measured) -> list[Refusal]:
             Refusal("inside_a_sweep", f"{measured.now:%H:%M} is inside :{window[0]}-:{window[1]}")
         )
     if measured.exam_open:
-        found.append(Refusal("exam_open", "a SimForge exam (OperationRun) is open"))
+        found.append(
+            Refusal("exam_open", "a SimForge exam (OperationRun) is open, or one is being graded")
+        )
     if measured.free_gb < MIN_FREE_GB:
         found.append(
             Refusal("memory", f"{measured.free_gb:.1f} GB free, under {MIN_FREE_GB:.0f} GB")
@@ -244,5 +246,5 @@ def pause_reason(*, now: datetime, exam_open: bool) -> str | None:
     if window is not None:
         return f"inside the :{window[0]}-:{window[1]} sweep"
     if exam_open:
-        return "a SimForge exam is open"
+        return "a SimForge exam is open or being graded"
     return None

@@ -70,8 +70,17 @@ class _Result:
     def scalar_one(self) -> int:
         return 0
 
+    def scalar(self) -> bool:
+        return False
+
+
+class _Dialect:
+    name = "postgresql"
+
 
 class _Conn:
+    dialect = _Dialect()
+
     def __init__(self, seen: list[str]) -> None:
         self.seen = seen
 
@@ -81,7 +90,7 @@ class _Conn:
     async def __aexit__(self, *_exc: object) -> bool:
         return False
 
-    async def execute(self, stmt: Any) -> _Result:
+    async def execute(self, stmt: Any, _params: Any = None) -> _Result:
         self.seen.append(str(stmt))
         return _Result()
 
@@ -135,7 +144,9 @@ async def test_a_throwaways_exam_check_reads_the_live_database_only(
     assert not any("55444" in u or "sf_runner_test" in u for u in urls)
     assert seen[0] == "SET TRANSACTION READ ONLY"
     assert '"OperationRun"' in seen[1]
-    assert seen[2:] == ["ROLLBACK", "DISPOSED"]
+    # ADR-0167: and whether an exam is being graded, from pg_locks - read, never taken.
+    assert "pg_locks" in seen[2] and "pg_try_advisory_lock" not in seen[2]
+    assert seen[3:] == ["ROLLBACK", "DISPOSED"]
 
 
 async def test_the_live_database_from_the_env_files_when_the_environment_had_none(

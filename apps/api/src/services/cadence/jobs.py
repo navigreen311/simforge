@@ -168,6 +168,7 @@ async def battery_sweep(session: AsyncSession | None = None) -> dict:
     from src.services.agent_runtime.llm_client import provider_label
     from src.services.agent_runtime.runtime import build_exam_runtime
     from src.workers.battery_sweep import battery_sweep_lock, sweep_unscored_runs
+    from src.workers.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 
     try:
         reader = VillageReader.from_settings()
@@ -192,7 +193,12 @@ async def battery_sweep(session: AsyncSession | None = None) -> dict:
             if not acquired:
                 log.info("cadence_battery_sweep_locked")
                 return {"job": "battery_sweep", "skipped": "another_pass_holds_the_lock"}
-            outcome = await sweep_unscored_runs(s, runtime=runtime, limit=BATTERY_SWEEP_LIMIT)
+            # ADR-0167. And the model: a partition pass or `grade_now` may be grading on it.
+            async with exam_model_lock(lock_session) as model_free:
+                if not model_free:
+                    log.info("cadence_battery_sweep_model_held")
+                    return {"job": "battery_sweep", "skipped": SKIP_MODEL_HELD}
+                outcome = await sweep_unscored_runs(s, runtime=runtime, limit=BATTERY_SWEEP_LIMIT)
 
     return {
         "job": "battery_sweep",
