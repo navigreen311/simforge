@@ -165,10 +165,10 @@ async def battery_sweep(session: AsyncSession | None = None) -> dict:
     Degrades the way `daily_snapshot` does: no Village data, no runtime, no pass - a skip rather
     than a 500, because an unreachable reader is a deployment fact and not a sweep failure.
     """
+    from src.services.agent_runtime.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
     from src.services.agent_runtime.llm_client import provider_label
     from src.services.agent_runtime.runtime import build_exam_runtime
     from src.workers.battery_sweep import battery_sweep_lock, sweep_unscored_runs
-    from src.workers.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 
     try:
         reader = VillageReader.from_settings()

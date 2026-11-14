@@ -52,6 +52,7 @@ from sqlalchemy.pool import NullPool
 from src.config import Settings, settings
 from src.models.operation_run import OperationRun
 from src.models.sandbox_run import SandboxRun, SandboxStep
+from src.services.agent_runtime.exam_model_lock import model_lock_held
 from src.services.forges.deal_desk_world import (
     READ_MODULES,
     Task,
@@ -62,7 +63,6 @@ from src.services.forges.deal_desk_world import (
 )
 from src.services.sandbox import office_sync, record, rules
 from src.services.sandbox.page import load_run, render_run_page
-from src.workers.exam_model_lock import model_lock_held
 
 VENTURE = "greenstone"
 TERMINAL = frozenset({"answered", "refused", "declined", "escalated", "failed"})

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from scripts import grade_now
 from src.models.held_out_partition import HeldOutPartitionVerdict
 from src.models.operation_run import OperationRun
-from src.services.agent_runtime.llm_client import ColdStartFailed
+from src.services.agent_runtime.llm_client import AnotherPhi4Caller, ColdStartFailed
 from src.services.operation.battery_result import battery_result_for
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION
 from src.services.operation.run_registry import open_run
@@ -177,3 +177,65 @@ async def test_the_partition_sweeps_rows_name_their_examiner(
     rows = await _rows(db_session)
     assert rows and all(r.agentModelIdentity for r in rows)
     assert {r.agentModelIdentity.get("model") for r in rows} == {"scripted"}
+
+
+# --- ADR-0167 (Ivan Green, 14 November 2026): another phi4 caller voids the grading ------------
+
+
+class _NotAlone(ScriptedProvider):
+    """Answers every probe, then finds in Ollama's log a request it did not send."""
+
+    def __init__(self) -> None:
+        super().__init__(_compliant)
+        self.begun = self.ended = 0
+
+    def reset_exam(self) -> None:
+        self.begun += 1
+
+    async def end_exam(self) -> None:
+        self.ended += 1
+        raise AnotherPhi4Caller(
+            f"{AnotherPhi4Caller.reason}: 1 model request this exam did not send"
+        )
+
+
+async def test_another_caller_voids_a_sweeps_exam_and_it_stays_open(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_run(db_session, run_ref="op-gn-not-alone")
+    provider = _NotAlone()
+    out = await battery_sweep.sweep_unscored_runs(db_session, runtime=_runtime(provider), limit=1)
+    assert (out.scored, provider.begun, provider.ended) == (0, 1, 1)
+    assert out.failed and AnotherPhi4Caller.reason in out.failed[0][1]
+    assert await _verdict(db_session, "op-gn-not-alone") is None, "never a pass, never a fail"
+    async with fresh_session(db_session) as s:
+        result = await battery_result_for(s, "op-gn-not-alone")
+    assert result is not None and result["observed"] is False, "nothing posted"
+    assert [r.runRef for r in await battery_sweep.unscored_runs(db_session, limit=10)] == [
+        "op-gn-not-alone"
+    ], "the next pass re-sits it"
+
+
+async def test_another_caller_voids_grade_now_with_the_reason(db_session: AsyncSession) -> None:
+    await _seed_run(db_session, run_ref="op-gn-now-not-alone")
+    async with fresh_session(db_session) as lock:
+        graded = await grade_now.grade_run(
+            db_session, lock, "op-gn-now-not-alone", runtime=_runtime(_NotAlone())
+        )
+    assert graded.exit_code == grade_now.NO_CLEAN_CACHE
+    assert graded.result["refused"] == "another phi4 caller during the exam"
+    assert graded.result["posted"] is False
+    assert await _verdict(db_session, "op-gn-now-not-alone") is None
+
+
+async def test_another_caller_voids_a_partition_seed_as_not_run(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid = await _seed(db_session)
+    _serve(monkeypatch, _NotAlone())
+    async with fresh_session(db_session) as lock:
+        graded = await grade_now.grade_partition_now(db_session, lock, pid)
+    assert graded.exit_code == grade_now.NO_CLEAN_CACHE
+    assert graded.result["refused"] == "another_phi4_caller_during_the_exam"
+    finals = [(r.seed, r.verdict) for r in await _rows(db_session) if r.verdict != "IN_PROGRESS"]
+    assert finals == [(0, "NOT_RUN")], "the seed is NOT RUN, never PASS or FAIL, and the pass stops"

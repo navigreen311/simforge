@@ -56,7 +56,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.operation_run import OperationRun
-from src.services.agent_runtime.llm_client import ColdStartFailed
+from src.services.agent_runtime.llm_client import AnotherPhi4Caller, ColdStartFailed
 from src.services.agent_runtime.runtime import AgentRuntime
 from src.services.operation.battery import (
     RESPONSE_PROTOCOL_VERSION,
@@ -203,7 +203,17 @@ async def sweep_unscored_runs(
             # one would meet the same Ollama.
             await session.rollback()
             failed.append((run_ref, f"{type(exc).__name__}: {exc}"))
-            log.warning("battery_sweep_refused_no_clean_cache", run_ref=run_ref, error=str(exc))
+            if isinstance(exc, AnotherPhi4Caller):
+                # ADR-0167. NOT RUN: nothing posted, the run stays open, and the next pass
+                # re-sits it.
+                log.warning(
+                    "battery_sweep_voided_another_phi4_caller",
+                    run_ref=run_ref,
+                    reason=AnotherPhi4Caller.reason,
+                    error=str(exc),
+                )
+            else:
+                log.warning("battery_sweep_refused_no_clean_cache", run_ref=run_ref, error=str(exc))
             break
         except Exception as exc:  # noqa: BLE001 - one bad run must not end the pass
             await session.rollback()

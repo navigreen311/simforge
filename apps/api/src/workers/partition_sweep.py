@@ -26,12 +26,12 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition
+from src.services.agent_runtime.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 from src.services.agent_runtime.llm_client import provider_label
 from src.services.agent_runtime.runtime import AgentRuntime, build_exam_runtime
 from src.services.operation import partition_grading
 from src.services.village.reader import VillageReader, VillageReaderError
 from src.telemetry.logging import get_logger
-from src.workers.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 
 log = get_logger("partition_sweep")
 

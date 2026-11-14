@@ -22,9 +22,9 @@ import sys
 
 from src.db import SessionLocal
 from src.models.held_out_partition import HeldOutPartition
+from src.services.agent_runtime.exam_model_lock import exam_model_lock
 from src.services.operation import partition_grading
 from src.services.village.reader import VillageReaderError
-from src.workers.exam_model_lock import exam_model_lock
 from src.workers.partition_sweep import build_runtime, partition_sweep_lock
 
 

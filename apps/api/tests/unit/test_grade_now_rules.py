@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 
 from scripts import grade_now, resit_partition, run_battery_sweep
+from src.services.agent_runtime import exam_model_lock
 from src.services.cadence import jobs
-from src.workers import exam_model_lock, partition_sweep
+from src.workers import partition_sweep
 
 API = Path(__file__).resolve().parents[2]
 QUIET = grade_now.Machine(now=datetime(2026, 11, 14, 10, 5), free_gb=12.0)

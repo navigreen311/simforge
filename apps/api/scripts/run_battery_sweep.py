@@ -44,10 +44,10 @@ import asyncio
 import json
 
 from src.db import SessionLocal
+from src.services.agent_runtime.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 from src.services.agent_runtime.runtime import build_exam_runtime
 from src.services.village.reader import VillageReader
 from src.workers.battery_sweep import battery_sweep_lock, sweep_unscored_runs
-from src.workers.exam_model_lock import SKIP_MODEL_HELD, exam_model_lock
 
 
 async def main_async(limit: int, seed: int) -> int:

@@ -28,9 +28,10 @@ WHEN IT REFUSES, WRITING NOTHING
   or the partition is not sealed;
 - the sweep's own lock or the examiner's model lock (`exam:model`) is held.
 
-A refusal is exit 2. An exam the examiner could not start from a clean cache (another phi4 user
-appeared mid-exam) is exit 3: nothing is posted, the run stays unscored, and the next sweep grades
-it as it would have.
+A refusal is exit 2. An exam that could not start from a clean cache, or that another phi4 caller
+overlapped (ADR-0167: Ollama's request log shows a model request the exam did not send between its
+first and last call), is exit 3: NOT RUN, nothing is posted, the run stays open, and the next sweep
+grades it as it would have.
 
 Not a route, by design (ADR-0050): no request puts a held-out probe. It prints the ref, the
 verdict and counts, never a probe or an answer.
@@ -155,12 +156,12 @@ async def grade_run(
 ) -> Graded:
     """One Unit A exam, as the :20 sweep grades it. The caller has checked the machine."""
     from src.models.operation_run import OperationRun
-    from src.services.agent_runtime.llm_client import ColdStartFailed
+    from src.services.agent_runtime.exam_model_lock import exam_model_lock
+    from src.services.agent_runtime.llm_client import AnotherPhi4Caller, ColdStartFailed
     from src.services.agent_runtime.runtime import build_exam_runtime
     from src.services.operation.battery import BatterySkipped, submit_battery_result
     from src.services.village.reader import VillageReader, VillageReaderError
     from src.workers.battery_sweep import battery_sweep_lock
-    from src.workers.exam_model_lock import exam_model_lock
 
     chosen = await _the_sweeps_candidate(session, run_ref, sitting)
     try:
@@ -180,10 +181,15 @@ async def grade_run(
                 )
             except ColdStartFailed as exc:
                 await session.rollback()
+                refused = (
+                    AnotherPhi4Caller.reason
+                    if isinstance(exc, AnotherPhi4Caller)
+                    else "no_clean_cache"
+                )
                 return Graded(
                     run_ref,
                     NO_CLEAN_CACHE,
-                    {"refused": "no_clean_cache", "detail": str(exc), "posted": False},
+                    {"refused": refused, "detail": str(exc), "posted": False},
                 )
     if isinstance(out, BatterySkipped):
         return Graded(run_ref, REFUSED, {"skipped": out.reason, "posted": False})
@@ -209,9 +215,9 @@ async def grade_partition_now(
 ) -> Graded:
     """One sealed partition, as the :50 sweep grades it. The caller has checked the machine."""
     from src.models.held_out_partition import HeldOutPartition
+    from src.services.agent_runtime.exam_model_lock import exam_model_lock
     from src.services.operation import partition_grading
     from src.services.village.reader import VillageReaderError
-    from src.workers.exam_model_lock import exam_model_lock
     from src.workers.partition_sweep import (
         PARTITION_SWEEP_LIMIT,
         build_runtime,
@@ -244,7 +250,10 @@ async def grade_partition_now(
                 budget_seconds=partition_grading.PARTITION_AGENT_BUDGET_SECONDS,
             )
     result = {"agents": out.agents, "put": out.put, "recorded": out.recorded}
-    if out.skipped == partition_grading.SKIP_NO_CLEAN_CACHE:
+    if out.skipped in (
+        partition_grading.SKIP_NO_CLEAN_CACHE,
+        partition_grading.SKIP_ANOTHER_CALLER,
+    ):
         return Graded(partition_id, NO_CLEAN_CACHE, {**result, "refused": out.skipped})
     if out.skipped:
         return Graded(partition_id, REFUSED, {**result, "skipped": out.skipped})

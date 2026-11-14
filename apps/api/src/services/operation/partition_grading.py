@@ -61,8 +61,8 @@ from src.models.held_out_partition import (
 )
 from src.services.agent_runtime.agent_identity import check_agent_identity
 from src.services.agent_runtime.examiner import check_examiner
-from src.services.agent_runtime.llm_client import ColdStartFailed, LLMResponse
-from src.services.agent_runtime.runtime import AgentRuntime
+from src.services.agent_runtime.llm_client import AnotherPhi4Caller, ColdStartFailed, LLMResponse
+from src.services.agent_runtime.runtime import AgentRuntime, begin_exam, end_exam
 from src.services.operation.battery import (
     _ACT_RE,
     _CAVEAT_RE,
@@ -703,6 +703,9 @@ SKIP_BOOTSTRAP = "this_forge_is_certified_by_a_human_bootstrap"
 #: B135. Ollama would not give the exam a clean cache: the unload did not empty `/api/ps`, or every
 #: call after it found the model loaded. The seed in progress is NOT_RUN and the pass stops.
 SKIP_NO_CLEAN_CACHE = "the_exam_could_not_start_from_a_clean_cache"
+#: ADR-0167 (Ivan Green, 14 November 2026). Another model request reached Ollama during a seed's
+#: put, or whether one did cannot be told. That seed is NOT_RUN and the pass stops.
+SKIP_ANOTHER_CALLER = "another_phi4_caller_during_the_exam"
 #: ADR-0162. A partition with a recorded roster whose scenarios or roster no longer give the
 #: digest it was sealed with. Nothing is put: who sits, or what is put, is not what was sealed.
 SKIP_SEAL_BROKEN = "the_partition_no_longer_matches_its_seal"
@@ -956,6 +959,8 @@ async def grade_partition(
                 sitting_id=sitting_id,
             )
             outcomes: list[ProbeOutcome] = []
+            # ADR-0167. One seed's put is one grading: alone from its first call to its last.
+            begin_exam(runtime.provider)
             try:
                 verdict = await asyncio.wait_for(
                     put_partition(
@@ -967,14 +972,24 @@ async def grade_partition(
                     ),
                     timeout=budget,
                 )
+                await end_exam(runtime.provider)
             except TimeoutError:
                 # The probes graded before the budget ran out are kept (ADR-0114).
                 verdict = TIMEOUT
             except ColdStartFailed as exc:
                 # B135. Nothing this seed answered is a measurement of the agent. NOT_RUN, so the
                 # agent is due again, and the pass stops: every later call meets the same Ollama.
+                # ADR-0167: so with another phi4 caller during the exam (`AnotherPhi4Caller`).
                 await session.rollback()
-                log.warning("partition_refused_no_clean_cache", partition=pid, error=str(exc))
+                if isinstance(exc, AnotherPhi4Caller):
+                    log.warning(
+                        "partition_voided_another_phi4_caller",
+                        partition=pid,
+                        reason=AnotherPhi4Caller.reason,
+                        error=str(exc),
+                    )
+                else:
+                    log.warning("partition_refused_no_clean_cache", partition=pid, error=str(exc))
                 await ledger.append(
                     agent.agent_id,
                     NOT_RUN,
@@ -984,7 +999,13 @@ async def grade_partition(
                     sitting_id=sitting_id,
                 )
                 return PartitionOutcome(
-                    pid, len(agents), put, ledger.recorded, skipped=SKIP_NO_CLEAN_CACHE
+                    pid,
+                    len(agents),
+                    put,
+                    ledger.recorded,
+                    skipped=SKIP_ANOTHER_CALLER
+                    if isinstance(exc, AnotherPhi4Caller)
+                    else SKIP_NO_CLEAN_CACHE,
                 )
             except Exception as exc:  # noqa: BLE001 - one agent must not end the pass
                 await session.rollback()
