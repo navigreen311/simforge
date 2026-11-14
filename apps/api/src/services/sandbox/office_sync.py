@@ -25,6 +25,7 @@ answer only to show it, and the count wins if the two disagree.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -86,6 +87,22 @@ class NewStep:
     payload: dict[str, Any]
     sandbox_ids: dict[str, str] = field(default_factory=dict)
     agent_id: str | None = None
+
+
+def rows(out: str) -> list[dict[str, Any]]:
+    """`OFFICE_TASK_SQL`'s rows from psql's output, one JSON value after another. Not one per
+    line: Postgres's json_agg puts a newline between array elements, so a task with two or more
+    malformed answers spans lines (the runner's "intermittent" JSONDecodeError)."""
+    found: list[dict[str, Any]] = []
+    decoder = json.JSONDecoder()
+    at = 0
+    while True:
+        while at < len(out) and out[at].isspace():
+            at += 1
+        if at == len(out):
+            return found
+        value, at = decoder.raw_decode(out, at)
+        found.append(value)
 
 
 def when(value: Any) -> datetime:

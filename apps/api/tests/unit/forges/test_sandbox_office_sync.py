@@ -156,3 +156,17 @@ def test_the_sql_only_reads() -> None:
     sql = office_sync.OFFICE_TASK_SQL.upper()
     for word in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE", "GRANT"):
         assert not re.search(rf"{word}", sql), word
+
+
+def test_a_row_whose_json_agg_spans_lines_is_read_whole() -> None:
+    """json_agg puts a newline between array elements: a task malformed twice spans lines."""
+    one = '{"task_id":"t-1","malformed":null}'
+    two = (
+        '{"task_id":"t-2","malformed":[{"audit_id":1,"turn":"a",'
+        '"reason":"answered_with_more_than_one_act_line","attempt":1}, \n'
+        ' {"audit_id":2,"turn":"a","reason":"no_act_line","attempt":2}]}'
+    )
+    found = office_sync.rows(f"{one}\n{two}\n")
+    assert [r["task_id"] for r in found] == ["t-1", "t-2"]
+    assert [m["attempt"] for m in found[1]["malformed"]] == [1, 2]
+    assert office_sync.rows("") == [] and office_sync.rows("\n  \n") == []
