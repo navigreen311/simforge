@@ -48,6 +48,29 @@ So stage 3 is ruled as worded in section 3 and needs no further ruling before it
 starts now. Stages 2 to 5 wait, and the 1.11.13 re-certification runs the old way, by founder
 blocks.
 
+## The ruling on another phi4 caller (Ivan Green, 14 November 2026): prevent and detect
+
+Stage 1's proof (#281) found this ADR wrong in one line. Section 2 said another phi4 user during
+grading "makes the exam refuse. It never makes it pass or fail." On the scratch database, one
+concurrent caller changed 33 of an exam's 57 answers while every exam call still loaded the model
+cold. Nothing refused. The verdict happened not to move, but nothing guaranteed it. The clean-cache
+rule refuses only when another caller keeps the model loaded. It does not see a request that runs
+beside the exam's own load. Ivan Green ruled:
+
+- **Detect.** Every exam and partition grading records whether any other phi4 request happened
+  between its first and last model call. That covers the sweeps, `grade_now` and a re-sit. The
+  evidence is Ollama's own request log. If any other request happened, the grading is NOT RUN:
+  - nothing is posted;
+  - the run stays open and re-sits at the next opportunity;
+  - it is logged with the reason "another phi4 caller during the exam";
+  - it never counts as a pass or a fail.
+- **Prevent.** SimForge exposes a read-only signal that an exam holds the model lock,
+  `GET /api/health/exam-model`. The Village checks it before it calls phi4
+  (`docs/exam-model-signal.md`, for the village-os change).
+
+Section 2 is corrected below. Detection is the guarantee; the signal and the lock only make a voided
+exam rare.
+
 ## The decision
 
 ### 1. One command: `python -m scripts.recertify`
@@ -172,11 +195,19 @@ a provider without that rule.)
   Village's `config.yaml`, read the same way), the model digest (pinned and checked before
   grading), the protocol and the rubric. None of these reads the clock. On-demand grading
   changes when a verdict is computed, not what goes into it.
-- **Isolation is enforced by the call, not by the schedule.** Every exam call starts from an
+- **Isolation is enforced by the grading, not by the schedule.** Every exam call starts from an
   unloaded model, and a warm load (under 1000 ms) is thrown away; three in a row raise
-  `ColdStartFailed` (B135). So another phi4 user during grading (a sandbox run, Village speech)
-  makes the exam refuse. It never makes it pass or fail. The `exam:model` lock and the sandbox
-  check keep that refusal rare; they are not what makes grading correct.
+  `ColdStartFailed` (B135).
+  - **Corrected 14 November (the ruling above).** That rule alone does not keep another phi4 user
+    from changing answers. On the scratch database, one concurrent caller changed 33 of 57 answers
+    with every exam call cold, and nothing refused.
+  - **So each grading also watches Ollama's request log** from its first model call to its last.
+    Any model request it did not send makes the grading NOT RUN, with the reason "another phi4
+    caller during the exam": nothing posted, the run left open, re-sat at the next opportunity.
+  - **Never a pass or a fail.** A sandbox run, Village speech or a second grader can cost an exam a
+    re-sit, never its verdict.
+  - **What keeps voided exams rare:** the `exam:model` lock, the sandbox check and the Village's
+    reading of `GET /api/health/exam-model`. None of them is what makes grading correct.
 - **The sandbox must see on-demand grading.** Today the runner's `exam_open` pause counts only
   open `OperationRun` rows, and a partition being graded writes none. `grade_now`, and the
   partition sweep, will hold the `exam:model` lock, and the runner's `pause_reason` will read it.
@@ -372,9 +403,10 @@ each), so a cycle that moves three modules adds roughly 16 min.
   Only the token prompt repeats.
 - **Holding Ivan's token for longer.** The blocks held it for minutes; a sitting holds it for up
   to about 15 min. It stays in memory only, and is asked again after any stop longer than 15 min.
-- **`grade_now` collides with Village speech or a sandbox run.** The clean-cache rule makes the
-  exam refuse rather than grade wrongly. The command falls back to the next sweep: slower, never
-  wrong.
+- **`grade_now` collides with Village speech or a sandbox run.** The request-log watch makes the
+  grading NOT RUN rather than grade wrongly (the ruling of 14 November). The command falls back to
+  the next sweep: slower, never wrong. The Village reading the signal, and stage 4's named step,
+  keep this rare.
 - **The freeze strands work.** Greenstone files nothing for 40 to 55 min instead of 2 h or more.
   The refusal names who opened the freeze and when.
 - **A wider blast radius.** One script now touches the broker, the database and SimForge. The
@@ -393,6 +425,15 @@ each), so a cycle that moves three modules adds roughly 16 min.
    ruled it as worded here on 14 November.
 4. **The Office: `scripts.recertify`.** `run`, `seal`, `sign` and `abandon`, each step a port of
    its block with that block's refusals, plus the journal and the dry run.
+   - **Village speech leaves phi4 alone for the exam window (Ivan Green, 14 November).**
+     - Before step 12 (grade now), the command stops Village speech's phi4 use as a named step with
+       its own typed word (`quiet`). It says what it stopped and how it will be restored.
+     - After the last exam and the partition are graded, it restores it as a named step
+       (`restore`), and on `abandon`.
+     - The journal records both, so a resumed run restores what an interrupted one stopped.
+     - It is one step of the command, beside the Village's own check of
+       `GET /api/health/exam-model`, not instead of it: an exam voided by a call that got through
+       is re-sat, never graded.
 5. **Rehearsal.** End to end on a scratch Office database and throwaway SimForge and Forge stacks,
    with a manual-only PR, a key-change PR, an interruption at every step, and a projection made to
    miss. Never into 8012 or the live databases.
