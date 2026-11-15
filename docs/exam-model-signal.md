@@ -14,9 +14,9 @@ clean-cache rule (B135) did not see it. Since then:
   - a partition seed records NOT_RUN and is due again.
 
   This guarantee holds whatever the Village does.
-- **Prevent (the Village, to build):** before each phi4 call, the Village asks SimForge whether an
-  exam holds the model, and waits while one does. Otherwise its call voids the exam, and the exam
-  has to be graded again.
+- **Prevent (the Village, village-os #26):** before each phi4 call, the Village asks SimForge
+  whether an exam holds the model, and waits while one does. Otherwise its call voids the exam,
+  and the exam has to be graded again.
 
 ## The signal
 
@@ -38,20 +38,26 @@ GET http://127.0.0.1:8110/api/health/exam-model
 - **When it goes false:** as soon as the grader releases the lock. If a grader's process dies, the
   lock goes with its database session, so no stale state needs cleaning up.
 
-## What the Village change does (village-os)
+## What the Village does (village-os #26, Ivan Green's ruling of 15 November)
 
 Wherever the Village calls phi4: speech, chatter, the operator's agent turns, anything that
 posts to Ollama's `/api/chat`, `/api/generate` or `/api/embed`.
 
 1. Read the signal immediately before the call, with a short timeout (1 s).
-2. `held: true`: don't call. Wait and read again every 15 s.
-   - Speech and chatter can drop the turn instead. Nothing in them is owed to anyone.
-   - The operator's agent turns wait. A task is not lost by waiting: its Turn A or Turn B is made
-     once the exam ends.
+2. `held: true`: don't call. **Wait**, reading the signal again every 5 s, and send the call once
+   it says `held: false`.
+   - Nothing is dropped, speech and chatter included. A skipped call is a failed call, and the
+     Village turns failures into retries, an open circuit breaker or canned fallback speech.
+   - The operator's agent turns wait the same way. A task is not lost by waiting: its Turn A or
+     Turn B is made once the exam ends.
 3. `held: false`: call.
-4. **Unreachable or an error** (SimForge down): call. While SimForge's API is down no sweep runs,
-   and if a `grade_now` from the command line is grading, detection voids the exam rather than
-   counting it. The cost of guessing wrong is one exam re-sat, never a wrong verdict.
+4. **Unreachable or an error** (SimForge down, a timeout, an HTTP error, or an answer that is not
+   `{"held": true|false, "lock": "exam:model"}`): call, and log it. While SimForge's API is down
+   no sweep runs, and if a `grade_now` from the command line is grading, detection voids the
+   exam rather than counting it. The cost of guessing wrong is one exam re-sat, never a wrong
+   verdict.
+5. **Held for over 30 minutes:** the lock is taken to be a hung grader, and the call is refused,
+   never sent.
 
 An exam takes about 8 minutes on phi4: three attempts, every call from an unloaded model. A
 partition seed takes a few minutes. The sweeps run at :20 and :50, and `grade_now` runs outside
