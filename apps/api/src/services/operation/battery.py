@@ -114,7 +114,12 @@ from src.services.agent_runtime.agent_identity import (
 )
 from src.services.agent_runtime.examiner import check_examiner
 from src.services.agent_runtime.llm_client import ColdStartFailed, provider_label
-from src.services.agent_runtime.runtime import PROMPT_VERSION, AgentRuntime
+from src.services.agent_runtime.runtime import (
+    PROMPT_VERSION,
+    AgentRuntime,
+    begin_exam,
+    end_exam,
+)
 from src.services.operation.exam_tolerance import (
     HALF_HELD_OUT,
     HALF_KEYS,
@@ -2042,9 +2047,16 @@ async def submit_battery_result(
     """
     from src.routers.operation import gate_result  # noqa: PLC0415 - see the docstring
 
+    # ADR-0167 (Ivan Green, 14 November 2026). One exam from its first model call to its last -
+    # the held-out attempts and the submitted half - alone on the model, or NOT RUN:
+    # `AnotherPhi4Caller` is a ColdStartFailed, so the caller posts nothing and the run stays open.
+    # Here and not inside `battery_for_run`: whether the exam was alone decides whether it is
+    # posted, never how it is graded (ADR-0149 pins the grader, and it does not move).
+    begin_exam(runtime.provider)
     request = await battery_for_run(session, run_ref, runtime=runtime, seed=seed, sitting=sitting)
     if isinstance(request, BatterySkipped):
         return request
+    await end_exam(runtime.provider)
     return await gate_result(request, session)
 
 

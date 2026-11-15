@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass
 from src.config import settings
 from src.services.agent_runtime.cache import LLMResponseCache
 from src.services.agent_runtime.model_identity import ModelIdentity
+from src.services.agent_runtime.request_log import RequestLog, RequestLogUnreadable, Watch
 from src.telemetry.logging import get_logger
 from src.telemetry.metrics import TOKENS_TOTAL
 
@@ -256,6 +257,15 @@ class ColdStartFailed(RuntimeError):
     answered would be a measurement of it, so the exam refuses rather than grading NOT_RUN."""
 
 
+class AnotherPhi4Caller(ColdStartFailed):
+    """Ivan Green, 14 November 2026 (ADR-0167): another request reached Ollama between the exam's
+    first and last model call, or whether one did cannot be told. A ColdStartFailed, so every
+    caller that refuses on a cache it cannot trust refuses on this too: nothing posted, the run
+    left open, NOT RUN."""
+
+    reason = "another phi4 caller during the exam"
+
+
 def _load_ms(data: dict) -> int:
     return int(data.get("load_duration") or 0) // 1_000_000
 
@@ -276,6 +286,7 @@ class OllamaProvider(LLMProvider):
         max_retries: int = 3,
         *,
         cold_start: bool = False,
+        request_log: RequestLog | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -284,6 +295,12 @@ class OllamaProvider(LLMProvider):
         #: B135. Unload the model and wait for `/api/ps` to be empty before every call. The exam's
         #: provider only (`get_exam_llm`).
         self.cold_start = cold_start
+        #: ADR-0167. Ollama's request log, watched from an exam's first request to its last. The
+        #: exam's provider only; None checks nothing.
+        self.request_log = request_log
+        self._watch: Watch | None = None
+        #: The model requests this exam sent and Ollama answered (so logged): unloads and calls.
+        self._own = 0
 
     async def complete(
         self,
@@ -319,6 +336,7 @@ class OllamaProvider(LLMProvider):
         async def _call() -> dict:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(f"{self.base_url}/api/chat", json=payload)
+                self._own += 1  # answered, so Ollama logged it (ADR-0167)
                 if resp.status_code >= 500:
                     raise httpx.HTTPStatusError("5xx", request=resp.request, response=resp)
                 resp.raise_for_status()
@@ -353,10 +371,14 @@ class OllamaProvider(LLMProvider):
         )
 
     async def _cold_call(self, answered) -> dict:  # noqa: ANN001 - the call, as a coroutine fn
-        """B135. Unload, wait for `/api/ps` to be empty, call; again if the call came back warm."""
+        """B135. Unload, wait for `/api/ps` to be empty, call; again if the call came back warm.
+        ADR-0167: after each call, refuse if the log shows a model request the exam did not send."""
+        if self.request_log is not None and self._watch is None:
+            self._begin_watch()
         for attempt in range(1, COLD_START_ATTEMPTS + 1):
             await self._unload()
             data = await answered()
+            self._check_alone()
             load_ms = _load_ms(data)
             if load_ms >= COLD_LOAD_MIN_MS:
                 return data
@@ -377,6 +399,7 @@ class OllamaProvider(LLMProvider):
                 resp = await client.post(
                     f"{self.base_url}/api/generate", json={"model": self.model, "keep_alive": 0}
                 )
+                self._own += 1  # answered, so Ollama logged it (ADR-0167)
                 resp.raise_for_status()
                 deadline = time.monotonic() + COLD_UNLOAD_TIMEOUT_SECONDS
                 while True:
@@ -398,6 +421,69 @@ class OllamaProvider(LLMProvider):
             raise ColdStartFailed(
                 f"could not unload {self.model}: {type(exc).__name__}: {exc}"
             ) from exc
+
+    # -- ADR-0167: was the exam alone? -----------------------------------------------------------
+
+    def _begin_watch(self) -> None:
+        assert self.request_log is not None
+        try:
+            self._watch = self.request_log.begin()
+        except RequestLogUnreadable as exc:
+            raise AnotherPhi4Caller(f"{AnotherPhi4Caller.reason}: cannot be told ({exc})") from exc
+        self._own = 0
+
+    def _check_alone(self, *, settled: bool = False) -> None:
+        """Refuse if the log gained more model requests than this exam sent. `settled` marks the
+        last read, after the end-of-exam unload, when every overlapping request has its line."""
+        if self._watch is None:
+            return
+        try:
+            seen = self._watch.model_requests()
+        except RequestLogUnreadable as exc:
+            self.reset_exam()
+            raise AnotherPhi4Caller(f"{AnotherPhi4Caller.reason}: cannot be told ({exc})") from exc
+        if seen > self._own:
+            others = seen - self._own
+            log.warning(
+                "exam_voided_another_phi4_caller",
+                model=self.model,
+                exam_requests=self._own,
+                logged=seen,
+                settled=settled,
+            )
+            self.reset_exam()
+            raise AnotherPhi4Caller(
+                f"{AnotherPhi4Caller.reason}: Ollama served {others} model request(s) this exam "
+                "did not send, between its first and last call"
+            )
+
+    def reset_exam(self) -> None:
+        """Forget the watch: the next call begins a new exam."""
+        self._watch = None
+        self._own = 0
+
+    async def end_exam(self) -> None:
+        """The exam's last word on whether it was alone.
+
+        Unloads the model and waits for `/api/ps` to empty - Ollama unloads only once no request
+        holds the model, so a request that overlapped the exam's last call has ended and been
+        logged - then reads the log once more. Raises `AnotherPhi4Caller`; does nothing when no
+        exam call was made since the last reset."""
+        if self._watch is None:
+            return
+        try:
+            await self._unload()
+            # A line is written as its request ends: give the exam's own last one a moment.
+            deadline = time.monotonic() + 5.0
+            while self._watch.model_requests() < self._own and time.monotonic() < deadline:
+                await asyncio.sleep(0.2)
+            self._check_alone(settled=True)
+        except AnotherPhi4Caller:
+            raise
+        except (ColdStartFailed, RequestLogUnreadable) as exc:
+            raise AnotherPhi4Caller(f"{AnotherPhi4Caller.reason}: cannot be told ({exc})") from exc
+        finally:
+            self.reset_exam()
 
     async def identity(self, settings_sent: dict) -> ModelIdentity | None:
         """Ask the server what it is serving. Two calls, because neither answers the whole thing.
@@ -492,9 +578,7 @@ class AnthropicProvider(LLMProvider):
         A record is still returned, because a practice run is a real run and its candidate is a
         real fact. What the absence costs is the certification, not the record.
         """
-        return ModelIdentity(
-            provider=self.name, model=self.model, settings=dict(settings_sent)
-        )
+        return ModelIdentity(provider=self.name, model=self.model, settings=dict(settings_sent))
 
     async def complete(
         self,
@@ -581,6 +665,18 @@ class CachedLLMProvider(LLMProvider):
         """Straight through to the inner provider, for `provider_label`'s reason: the cache is not
         a candidate. It returns what some model said, and the identity belongs to that model."""
         return await self.inner.identity(settings_sent)
+
+    def reset_exam(self) -> None:
+        """ADR-0167, straight through: the watch is the inner provider's."""
+        reset = getattr(self.inner, "reset_exam", None)
+        if reset is not None:
+            reset()
+
+    async def end_exam(self) -> None:
+        """ADR-0167, straight through: the watch is the inner provider's."""
+        end = getattr(self.inner, "end_exam", None)
+        if end is not None:
+            await end()
 
     def _request(self, system, messages, temperature, max_tokens, seed) -> dict:
         return {
@@ -769,6 +865,9 @@ def get_exam_llm() -> LLMProvider:
         # B135. Every exam call from a clean cache, held-out and submitted alike. No setting turns
         # it off: an exam whose answers depend on what ran before it is not reproducible.
         cold_start=True,
+        # ADR-0167. And alone: Ollama's request log, watched from the exam's first call to its
+        # last. A model request the exam did not send voids it (NOT RUN).
+        request_log=RequestLog.from_settings(),
     )
     return CachedLLMProvider(inner, LLMResponseCache(), purpose="agent")
 

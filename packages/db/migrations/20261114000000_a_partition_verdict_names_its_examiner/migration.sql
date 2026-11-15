@@ -1,0 +1,11 @@
+-- ADR-0167 stage 1: a held-out partition verdict records the examiner that graded it, as a
+-- battery-graded OperationRun does (agentModelIdentity): model, file digest, size,
+-- quantization, settings and fingerprint - examiner.as_record(). A verdict graded by
+-- grade_now outside a sweep can then be checked against the pin afterwards, not only before.
+--
+-- One nullable column. Null on every existing row: what graded them was checked, not kept,
+-- and is not backfilled. Idempotent.
+--
+-- Rollback: ALTER TABLE "HeldOutPartitionVerdict" DROP COLUMN "agentModelIdentity"; and
+-- delete this migration's row from _prisma_migrations.
+ALTER TABLE "HeldOutPartitionVerdict" ADD COLUMN IF NOT EXISTS "agentModelIdentity" JSONB;

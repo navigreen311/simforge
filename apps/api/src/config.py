@@ -111,6 +111,10 @@ class Settings(BaseSettings):
     # not of production - and Ollama reloads the model whenever two callers ask for different
     # windows, so one value is also the cheap one.
     exam_num_ctx: int = Field(default=8192, alias="EXAM_NUM_CTX")
+    # ADR-0167 (Ivan Green, 14 November 2026). Ollama's server log, read to tell whether another
+    # caller used the model during an exam. Empty means Ollama for Windows' own place,
+    # %LOCALAPPDATA%\Ollama\server.log. A log that cannot be read voids the exam (NOT RUN).
+    ollama_request_log: str = Field(default="", alias="OLLAMA_REQUEST_LOG")
     # The Village's own `config.yaml` - where its agents' model is declared. Read-only, and read
     # at check time rather than cached, so a change in production is seen on the next battery.
     # Empty means SimForge cannot see what production runs, and the battery refuses to claim it

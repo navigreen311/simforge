@@ -1284,6 +1284,8 @@ model HeldOutPartitionVerdict {
   /// ADR-0143. The sitting's slips when every FAIL is one; null when any is hard.
   /// CHECK held_out_partition_verdict_slip_count - see the migration.
   slipCount              Int?
+  /// ADR-0167. The examiner that graded the row (examiner.as_record()). Null on older rows.
+  agentModelIdentity     Json?
   decidedAt              DateTime         @default(now())
 
   @@index([partitionId])

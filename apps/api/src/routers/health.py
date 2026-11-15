@@ -182,3 +182,24 @@ async def village_fingerprint() -> FingerprintResponse:
         captured_at=datetime.now(UTC).isoformat(),
         drift_detected=drift,
     )
+
+
+@router.get("/exam-model")
+async def exam_model(session: AsyncSession = Depends(get_session)) -> dict:
+    """Whether an exam holds the examiner's model now (ADR-0167, Ivan Green, 14 November 2026).
+
+    For the Village to read before it calls phi4: while `held` is true an exam or a partition is
+    being graded, and a phi4 call now would void it (NOT RUN, "another phi4 caller during the
+    exam"). Public and read-only, like the rest of this router: it reads `pg_locks` for the
+    `exam:model` advisory lock and takes nothing. No id, no ref, no secret.
+
+    Prevention only. Detection is the guarantee: a call the Village makes anyway is found in
+    Ollama's request log and the grading is voided, never counted.
+    """
+    from src.services.agent_runtime.exam_model_lock import LOCK_KEY, model_lock_held
+
+    return {
+        "held": await model_lock_held(session),
+        "lock": LOCK_KEY,
+        "checked_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }

@@ -99,7 +99,7 @@ Every rule is checked and every reason reported. `check` runs them alone.
 | `not_a_starter` | anyone but Ivan Green or Ira Green |
 | `over_task_cap`, `more_tasks_than_the_seed` | over 60 tasks, or more than the seed has |
 | `inside_a_sweep` | the minute is in :17-:24 or :47-:54 (a hand start is refused; a scheduled one waits) |
-| `exam_open` | a SimForge `OperationRun` is open (no end, verdict or timeout), read from the live SimForge database in a READ ONLY transaction, a throwaway included |
+| `exam_open` | a SimForge `OperationRun` is open (no end, verdict or timeout), or an exam is being graded (the examiner's `exam:model` advisory lock is held, read from `pg_locks` and never taken; ADR-0167: a partition being graded writes no `OperationRun`), read from the live SimForge database in a READ ONLY transaction, a throwaway included |
 | `memory` | under 8 GB free. First, the phi4 rule: if phi4 is loaded, no exam is open and it is outside the sweeps, phi4 is unloaded (`ollama stop phi4`) and memory measured again |
 | `another_run` | another run holds the lock |
 | `port_in_use` | 127.0.0.1:9212 already listening (a throwaway: 8013, 9213 or 55443), with who holds it |
@@ -135,7 +135,7 @@ check) and the sandbox operator's. A refusal there stops the run and is shown in
    - every step the Office wrote since is recorded as a `SandboxStep`, with the Office's times
      (`office_sync`), and graded by the record (stage 5), with any CAVEAT flagged that states a
      count the Forge's answer contradicts (below);
-   - inside a sweep, or while a SimForge exam is open, it pauses (no tick, no approval) and
+   - inside a sweep, or while a SimForge exam is open or being graded, it pauses (no tick, no approval) and
      resumes after;
    - it stops at the step budget, the wall-clock budget, 8 ticks in a row that record nothing,
      or a stop.
