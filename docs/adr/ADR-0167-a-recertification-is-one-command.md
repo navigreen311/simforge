@@ -487,3 +487,5 @@ entry 345. Where this addendum and the sections above differ, this addendum hold
 
 **Status after this addendum:** stage 1 is built (#281, #283). Stage 3 is ruled (14 November).
 Stages 2, 4 and 5 are ruled as above. Stage 2 starts with The Office's read-only `plan`.
+
+**Where the planner lives** (Ivan Green, 15 November 2026): The Office's `broker/recertification.py` (The Office #531), not `provisioning` as section 4 names it.
