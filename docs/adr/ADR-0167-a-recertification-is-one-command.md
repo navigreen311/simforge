@@ -449,3 +449,41 @@ each), so a cycle that moves three modules adds roughly 16 min.
 - Department (Unit B) exams. They are closed by The Office's `department_outcome` or by the :35
   timeout (ADR-0161, ADR-0165), not graded by a sweep. The command waits for them as Gate 9 does
   today.
+
+## Addendum: the build rulings (Ivan Green, 15 November 2026)
+
+On Claude's build plan for stages 2 to 5, with The Office's run fe5e245e (manuals 1.11.13,
+complete 15 November at 14:58:13) as the worked example. Recorded as The Office's decisions
+entry 345. Where this addendum and the sections above differ, this addendum holds.
+
+1. **The freeze** (section 5, step 0) refuses filing new tasks **and new proposals** for the
+   venture, with 409 `recertification_open`. **The grants stay active and carry over; nothing is
+   paused.** Step 0 no longer pauses the venture's grants as block 44 did. Gate 7 carries the
+   active grants and Gate 11 activates none, as on 15 November.
+2. **Ivan Green's Office token** is held from his sitting, in memory only, never written to disk
+   or to the journal. It is used only for steps 12 and 13 (grading, and advancing Gates 9 and 9.5),
+   for at most 4 hours, then discarded. This replaces "asked again after any stop longer than
+   15 min" for those two steps.
+3. **Grading after the seal.** Both the waiting `run` and Ira Green's `seal` may start
+   `grade_now`. The `exam:model` lock makes it happen once. A seal that lands therefore never waits
+   for the :50 sweep: on 15 November the partition was sealed at 11:58:04, and graded at the 12:50
+   sweep.
+4. **Key approval** is its own first step, `recertify approve-key --pr`, before `plan`. `plan`
+   refuses any key still in draft. Step 2 of section 1 (a stop for key approval inside `run`)
+   becomes that check. An approval commits to the PR and moves its head, so it needs its own CI
+   run before a pin exists.
+5. **Quiet.** No new village-os change. The command relies on village-os #26's wait (the Village
+   polls `GET /api/health/exam-model` every 5 s and never drops a call; #283) and on the freeze.
+   **Stage 4's `quiet` and `restore` steps are dropped.** Detection (the request-log watch) is
+   still the guarantee.
+6. **The rehearsal** (stage 5) uses scratch identities only, in the 8013/9213/55443 slot, never
+   8012. It passes when every scenario ends in a correct refusal or a correct completion, with no
+   unpinned merge and no voided exam counted.
+7. **The first live use** (stage 6) is The Office's B139 comp_analysis cycle, with B133's key #7
+   folded in.
+8. **"Done".** `plan` or `run` on a pin whose re-certification is closed refuses, from The
+   Office's `venture_recertification` row, naming the run and when it closed. Founder blocks from
+   now on keep a DONE line and a first-statement refusal once run.
+
+**Status after this addendum:** stage 1 is built (#281, #283). Stage 3 is ruled (14 November).
+Stages 2, 4 and 5 are ruled as above. Stage 2 starts with The Office's read-only `plan`.
