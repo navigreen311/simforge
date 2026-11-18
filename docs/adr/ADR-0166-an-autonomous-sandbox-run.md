@@ -813,6 +813,27 @@ not drawn by seed 6 or 7. The other misses are kinds seeds 4 and 5 also missed:
 | s7-037 | bm.unknown_key_save_matches | Ronan Valek | Turn A REFUSE |
 | s7-038 | bm.unknown_key_max_buyers | Seraphine Valek | Turn A REFUSE |
 
+### Generator 1.3.2: a task records only under its approved key's subjects (18 November)
+
+Seed 8's run (sandbox-01M7QK23M73G767QWAEBVXG0AZ) had one comp_analysis task refused at filing
+(409): "comp_analysis's approved key never records under `max_comps`". The template was
+`ca.max_comps_out_of_range`, drawn on every third seed. `pl.no_query` files today: The Office's
+property_lookup key now records under `query`.
+
+- **`ca.max_comps_out_of_range` is held back** (`HELD_BACK`). It is written in full, still to
+  Ivan's ruling, but never drawn until comp_analysis's approved key records under `max_comps`.
+  The ruled key is not rewritten to fit.
+- **`test_every_task_records_only_under_its_modules_approved_key`**: every template on every seed,
+  and every task every seed files, records only under its module's approved-key subjects. The
+  subjects are The Office's record vocabulary (`broker/record_vocabulary.py`, main 0798465),
+  copied by hand into the test as subject names only.
+- **Another test** fails if a held-back scenario's subject joins the key, so it is returned to the
+  pool.
+- **The world does not change.** `WORLD_VERSION` stays 1.3.0 while `GENERATOR_VERSION` is 1.3.2.
+  The pool is 98 scenarios and 554 templates.
+- **Every seed's draw can change**, because the comp_analysis malformed-input bucket lost a
+  scenario. A run opened under 1.3.1 is refused on resume, as for any bump.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,

@@ -58,10 +58,10 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.3.1"
+GENERATOR_VERSION = "1.3.2"
 #: The world's own version: bumped only when the same seed would give a different world. It
 #: names the world and is in every row's id (`world_name`), so CRE Forge's loader reads a world
-#: by it, and a bump that changes only the tasks (1.3.1) needs no loader change.
+#: by it, and a bump that changes only the tasks (1.3.1, 1.3.2) needs no loader change.
 WORLD_VERSION = "1.3.0"
 
 #: The task classes this generator writes, and the only ones. `sandbox_refusal` is a practice
@@ -881,6 +881,14 @@ class _Builder:
 #
 # The five keys 1.3.0 left out were ruled by Ivan Green on 13 November 2026 and are in the
 # pool from 1.3.1 (see the end of this section).
+#
+# **A task records only under a subject its module's approved key uses (generator 1.3.2).** The
+# Office refuses at filing (409) a task whose record subject the module's approved key never
+# uses, so such a task never runs. A ruled scenario whose subject the key does not use yet is
+# written in full but held back (`HELD_BACK`), never drawn, until the key uses that subject:
+# `ca.max_comps_out_of_range` (`max_comps`), refused at filing in seed 8's run of 18 November.
+# `test_every_task_records_only_under_its_modules_approved_key` holds every template to the
+# keys' subjects.
 
 
 @dataclass(frozen=True)
@@ -911,14 +919,19 @@ class _Words:
 
 
 POOL: list[Scenario] = []
+#: Ruled scenarios written in full but never drawn: each records under a subject its module's
+#: approved key does not use yet, so The Office would refuse the task at filing (generator 1.3.2).
+HELD_BACK: list[Scenario] = []
 
 
 def _scenario(
-    module: str, scenario_class: str, key: str, wordings: int = 5
+    module: str, scenario_class: str, key: str, wordings: int = 5, *, held_back: bool = False
 ) -> Callable[[Callable[[_Builder, World, _Words], bool]], Callable[..., bool]]:
     def register(build: Callable[[_Builder, World, _Words], bool]) -> Callable[..., bool]:
-        assert all(s.key != key for s in POOL), key
-        POOL.append(Scenario(module, scenario_class, key, wordings, build))
+        assert all(s.key != key for s in POOL + HELD_BACK), key
+        (HELD_BACK if held_back else POOL).append(
+            Scenario(module, scenario_class, key, wordings, build)
+        )
         return build
 
     return register
@@ -2996,12 +3009,15 @@ def _pl_no_query(b: _Builder, world: World, w: _Words) -> bool:
     )
 
 
-@_scenario(CA, "malformed_input", "ca.max_comps_out_of_range")
+@_scenario(CA, "malformed_input", "ca.max_comps_out_of_range", held_back=True)
 def _ca_max_comps_range(b: _Builder, world: World, w: _Words) -> bool:
     """`max_comps` outside 1 to 10: ACT DECLINE, RECORD max_comps = OUT OF RANGE, a CAVEAT naming
     the value and the range. Never clamp, never REFUSE n (Ivan Green, 13 November; B136). The
     Forge refuses it 422 `max_comps_out_of_range` before anything runs, so the pre-call ACT is
-    either, as for every value the Forge refuses."""
+    either, as for every value the Forge refuses.
+
+    Held back from 1.3.2: comp_analysis's approved key never records under `max_comps`, so The
+    Office refuses the task at filing (seed 8, 18 November). Drawn again once the key does."""
     p, who = world.properties[0], w.who(_CA_WHO)
     sent = (0, 11, 25)[world.seed % 3]
     facts = w.pick(
