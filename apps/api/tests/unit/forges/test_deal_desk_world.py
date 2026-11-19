@@ -19,6 +19,7 @@ from src.services.forges.deal_desk_world import (
     COMP_AGE_DAYS,
     COMP_RADIUS_MI,
     GENERATOR_VERSION,
+    HELD_BACK,
     POOL,
     QUOTAS,
     READ_MODULES,
@@ -155,13 +156,16 @@ def test_the_generator_never_emits_a_held_out_label() -> None:
 
 def _built(key: str, seeds: range | tuple[int, ...] = SEEDS) -> list[Task]:
     """One scenario's task, at its first wording, on every seed that can carry it."""
-    scenario = next(s for s in POOL if s.key == key)
+    scenario = next(s for s in POOL + HELD_BACK if s.key == key)
     out = [build_template(generate_world(seed), scenario, 0) for seed in seeds]
     return [t for t in out if t is not None]
 
 
 def _keys(module: str, scenario_class: str) -> list[str]:
-    return [s.key for s in POOL if (s.module, s.scenario_class) == (module, scenario_class)]
+    """Every scenario of a (module, class), the held-back ones included: their keys still hold."""
+    return [
+        s.key for s in POOL + HELD_BACK if (s.module, s.scenario_class) == (module, scenario_class)
+    ]
 
 
 def test_a_widening_is_refused_or_run_by_its_reason() -> None:
@@ -740,9 +744,73 @@ def test_ivan_greens_rulings_on_the_five_open_keys() -> None:
 
 
 def test_a_task_only_bump_keeps_the_world_and_its_ids() -> None:
-    """1.3.1 changes the tasks, not the world: its name, its rows and its digest are 1.3.0's,
-    so CRE Forge's loader reads it unchanged."""
-    assert (GENERATOR_VERSION, WORLD_VERSION) == ("1.3.1", "1.3.0")
+    """1.3.1 and 1.3.2 change the tasks, not the world: its name, its rows and its digest are
+    1.3.0's, so CRE Forge's loader reads it unchanged."""
+    assert (GENERATOR_VERSION, WORLD_VERSION) == ("1.3.2", "1.3.0")
     assert world_name(4) == "simforge-1.3.0-seed-4"
     export = json.loads(export_json(4))
     assert (export["version"], export["generator_version"]) == ("1.3.0", "1.3.0")
+
+
+#: The subjects each module's APPROVED answer key records under, in the Office the sandbox
+#: files against: `SANDBOX_OFFICE_CHECKOUT` (theoffice f8d8c73, manuals 1.11.12), as its record
+#: vocabulary (`broker/record_vocabulary.py`) reads them, the list its 409 at filing names. Not
+#: The Office's main: from 1.11.13 (15 November) main's property_lookup key also records under
+#: `query`, and the sandbox's does not (seed 9, 19 November). Subject names only, copied here
+#: by hand - nothing reads a key. That Office refuses to file a task that records under any
+#: other subject, so the generator must never write one. Moving the sandbox's Office forward
+#: means updating this list from that checkout, and returning what it now allows to the pool.
+APPROVED_RECORD_SUBJECTS: dict[str, frozenset[str]] = {
+    "property_lookup": frozenset(
+        {
+            "asking_price_not_recorded",
+            "page_size",
+            "search_term",
+            "square_feet_not_recorded",
+            "total",
+        }
+    ),
+    "comp_analysis": frozenset({"max_age_days", "property_id", "radius_miles", "total"}),
+    "buyer_match": frozenset({"deal_id", "limit", "potential_concerns_count", "total"}),
+}
+
+
+def _recorded(t: Task) -> set[str]:
+    return {k.record_subject for k in (t.turn_a, t.turn_b) if k.record_subject is not None}
+
+
+def test_every_task_records_only_under_its_modules_approved_key() -> None:
+    """Generator 1.3.2 (refused at filing: seed 8, 18 November, comp_analysis for `max_comps`;
+    seed 9, 19 November, property_lookup for `query`). Every module, every template the pool
+    can draw, on every seed, and every task every seed's run files: the subjects it records
+    under are a subset of its module's approved key's."""
+    assert set(APPROVED_RECORD_SUBJECTS) == set(READ_MODULES)
+    for seed in SEEDS:
+        world = generate_world(seed)
+        for t in generate_tasks(world):
+            assert _recorded(t) <= APPROVED_RECORD_SUBJECTS[t.module_id], (seed, t.template)
+        for scenario in POOL:
+            for n in range(scenario.wordings):
+                t = build_template(world, scenario, n)
+                assert t is not None
+                assert _recorded(t) <= APPROVED_RECORD_SUBJECTS[t.module_id], (
+                    seed,
+                    t.template,
+                    sorted(_recorded(t) - APPROVED_RECORD_SUBJECTS[t.module_id]),
+                )
+
+
+def test_a_scenario_is_held_back_only_while_its_subject_is_outside_the_key() -> None:
+    """`HELD_BACK` is exactly the ruled scenarios whose subject the approved key does not use
+    yet, and none of them is ever drawn. Once The Office's key records under one, this fails
+    until the scenario is returned to the pool."""
+    assert sorted(s.key for s in HELD_BACK) == ["ca.max_comps_out_of_range", "pl.no_query"]
+    for scenario in HELD_BACK:
+        built = _built(scenario.key)
+        assert built
+        for t in built:
+            assert not _recorded(t) <= APPROVED_RECORD_SUBJECTS[t.module_id], scenario.key
+    held = {s.key for s in HELD_BACK}
+    assert not held & {s.key for s in POOL}
+    for seed in SEEDS:
+        assert not {t.template.split("/")[0] for t in _tasks(seed)} & held, seed

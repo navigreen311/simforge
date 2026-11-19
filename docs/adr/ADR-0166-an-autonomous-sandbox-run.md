@@ -813,6 +813,37 @@ not drawn by seed 6 or 7. The other misses are kinds seeds 4 and 5 also missed:
 | s7-037 | bm.unknown_key_save_matches | Ronan Valek | Turn A REFUSE |
 | s7-038 | bm.unknown_key_max_buyers | Seraphine Valek | Turn A REFUSE |
 
+### Generator 1.3.2: a task records only under its approved key's subjects (18-19 November)
+
+Two runs each had a task refused at filing (409), each one recording under a subject its
+module's approved key never uses:
+
+| run | task | template | subject |
+|---|---|---|---|
+| sandbox-01M7QK23M73G767QWAEBVXG0AZ, seed 8, 18 November | comp_analysis | `ca.max_comps_out_of_range` | `max_comps` |
+| sandbox-01M7T5EV1215WMGPY56RGBGKBV, seed 9, 19 November | s9-010, property_lookup | `pl.no_query` | `query` |
+
+**The key that counts is the sandbox Office's.** The Office the sandbox files against is
+`SANDBOX_OFFICE_CHECKOUT`, theoffice f8d8c73 (manuals 1.11.12). The Office's main gained `query`
+in property_lookup's key with 1.11.13 (15 November); the sandbox's checkout did not. The first
+cut of this fix read main's vocabulary, which is why it missed `pl.no_query`.
+
+- **Both scenarios are held back** (`HELD_BACK`). Each is written in full, still to Ivan's
+  ruling, and still tested, but never drawn until the sandbox Office's key records under its
+  subject. The ruled keys are not rewritten to fit.
+- **`test_every_task_records_only_under_its_modules_approved_key`** covers all three modules:
+  every template on every seed, and every task every seed files, records only under its
+  module's approved-key subjects.
+  - The subjects are the sandbox Office's record vocabulary (`broker/record_vocabulary.py` at
+    f8d8c73), copied by hand into the test as subject names only.
+  - Moving the sandbox's Office forward means updating that list from the new checkout.
+- **Another test** holds `HELD_BACK` to exactly the scenarios outside the vocabulary. It fails
+  once a subject joins the key, so the scenario is returned to the pool.
+- **The world does not change.** `WORLD_VERSION` stays 1.3.0 while `GENERATOR_VERSION` is 1.3.2.
+  The pool is 97 scenarios and 549 templates.
+- **Every seed's draw can change**, because two malformed-input buckets each lost a scenario. A
+  run opened under 1.3.1 is refused on resume, as for any bump.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,
