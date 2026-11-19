@@ -883,12 +883,14 @@ class _Builder:
 # pool from 1.3.1 (see the end of this section).
 #
 # **A task records only under a subject its module's approved key uses (generator 1.3.2).** The
-# Office refuses at filing (409) a task whose record subject the module's approved key never
-# uses, so such a task never runs. A ruled scenario whose subject the key does not use yet is
-# written in full but held back (`HELD_BACK`), never drawn, until the key uses that subject:
-# `ca.max_comps_out_of_range` (`max_comps`), refused at filing in seed 8's run of 18 November.
-# `test_every_task_records_only_under_its_modules_approved_key` holds every template to the
-# keys' subjects.
+# Office the sandbox files against refuses at filing (409) a task whose record subject the
+# module's approved key never uses, so such a task never runs. A ruled scenario whose subject
+# that key does not use yet is written in full but held back (`HELD_BACK`), never drawn, until
+# the key uses that subject:
+# - `ca.max_comps_out_of_range` (`max_comps`): refused at filing in seed 8's run, 18 November;
+# - `pl.no_query` (`query`): refused at filing in seed 9's run, 19 November.
+# `test_every_task_records_only_under_its_modules_approved_key` holds every template, in every
+# module, to the keys' subjects.
 
 
 @dataclass(frozen=True)
@@ -2984,11 +2986,14 @@ def _pl_over_1000(b: _Builder, world: World, w: _Words) -> bool:
     return _pl_over_cap_to(b, world, w, 1000)
 
 
-@_scenario(PL, "malformed_input", "pl.no_query")
+@_scenario(PL, "malformed_input", "pl.no_query", held_back=True)
 def _pl_no_query(b: _Builder, world: World, w: _Words) -> bool:
     """A property search with no query at all: ACT DECLINE before any call, RECORD query =
     MISSING, CAVEAT that the query was empty (Ivan Green, 13 November). Not an either: before
-    the call is the ruling."""
+    the call is the ruling.
+
+    Held back from 1.3.2: the sandbox Office's property_lookup key never records under `query`,
+    so it refuses the task at filing (seed 9, 19 November). Drawn again once that key does."""
     who = w.who(_PL_WHO)
     facts = w.pick(
         f"{who} files a property search with a page size of 25 and no query.",
@@ -3016,8 +3021,9 @@ def _ca_max_comps_range(b: _Builder, world: World, w: _Words) -> bool:
     Forge refuses it 422 `max_comps_out_of_range` before anything runs, so the pre-call ACT is
     either, as for every value the Forge refuses.
 
-    Held back from 1.3.2: comp_analysis's approved key never records under `max_comps`, so The
-    Office refuses the task at filing (seed 8, 18 November). Drawn again once the key does."""
+    Held back from 1.3.2: the sandbox Office's comp_analysis key never records under
+    `max_comps`, so it refuses the task at filing (seed 8, 18 November). Drawn again once that
+    key does."""
     p, who = world.properties[0], w.who(_CA_WHO)
     sent = (0, 11, 25)[world.seed % 3]
     facts = w.pick(

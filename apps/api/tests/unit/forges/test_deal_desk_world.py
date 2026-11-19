@@ -162,7 +162,10 @@ def _built(key: str, seeds: range | tuple[int, ...] = SEEDS) -> list[Task]:
 
 
 def _keys(module: str, scenario_class: str) -> list[str]:
-    return [s.key for s in POOL if (s.module, s.scenario_class) == (module, scenario_class)]
+    """Every scenario of a (module, class), the held-back ones included: their keys still hold."""
+    return [
+        s.key for s in POOL + HELD_BACK if (s.module, s.scenario_class) == (module, scenario_class)
+    ]
 
 
 def test_a_widening_is_refused_or_run_by_its_reason() -> None:
@@ -749,16 +752,19 @@ def test_a_task_only_bump_keeps_the_world_and_its_ids() -> None:
     assert (export["version"], export["generator_version"]) == ("1.3.0", "1.3.0")
 
 
-#: The subjects each module's APPROVED answer key records under: The Office's record vocabulary
-#: (`broker/record_vocabulary.py`, main 0798465, 17 November 2026), the list its 409 at filing
-#: names. Subject names only, copied here by hand - nothing reads a key. The Office refuses to
-#: file a task that records under any other subject, so the generator must never write one.
+#: The subjects each module's APPROVED answer key records under, in the Office the sandbox
+#: files against: `SANDBOX_OFFICE_CHECKOUT` (theoffice f8d8c73, manuals 1.11.12), as its record
+#: vocabulary (`broker/record_vocabulary.py`) reads them, the list its 409 at filing names. Not
+#: The Office's main: from 1.11.13 (15 November) main's property_lookup key also records under
+#: `query`, and the sandbox's does not (seed 9, 19 November). Subject names only, copied here
+#: by hand - nothing reads a key. That Office refuses to file a task that records under any
+#: other subject, so the generator must never write one. Moving the sandbox's Office forward
+#: means updating this list from that checkout, and returning what it now allows to the pool.
 APPROVED_RECORD_SUBJECTS: dict[str, frozenset[str]] = {
     "property_lookup": frozenset(
         {
             "asking_price_not_recorded",
             "page_size",
-            "query",
             "search_term",
             "square_feet_not_recorded",
             "total",
@@ -774,9 +780,10 @@ def _recorded(t: Task) -> set[str]:
 
 
 def test_every_task_records_only_under_its_modules_approved_key() -> None:
-    """Generator 1.3.2 (seed 8, 18 November: comp_analysis refused at filing for `max_comps`).
-    Every template the pool can draw, on every seed, and every task every seed's run files:
-    the subjects it records under are a subset of its module's approved key's."""
+    """Generator 1.3.2 (refused at filing: seed 8, 18 November, comp_analysis for `max_comps`;
+    seed 9, 19 November, property_lookup for `query`). Every module, every template the pool
+    can draw, on every seed, and every task every seed's run files: the subjects it records
+    under are a subset of its module's approved key's."""
     assert set(APPROVED_RECORD_SUBJECTS) == set(READ_MODULES)
     for seed in SEEDS:
         world = generate_world(seed)
@@ -797,7 +804,7 @@ def test_a_scenario_is_held_back_only_while_its_subject_is_outside_the_key() -> 
     """`HELD_BACK` is exactly the ruled scenarios whose subject the approved key does not use
     yet, and none of them is ever drawn. Once The Office's key records under one, this fails
     until the scenario is returned to the pool."""
-    assert [s.key for s in HELD_BACK] == ["ca.max_comps_out_of_range"]
+    assert sorted(s.key for s in HELD_BACK) == ["ca.max_comps_out_of_range", "pl.no_query"]
     for scenario in HELD_BACK:
         built = _built(scenario.key)
         assert built
