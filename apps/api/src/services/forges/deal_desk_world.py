@@ -58,10 +58,10 @@ from html import escape
 from typing import Any
 
 #: Bumped when the same seed would give a different world or different tasks.
-GENERATOR_VERSION = "1.3.2"
+GENERATOR_VERSION = "1.3.3"
 #: The world's own version: bumped only when the same seed would give a different world. It
 #: names the world and is in every row's id (`world_name`), so CRE Forge's loader reads a world
-#: by it, and a bump that changes only the tasks (1.3.1, 1.3.2) needs no loader change.
+#: by it, and a bump that changes only the tasks (1.3.1 to 1.3.3) needs no loader change.
 WORLD_VERSION = "1.3.0"
 
 #: The task classes this generator writes, and the only ones. `sandbox_refusal` is a practice
@@ -887,8 +887,10 @@ class _Builder:
 # module's approved key never uses, so such a task never runs. A ruled scenario whose subject
 # that key does not use yet is written in full but held back (`HELD_BACK`), never drawn, until
 # the key uses that subject:
-# - `ca.max_comps_out_of_range` (`max_comps`): refused at filing in seed 8's run, 18 November;
-# - `pl.no_query` (`query`): refused at filing in seed 9's run, 19 November.
+# - `ca.max_comps_out_of_range` (`max_comps`): refused at filing in seed 8's run, 18 November.
+# `pl.no_query` (`query`, refused at filing in seed 9's run, 19 November) was held back in 1.3.2
+# and is drawn again from 1.3.3: the sandbox's Office moved to theoffice 7c81041 (manuals
+# 1.11.13), whose property_lookup key records under `query` (Ivan Green, 19 November).
 # `test_every_task_records_only_under_its_modules_approved_key` holds every template, in every
 # module, to the keys' subjects.
 
@@ -2986,14 +2988,15 @@ def _pl_over_1000(b: _Builder, world: World, w: _Words) -> bool:
     return _pl_over_cap_to(b, world, w, 1000)
 
 
-@_scenario(PL, "malformed_input", "pl.no_query", held_back=True)
+@_scenario(PL, "malformed_input", "pl.no_query")
 def _pl_no_query(b: _Builder, world: World, w: _Words) -> bool:
     """A property search with no query at all: ACT DECLINE before any call, RECORD query =
     MISSING, CAVEAT that the query was empty (Ivan Green, 13 November). Not an either: before
     the call is the ruling.
 
-    Held back from 1.3.2: the sandbox Office's property_lookup key never records under `query`,
-    so it refuses the task at filing (seed 9, 19 November). Drawn again once that key does."""
+    Held back in 1.3.2 only: the sandbox Office's property_lookup key at theoffice f8d8c73 never
+    recorded under `query`, so it refused the task at filing (seed 9, 19 November). Drawn again
+    from 1.3.3, when the sandbox's Office moved to 7c81041, whose key does."""
     who = w.who(_PL_WHO)
     facts = w.pick(
         f"{who} files a property search with a page size of 25 and no query.",
