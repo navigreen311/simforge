@@ -551,6 +551,32 @@ other example). Nothing in the loader changed. The agreement:
   until it is. Founder block 135 applies it (drafted, not run). It was tested on a throwaway
   database holding SimForge's schema as it stood before #269.
 
+### The sandbox practises on the live Office's manuals, or does not run (19 November)
+
+Ivan Green, 19 November 2026: **"the sandbox must practise on the same manuals as live."** #286
+found the daily run filing against theoffice f8d8c73 (12 November, manuals 1.11.12, schema 0126)
+while the live Office ran 7c81041 (manuals 1.11.13, schema 0128). So every run since 15 November
+practised property_lookup on a manual the live Office no longer runs, and nothing said so.
+
+**Runner step 4 now compares the manuals and refuses on a difference.**
+
+- After the sandbox Office's setup, the runner reads back the manuals it authored, from its own
+  database (`forge_operating_instruction`, the instruction in force for each module).
+- It reads the live Office's manuals in force for the same three modules through the live
+  Office's `OFFICE_READ_DSN`, in a read-only transaction. It is the same read-only DSN the
+  simulation check already uses.
+- It compares the hashes. Both are The Office's own `content_hash`, which its database makes from
+  the content, so the same manual has the same hash whatever its version string says.
+- On any difference the run stops before the Office's run is started or anything is filed. No
+  `SandboxRun` opens, so the seed is not used up. The log and `summary.json` name each module
+  with both sides' version and hash, and say to move `SANDBOX_OFFICE_CHECKOUT` to the live
+  checkout's commit.
+- On a match the log names the manuals, and `summary.json` keeps both sides.
+- A throwaway never reads the live Office. It says it did not compare.
+
+Moving the checkout is all the sandbox's database needs: step 4 drops `office_sandbox`, makes it
+again and migrates it from the checkout every run, and setup authors the checkout's manuals.
+
 ## The first real run, audited (10 November)
 
 Run `sandbox-01M73YAV88WWRG7F7CFFCVY2NP`: Ivan Green, seed 0, generator 1.1.0, 18 tasks filed,
@@ -843,32 +869,6 @@ cut of this fix read main's vocabulary, which is why it missed `pl.no_query`.
   The pool is 97 scenarios and 549 templates.
 - **Every seed's draw can change**, because two malformed-input buckets each lost a scenario. A
   run opened under 1.3.1 is refused on resume, as for any bump.
-
-### The sandbox practises on the live Office's manuals, or does not run (19 November)
-
-Ivan Green, 19 November 2026: **"the sandbox must practise on the same manuals as live."** #286
-found the daily run filing against theoffice f8d8c73 (12 November, manuals 1.11.12, schema 0126)
-while the live Office ran 7c81041 (manuals 1.11.13, schema 0128). So every run since 15 November
-practised property_lookup on a manual the live Office no longer runs, and nothing said so.
-
-**Runner step 4 now compares the manuals and refuses on a difference.**
-
-- After the sandbox Office's setup, the runner reads back the manuals it authored, from its own
-  database (`forge_operating_instruction`, the instruction in force for each module).
-- It reads the live Office's manuals in force for the same three modules through the live
-  Office's `OFFICE_READ_DSN`, in a read-only transaction. It is the same read-only DSN the
-  simulation check already uses.
-- It compares the hashes. Both are The Office's own `content_hash`, which its database makes from
-  the content, so the same manual has the same hash whatever its version string says.
-- On any difference the run stops before the Office's run is started or anything is filed. No
-  `SandboxRun` opens, so the seed is not used up. The log and `summary.json` name each module
-  with both sides' version and hash, and say to move `SANDBOX_OFFICE_CHECKOUT` to the live
-  checkout's commit.
-- On a match the log names the manuals, and `summary.json` keeps both sides.
-- A throwaway never reads the live Office. It says it did not compare.
-
-Moving the checkout is all the sandbox's database needs: step 4 drops `office_sandbox`, makes it
-again and migrates it from the checkout every run, and setup authors the checkout's manuals.
 
 ## Not decided here
 
