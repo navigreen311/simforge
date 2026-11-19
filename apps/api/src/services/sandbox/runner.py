@@ -6,7 +6,8 @@ For one run it:
 2. picks a seed (the next after the last one run, unless named) and that seed's tasks;
 3. loads the seed's world into the sandbox CRE Forge with `--replace` (the Forge's own loader);
 4. starts a fresh sandbox Office (a new `office_sandbox` database), sets up Greenstone and serves
-   it on 127.0.0.1:9212 (9213 for a throwaway);
+   it on 127.0.0.1:9212 (9213 for a throwaway), and refuses to go on when the manuals it set up
+   are not the ones the live Office runs (`manuals_differ`);
 5. sets up the sandbox Village operator, pointed at that Office's broker;
 6. as the starter, with their own sandbox token, starts the Office's run and files up to N
    tasks; a filing the Office refuses is skipped and named;
@@ -80,6 +81,67 @@ THROWAWAY_OFFICE_PG_PORT = 55443
 DATABASE_URL_BEFORE_THROWAWAY = "SIMFORGE_SANDBOX_DATABASE_URL_BEFORE_THROWAWAY"
 #: The label the throwaway Forge's containers carry: the runner home that started them.
 HOME_LABEL = "simforge.sandbox.home"
+
+#: The live Office's manuals for the modules the sandbox practises: the instruction in force for
+#: each, read through the live Office's OFFICE_READ_DSN in a read-only transaction. Ivan Green,
+#: 19 November 2026: "the sandbox must practise on the same manuals as live." The sandbox's
+#: checkout sat at theoffice f8d8c73 (manuals 1.11.12) while live ran 1.11.13, and nothing said
+#: so (SimForge #286).
+LIVE_MANUALS_SQL = (
+    "SELECT module_id, instruction_version, content_hash FROM forge_operating_instruction "
+    "WHERE forge_id = $1 AND module_id = ANY($2::text[]) AND superseded_at IS NULL"
+)
+OFFICE_FORGE = "cre-forge"
+
+
+#: The same, in the sandbox Office's own database, read after its setup authored them (psql -tA:
+#: one `module|version|hash` line each).
+SANDBOX_MANUALS_SQL = (
+    "SELECT module_id, instruction_version, content_hash FROM forge_operating_instruction "
+    f"WHERE forge_id = '{OFFICE_FORGE}' AND superseded_at IS NULL ORDER BY module_id"
+)
+
+
+def manuals_from_psql(out: str) -> dict[str, tuple[str, str]]:
+    """`SANDBOX_MANUALS_SQL`'s psql -tA lines: module -> (version, hash)."""
+    found = {}
+    for line in out.splitlines():
+        if line.count("|") == 2:
+            module, version, digest = line.strip().split("|")
+            found[module] = (version, digest)
+    return found
+
+
+class ManualsDiffer(RuntimeError):
+    """The sandbox Office set up manuals the live Office does not run: nothing is filed. It
+    carries the run's `Outcome` so far, so the run's summary still names both sides."""
+
+    def __init__(self, message: str, outcome: Outcome) -> None:
+        super().__init__(message)
+        self.outcome = outcome
+
+
+def manuals_differ(
+    sandbox: Mapping[str, tuple[str, str]], live: Mapping[str, tuple[str, str]]
+) -> list[str]:
+    """Every module whose manual differs, in words; each side is module -> (version, hash).
+    Both hashes are The Office's own (`forge_operating_instruction.content_hash`, made by its
+    database from the content), so the same manual has the same hash on both, whatever its
+    version says. A module either side lacks differs too."""
+    out = []
+    for module in READ_MODULES:
+        mine, theirs = sandbox.get(module), live.get(module)
+        if theirs is None:
+            out.append(f"{module}: the live Office has no manual in force")
+        elif mine is None:
+            out.append(f"{module}: the sandbox Office set up no manual")
+        elif not mine[1] or mine[1] != theirs[1]:
+            out.append(
+                f"{module}: the sandbox's {mine[0]} {mine[1][:12]}, the live Office's "
+                f"{theirs[0]} {theirs[1][:12]}"
+            )
+    return out
+
 
 # --- the runner's own directory ------------------------------------------------------------------
 
@@ -254,6 +316,8 @@ class Targets:
 class Stack(Protocol):
     def load_world(self, seed: int, path: Path) -> str: ...
     def office_up(self, run_dir: Path) -> Path: ...
+    def office_manuals(self) -> dict[str, tuple[str, str]]: ...
+    async def live_manuals(self) -> dict[str, tuple[str, str]] | None: ...
     def operator_up(self, run_dir: Path, tokens: Path) -> None: ...
     def office(self, method: str, path: str, token: str, body: Any = None) -> tuple[int, Any]: ...
     def snapshot(self, office_run_id: str) -> list[dict[str, Any]]: ...
@@ -309,6 +373,7 @@ class ProcessStack:
         self.broker: subprocess.Popen[str] | None = None
         self.run_dir: Path | None = None
         self.operator_config: Path | None = None
+        self.manuals: dict[str, tuple[str, str]] = {}
 
     # -- helpers
     def _run(
@@ -526,12 +591,12 @@ class ProcessStack:
                 f"postgresql://postgres:{values['OFFICE_SANDBOX_PG_PASSWORD']}@127.0.0.1:"
                 f"{self.t.office_pg_port}/standin_declared"
             )
+        return self._live_read_dsn("the simulation check reads the live declaration there")
+
+    def _live_read_dsn(self, why: str) -> str:
         dsn = read_env(self.t.live_office_env).get("OFFICE_READ_DSN", "")
         if not dsn:
-            raise RuntimeError(
-                f"no OFFICE_READ_DSN in {self.t.live_office_env}: the "
-                "simulation check reads the live declaration there"
-            )
+            raise RuntimeError(f"no OFFICE_READ_DSN in {self.t.live_office_env}: {why}")
         return dsn
 
     def office_up(self, run_dir: Path) -> Path:
@@ -569,6 +634,7 @@ class ProcessStack:
             )
         summary = done.stdout.decode("utf-8", "replace")
         grants = json.loads(summary[summary.index("{") :]).get("grants", [])
+        self.manuals = manuals_from_psql(self._psql(SANDBOX_MANUALS_SQL))
         self.log("   set up Greenstone: " + "; ".join(grants))
         log_file = (run_dir / "office-broker.log").open("w", encoding="utf-8")
         self.broker = subprocess.Popen(  # noqa: S603
@@ -591,6 +657,29 @@ class ProcessStack:
         else:
             raise RuntimeError(f"the sandbox Office is not live on {self.t.broker_url}")
         return tokens
+
+    def office_manuals(self) -> dict[str, tuple[str, str]]:
+        """The manuals the sandbox Office's setup authored, read back from its database."""
+        return dict(self.manuals)
+
+    async def live_manuals(self) -> dict[str, tuple[str, str]] | None:
+        """The live Office's manuals in force, read only. None for a throwaway, which never
+        reads the live Office (its simulation check reads a stand-in too)."""
+        if self.t.throwaway:
+            return None
+        import asyncpg  # type: ignore[import-untyped]
+
+        dsn = self._live_read_dsn("the manuals check reads the live Office's manuals there")
+        conn = await asyncpg.connect(dsn, timeout=15)
+        try:
+            async with conn.transaction(readonly=True):
+                rows = await conn.fetch(LIVE_MANUALS_SQL, OFFICE_FORGE, list(READ_MODULES))
+        finally:
+            await conn.close()
+        return {
+            str(r["module_id"]): (str(r["instruction_version"]), str(r["content_hash"]))
+            for r in rows
+        }
 
     def office(self, method: str, path: str, token: str, body: Any = None) -> tuple[int, Any]:
         data = None if body is None else json.dumps(body).encode("utf-8")
@@ -1035,6 +1124,9 @@ class Outcome:
     office_run_id: str | None = None
     seed: int | None = None
     page: Path | None = None
+    #: step 4: module -> {"sandbox": "<version> <hash>", "live": "<version> <hash>"}; a
+    #: throwaway's "live" is "not compared"
+    manuals: dict[str, dict[str, str]] = field(default_factory=dict)
     refused_at_filing: list[dict[str, str]] = field(default_factory=list)
     record_refusals: list[dict[str, str]] = field(default_factory=list)
     office_status: dict[str, str] = field(default_factory=dict)
@@ -1087,6 +1179,29 @@ async def drive(
     log("4. a fresh sandbox Office, set up for Greenstone")
     tokens_file = stack.office_up(run_dir)
     token = _person_token(tokens_file, starter)
+    mine, live = stack.office_manuals(), await stack.live_manuals()
+    out.manuals = {
+        m: {
+            "sandbox": " ".join(mine[m]) if m in mine else "none",
+            "live": "not compared" if live is None else " ".join(live.get(m, ("none",))),
+        }
+        for m in READ_MODULES
+    }
+    if live is None:
+        log("   manuals not compared with the live Office's: a throwaway never reads it")
+    else:
+        differ = manuals_differ(mine, live)
+        if differ:
+            raise ManualsDiffer(
+                "the sandbox Office's manuals are not the live Office's, so this run would "
+                "practise on manuals live does not run (Ivan Green, 19 November). Move "
+                "SANDBOX_OFFICE_CHECKOUT to the live checkout's commit. " + "; ".join(differ),
+                out,
+            )
+        log(
+            "   the same manuals as the live Office: "
+            + ", ".join(f"{m} {live[m][0]} {live[m][1][:12]}" for m in READ_MODULES)
+        )
 
     log("5. the sandbox operator")
     stack.operator_up(run_dir, tokens_file)

@@ -27,6 +27,12 @@ from src.services.forges.deal_desk_world import (
 from src.services.sandbox import runner
 
 T0 = datetime(2026, 11, 10, 21, 0)
+#: The manuals a sandbox Office's setup authors: module -> (version, content hash).
+MANUALS = {
+    "property_lookup": ("1.11.13", "cc62a653e456" + "0" * 52),
+    "comp_analysis": ("1.11.13", "d9a14ba960f5" + "0" * 52),
+    "buyer_match": ("1.11.13", "b7332fa1d9c9" + "0" * 52),
+}
 
 
 class FakeStack:
@@ -38,8 +44,14 @@ class FakeStack:
         refuse: set[str] = frozenset(),
         forge_differs: set[str] = frozenset(),
         stall: bool = False,
+        manuals: dict[str, tuple[str, str]] | None = None,
+        live_manuals: dict[str, tuple[str, str]] | None | str = "same",
     ) -> None:
         self.refuse, self.differs, self.stall = refuse, forge_differs, stall
+        # The sandbox Office's setup and the live Office's manuals: the same unless a test
+        # says otherwise ("same"); None is a throwaway, which never reads the live Office.
+        self.manuals = dict(MANUALS) if manuals is None else manuals
+        self.live = dict(MANUALS) if live_manuals == "same" else live_manuals
         self.tasks: dict[str, dict[str, Any]] = {}
         self.by_id: dict[str, Task] = {}
         self.calls: list[tuple[str, str]] = []
@@ -61,6 +73,13 @@ class FakeStack:
             "PERSON_IVAN=ivan-sandbox-token\nPERSON_IRA=ira-sandbox-token\n", encoding="ascii"
         )
         return tokens
+
+    def office_manuals(self) -> dict[str, tuple[str, str]]:
+        return dict(self.manuals)
+
+    async def live_manuals(self) -> dict[str, tuple[str, str]] | None:
+        assert not isinstance(self.live, str)
+        return self.live
 
     def operator_up(self, run_dir: Path, tokens: Path) -> None:
         pass
@@ -183,6 +202,7 @@ async def _drive(
     clock: runner.Clock | None = None,
     stop: Any = lambda: None,
     budget: runner.Budget | None = None,
+    log: Any = lambda _m: None,
 ) -> runner.Outcome:
     tasks = runner.choose_tasks(0)
     FakeStack._all = tasks
@@ -195,7 +215,7 @@ async def _drive(
         want=want,
         run_dir=tmp_path,
         budget=budget or runner.Budget(max_ticks=40, max_minutes=60, poll_seconds=30),
-        log=lambda _m: None,
+        log=log,
         clock=clock or FakeClock([]),
         exam_is_open=lambda: runner.exam_open(db),
         stop_requested=stop,

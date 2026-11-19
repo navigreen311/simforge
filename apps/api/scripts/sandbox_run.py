@@ -261,6 +261,8 @@ async def _start(args: argparse.Namespace, *, scheduled: bool) -> int:
     except Exception as exc:  # noqa: BLE001 - report it, then stop everything
         log(f"FAILED: {type(exc).__name__}: {exc}")
         code = 1
+        if isinstance(exc, runner.ManualsDiffer):
+            outcome = exc.outcome  # the summary names both sides' manuals
     finally:
         log("9. stopping everything this run started")
         for said in stack.stop():
