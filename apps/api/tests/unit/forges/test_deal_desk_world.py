@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
+import subprocess
 import uuid
 from collections import Counter
 from dataclasses import asdict
@@ -744,27 +746,32 @@ def test_ivan_greens_rulings_on_the_five_open_keys() -> None:
 
 
 def test_a_task_only_bump_keeps_the_world_and_its_ids() -> None:
-    """1.3.1 and 1.3.2 change the tasks, not the world: its name, its rows and its digest are
+    """1.3.1 to 1.3.3 change the tasks, not the world: its name, its rows and its digest are
     1.3.0's, so CRE Forge's loader reads it unchanged."""
-    assert (GENERATOR_VERSION, WORLD_VERSION) == ("1.3.2", "1.3.0")
+    assert (GENERATOR_VERSION, WORLD_VERSION) == ("1.3.3", "1.3.0")
     assert world_name(4) == "simforge-1.3.0-seed-4"
     export = json.loads(export_json(4))
     assert (export["version"], export["generator_version"]) == ("1.3.0", "1.3.0")
 
 
+#: The commit `SANDBOX_OFFICE_CHECKOUT` stands at, which the list below is read from: theoffice
+#: 7c81041 (manuals 1.11.13, schema 0128), the live checkout's commit (Ivan Green, 19 November:
+#: "the sandbox must practise on the same manuals as live"; founder block 173 moved it there).
+SANDBOX_OFFICE_COMMIT = "7c810410c61b3705f48cdce49520d38ca24889ca"
+
 #: The subjects each module's APPROVED answer key records under, in the Office the sandbox
-#: files against: `SANDBOX_OFFICE_CHECKOUT` (theoffice f8d8c73, manuals 1.11.12), as its record
-#: vocabulary (`broker/record_vocabulary.py`) reads them, the list its 409 at filing names. Not
-#: The Office's main: from 1.11.13 (15 November) main's property_lookup key also records under
-#: `query`, and the sandbox's does not (seed 9, 19 November). Subject names only, copied here
-#: by hand - nothing reads a key. That Office refuses to file a task that records under any
-#: other subject, so the generator must never write one. Moving the sandbox's Office forward
-#: means updating this list from that checkout, and returning what it now allows to the pool.
+#: files against (`SANDBOX_OFFICE_COMMIT`), as its record vocabulary
+#: (`broker/record_vocabulary.py`) reads them, the list its 409 at filing names. Subject names
+#: only, copied here by hand - nothing reads a key. That Office refuses to file a task that
+#: records under any other subject, so the generator must never write one. Moving the sandbox's
+#: Office means updating this list from the new checkout, and returning what it now allows to
+#: the pool. At f8d8c73 (1.11.12) property_lookup's had no `query` (seed 9, 19 November).
 APPROVED_RECORD_SUBJECTS: dict[str, frozenset[str]] = {
     "property_lookup": frozenset(
         {
             "asking_price_not_recorded",
             "page_size",
+            "query",
             "search_term",
             "square_feet_not_recorded",
             "total",
@@ -804,7 +811,7 @@ def test_a_scenario_is_held_back_only_while_its_subject_is_outside_the_key() -> 
     """`HELD_BACK` is exactly the ruled scenarios whose subject the approved key does not use
     yet, and none of them is ever drawn. Once The Office's key records under one, this fails
     until the scenario is returned to the pool."""
-    assert sorted(s.key for s in HELD_BACK) == ["ca.max_comps_out_of_range", "pl.no_query"]
+    assert [s.key for s in HELD_BACK] == ["ca.max_comps_out_of_range"]
     for scenario in HELD_BACK:
         built = _built(scenario.key)
         assert built
@@ -814,3 +821,38 @@ def test_a_scenario_is_held_back_only_while_its_subject_is_outside_the_key() -> 
     assert not held & {s.key for s in POOL}
     for seed in SEEDS:
         assert not {t.template.split("/")[0] for t in _tasks(seed)} & held, seed
+
+
+def _sandbox_office_checkout() -> Path | None:
+    """`SANDBOX_OFFICE_CHECKOUT` from the environment, or from the runner's own config."""
+    named = os.environ.get("SANDBOX_OFFICE_CHECKOUT")
+    if not named:
+        config = (
+            Path(os.environ.get("SIMFORGE_SANDBOX_HOME") or Path.home() / ".simforge-sandbox")
+            / "runner.env"
+        )
+        if config.is_file():
+            for line in config.read_text(encoding="utf-8").splitlines():
+                if line.startswith("SANDBOX_OFFICE_CHECKOUT="):
+                    named = line.partition("=")[2].strip()
+    return Path(named) if named and Path(named).is_dir() else None
+
+
+def test_the_record_subjects_are_the_sandbox_office_checkouts() -> None:
+    """`APPROVED_RECORD_SUBJECTS` is read from `SANDBOX_OFFICE_COMMIT`. On the machine the runner
+    runs on, the sandbox's Office checkout must stand at that commit, so moving the checkout
+    without updating the list (or the list without the checkout) fails here. Elsewhere (CI) there
+    is no checkout, and the pin is what is held."""
+    assert re.fullmatch(r"[0-9a-f]{40}", SANDBOX_OFFICE_COMMIT)
+    checkout = _sandbox_office_checkout()
+    if checkout is not None:
+        head = subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert head == SANDBOX_OFFICE_COMMIT, (
+            f"{checkout} stands at {head[:7]}, the record subjects are read from "
+            f"{SANDBOX_OFFICE_COMMIT[:7]}: update APPROVED_RECORD_SUBJECTS and HELD_BACK"
+        )

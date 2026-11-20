@@ -870,6 +870,27 @@ cut of this fix read main's vocabulary, which is why it missed `pl.no_query`.
 - **Every seed's draw can change**, because two malformed-input buckets each lost a scenario. A
   run opened under 1.3.1 is refused on resume, as for any bump.
 
+### Generator 1.3.3: `pl.no_query` back in the pool (19 November)
+
+Ivan Green, 19 November 2026: "the sandbox must practise on the same manuals as live." Founder
+block 173 moves `SANDBOX_OFFICE_CHECKOUT` from theoffice f8d8c73 (manuals 1.11.12) to 7c81041,
+the live checkout's commit (manuals 1.11.13, schema 0128).
+
+- **The record subjects come from 7c81041.** At that commit The Office's record vocabulary
+  (`broker/record_vocabulary.py`) gives property_lookup's approved key `query`. The key was
+  approved by Ivan Green on 15 November. comp_analysis and buyer_match are unchanged. The test
+  pins the commit (`SANDBOX_OFFICE_COMMIT`).
+- **On the runner's machine, the test checks the checkout itself.** It reads
+  `SANDBOX_OFFICE_CHECKOUT` from the runner's `runner.env` and fails if the checkout stands at
+  any other commit. Moving the checkout without updating the list, or the list without the
+  checkout, fails there.
+- **`pl.no_query` is drawn again.** Only `ca.max_comps_out_of_range` stays held back:
+  comp_analysis's key still never records under `max_comps`.
+- **The pool** is 98 scenarios and 554 templates. The world stays 1.3.0. Every seed's draw can
+  change, and a run opened under 1.3.2 is refused on resume, as for any bump.
+- **Merge order.** Merge this only after block 173 has moved the checkout. Until then the
+  sandbox Office's key has no `query`, and it would refuse `pl.no_query` at filing again.
+
 ## Not decided here
 
 - The write modules (`underwrite_deal`, `assign_contract`), and any module with a signature,
