@@ -122,6 +122,12 @@ check) and the sandbox operator's. A refusal there stops the run and is shown in
    `office_sandbox` database is dropped and made again, migrated, and set up for Greenstone
    (`python -m broker.sandbox setup`). The simulation check reads the live Office's own
    declaration once, on its read-only DSN. The broker is served on 127.0.0.1:9212 (9213 for a throwaway).
+   **The manuals.** The manuals setup authored are read back from `office_sandbox` and compared
+   with the live Office's manuals in force for the three modules, read through the same read-only
+   DSN. If any differ, the run stops here, before anything is filed. The log names each module
+   with both hashes; move `SANDBOX_OFFICE_CHECKOUT` to the live checkout's commit (Ivan Green,
+   19 November: "the sandbox must practise on the same manuals as live"). A throwaway does not
+   compare and says so.
 5. **The sandbox operator** is set up from the Office's fresh tokens (`sandbox_operator.py setup`).
 6. **Filing.** As the starter, with their own sandbox token, the runner starts the Office's run
    and files up to N tasks. A task's facts are its request, plus the person's words as
