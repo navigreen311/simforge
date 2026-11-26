@@ -109,8 +109,12 @@ class Settings(BaseSettings):
     # and the exam grades an agent that never read its manual. It must equal the Village
     # operator's AGENT_NUM_CTX - the exam and production read the same window or the exam is
     # not of production - and Ollama reloads the model whenever two callers ask for different
-    # windows, so one value is also the cheap one.
-    exam_num_ctx: int = Field(default=8192, alias="EXAM_NUM_CTX")
+    # windows, so one value is also the cheap one. 16384 since Ivan Green's ruling of 25 November
+    # 2026 (The Office, decisions entry 353): the CRE Forge's comp_analysis Turn B carries up to
+    # 10 comps of about 260 tokens each, about 8,415 tokens on the live manual, and a 1.11.14
+    # draft passed 8192. 16384 is phi4's n_ctx_train, the most it takes; it is part of the model
+    # fingerprint, so every certified grant re-sits.
+    exam_num_ctx: int = Field(default=16384, alias="EXAM_NUM_CTX")
     # ADR-0167 (Ivan Green, 14 November 2026). Ollama's server log, read to tell whether another
     # caller used the model during an exam. Empty means Ollama for Windows' own place,
     # %LOCALAPPDATA%\Ollama\server.log. A log that cannot be read voids the exam (NOT RUN).

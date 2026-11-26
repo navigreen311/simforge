@@ -58,9 +58,10 @@ async def test_no_window_named_sends_none(monkeypatch: pytest.MonkeyPatch) -> No
     assert "num_ctx" not in seen[0]["options"]
 
 
-def test_the_default_window_is_8192() -> None:
-    """The value Ivan ruled, and the one the Village operator's AGENT_NUM_CTX defaults to."""
-    assert settings.exam_num_ctx == 8192
+def test_the_default_window_is_16384() -> None:
+    """The value Ivan ruled (8192 on 17 October, 16384 on 25 November 2026), and the one the
+    Village operator's AGENT_NUM_CTX defaults to."""
+    assert settings.exam_num_ctx == 16384
 
 
 class _Village:
