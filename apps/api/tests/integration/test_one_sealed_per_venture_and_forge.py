@@ -41,8 +41,12 @@ from src.services.operation.partition_verdict import (
     venture_verdict,
 )
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
+from tests.integration.examiner_now import AT_EXAMINER
 from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session
+from tests.integration.test_operation_battery_run import (
+    _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
+)
 from tests.integration.test_partition_authoring import FORGE, VENTURE, _seed
 
 #: Seeded by `_seed` beside FORGE, with a never-do list of its own.
@@ -221,6 +225,7 @@ def _verdict(
         partitionId=p.id,
         ventureId=p.ventureId,
         agentId=agent,
+        agentModelIdentity=AT_EXAMINER,  # entry 355: at the examiner now
         verdict=verdict,
         partitionDigest=p.contentDigest,
         protocolVersion=PARTITION_PROTOCOL_VERSION,

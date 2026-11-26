@@ -37,6 +37,7 @@ from src.services.operation.partition_verdict import venture_verdict
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 from tests.integration import test_partition_authoring as authoring
 from tests.integration import test_partition_sweep as sweep
+from tests.integration.examiner_now import AT_EXAMINER
 from tests.integration.operators import credential_of, ensure
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
@@ -273,6 +274,7 @@ async def _verdict_row(db: AsyncSession, pid: str, agent: str, verdict: str) -> 
                 partitionId=pid,
                 ventureId=sweep.VENTURE,
                 agentId=agent,
+                agentModelIdentity=AT_EXAMINER,  # entry 355: at the examiner now
                 verdict=verdict,
                 partitionDigest=row.contentDigest,
                 protocolVersion=PARTITION_PROTOCOL_VERSION,

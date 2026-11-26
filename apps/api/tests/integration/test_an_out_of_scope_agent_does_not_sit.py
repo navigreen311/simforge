@@ -15,6 +15,7 @@ from src.models.operation_run import OperationRun
 from src.services.operation.partition_roster import partition_roster
 from src.services.operation.partition_verdict import venture_verdict
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
+from tests.integration.examiner_now import AT_EXAMINER
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
     _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
@@ -100,6 +101,7 @@ async def test_an_old_not_run_for_an_out_of_scope_agent_no_longer_holds_the_gate
                 partitionId=pid,
                 ventureId=VENTURE,
                 agentId=RETIRED,
+                agentModelIdentity=AT_EXAMINER,  # entry 355: at the examiner now
                 verdict="NOT_RUN",
                 partitionDigest=partition.contentDigest,
                 protocolVersion=PARTITION_PROTOCOL_VERSION,
@@ -129,6 +131,7 @@ async def test_an_in_scope_agent_still_holds_the_gate(
                 partitionId=pid,
                 ventureId=VENTURE,
                 agentId=AGENT,
+                agentModelIdentity=AT_EXAMINER,  # entry 355: at the examiner now
                 verdict="FAIL",
                 partitionDigest=partition.contentDigest,
                 protocolVersion=PARTITION_PROTOCOL_VERSION,

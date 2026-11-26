@@ -26,6 +26,9 @@ from tests.integration.test_gate_9_5_verdict import (
     _verdict,
     bridged,  # noqa: F401 - fixture
 )
+from tests.integration.test_operation_battery_run import (
+    _examiner_pinned,  # noqa: F401 - autouse: entry 355, Gate 9.5 counts sittings at it
+)
 
 pytestmark = pytest.mark.asyncio
 

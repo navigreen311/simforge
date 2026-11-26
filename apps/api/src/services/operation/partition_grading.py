@@ -61,6 +61,12 @@ from src.models.held_out_partition import (
 )
 from src.services.agent_runtime.agent_identity import check_agent_identity
 from src.services.agent_runtime.examiner import check_examiner
+from src.services.agent_runtime.examiner_settings import (
+    ExaminerSettingsUnknown,
+    same_settings,
+    settings_now,
+    settings_of,
+)
 from src.services.agent_runtime.llm_client import AnotherPhi4Caller, ColdStartFailed, LLMResponse
 from src.services.agent_runtime.runtime import AgentRuntime, begin_exam, end_exam
 from src.services.operation.battery import (
@@ -689,6 +695,9 @@ SKIP_NOT_SEALED = "the_partition_is_not_sealed"
 #: B136. The runtime handed in is not at the temperature the Village declares for this
 #: partition's Forge - built by `examiner_runtime` for another Forge, or not by it at all.
 SKIP_NOT_AT_THIS_FORGE = "the_examiner_is_not_at_this_forges_declared_temperature"
+#: The Office decisions entry 355. The examiner described is not at the five facts
+#: `examiner_settings.settings_now` states for this Forge, or they cannot be stated.
+SKIP_NOT_AT_STATED_SETTINGS = "the_examiner_is_not_at_the_settings_gate_9_5_counts"
 #: ADR-0125. A live instruction set is not the one the partition was authored from. Its
 #: scenarios carry positional refs into the old never-do lists; grading them against the
 #: new ones would match a correct refusal against the wrong rule.
@@ -866,6 +875,17 @@ async def grade_partition(
     # puts nothing - and kept on every row this pass writes.
     identity = await runtime.model_identity()
     ledger.model_identity = identity.as_record() if identity else None
+    # Entry 355. What this pass grades at, as the five facts Gate 9.5 counts a sitting by - and
+    # the pass puts nothing unless they are what Gate 9.5 will read as now. A sitting written at
+    # other settings would be one Gate 9.5 ignores, and the grader would put it again next pass.
+    examiner_now = settings_of(identity)
+    try:
+        stated = settings_now(forge)
+    except ExaminerSettingsUnknown:
+        stated = None
+    if examiner_now is None or examiner_now != stated:
+        log.warning("partition_examiner_not_at_stated_settings", partition=pid, forge=forge)
+        return PartitionOutcome(pid, 0, 0, 0, skipped=SKIP_NOT_AT_STATED_SETTINGS)
 
     agents = await agents_for_partition(session, partition)
 
@@ -891,6 +911,9 @@ async def grade_partition(
             r.protocolVersion == PARTITION_PROTOCOL_VERSION
             # ADR-0137. A sitting graded under another rubric is due again, like a protocol.
             and r.rubricVersion == OPERATION_RUBRIC_VERSION
+            # The Office decisions entry 355. And one graded by another examiner - another
+            # window, cap, temperature or digest - for the reason Gate 9.5 no longer counts it.
+            and same_settings(r.agentModelIdentity, examiner_now)
             and (
                 r.instructionContentHash is None
                 or live_digest is None

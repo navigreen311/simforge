@@ -36,6 +36,7 @@ from src.services.operation.held_out import author_for_module
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
 from src.utils.time import utcnow
 from src.workers import partition_sweep
+from tests.integration.examiner_now import AT_EXAMINER
 from tests.integration.scheduler_path import fresh_session, run_scheduled
 from tests.integration.test_operation_battery_run import (
     _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
@@ -253,6 +254,7 @@ async def test_an_abandoned_in_progress_becomes_timeout_and_is_graded_again(
             partitionId=pid,
             ventureId=VENTURE,
             agentId=AGENT,
+            agentModelIdentity=AT_EXAMINER,  # entry 355: at the examiner now
             verdict="IN_PROGRESS",
             partitionDigest=DIGEST,
             # Abandoned by THIS build: a superseded one is simply re-sat (ADR-0123).

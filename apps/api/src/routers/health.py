@@ -203,3 +203,49 @@ async def exam_model(session: AsyncSession = Depends(get_session)) -> dict:
         "lock": LOCK_KEY,
         "checked_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+
+
+@router.get("/examiner-settings")
+async def examiner_settings(forge_id: str) -> dict:
+    """What an exam on `forge_id` would run at now, and the segment a run ref names it by.
+
+    The Office decisions entry 355 (Ivan Green, 26 November 2026): a changed setting makes a new
+    exam, so The Office's `mint_run_ref` puts `ref_segment` in a Unit A ref, and the battery
+    refuses to grade a ref whose segment is not this one. Public and read-only, like
+    `/exam-model`: the tag, the pinned digest (which `/api/tags` on the same host already serves)
+    and three numbers. No id, no ref, no secret.
+
+    Always 200. `readable` false, with `reason`, when the settings cannot be stated - an unpinned
+    examiner or an unreadable Village config. The Office omits the segment then and says so; it
+    never mints one from a value this route did not give.
+    """
+    from src.services.agent_runtime.examiner_settings import (
+        ExaminerSettingsUnknown,
+        ref_segment,
+        settings_digest,
+        settings_now,
+    )
+
+    checked_at = datetime.now(UTC).isoformat(timespec="seconds")
+    try:
+        facts = settings_now(forge_id)
+    except ExaminerSettingsUnknown as exc:
+        return {
+            "forge_id": forge_id,
+            "readable": False,
+            "examiner_settings": None,
+            "digest": None,
+            "ref_segment": None,
+            "reason": str(exc)[:300],
+            "checked_at": checked_at,
+        }
+    digest = settings_digest(facts)
+    return {
+        "forge_id": forge_id,
+        "readable": True,
+        "examiner_settings": facts,
+        "digest": digest,
+        "ref_segment": ref_segment(digest),
+        "reason": None,
+        "checked_at": checked_at,
+    }
