@@ -31,7 +31,11 @@ from src.models.held_out_partition import (
 )
 from src.services.operation.partition_verdict import venture_verdict
 from src.services.operation.rubric import OPERATION_RUBRIC_VERSION, PARTITION_PROTOCOL_VERSION
+from tests.integration.examiner_now import AT_EXAMINER
 from tests.integration.scheduler_path import fresh_session
+from tests.integration.test_operation_battery_run import (
+    _examiner_pinned,  # noqa: F401 - autouse: pins the examiner for every test here
+)
 
 TOKEN = "office-tenant-token-for-tests"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -105,6 +109,7 @@ def _verdict(
         partitionId=p.id,
         ventureId=p.ventureId,
         agentId=agent,
+        agentModelIdentity=AT_EXAMINER,  # entry 355: at the examiner now
         verdict=verdict,
         partitionDigest=digest if digest is not None else p.contentDigest,
         protocolVersion=protocol,

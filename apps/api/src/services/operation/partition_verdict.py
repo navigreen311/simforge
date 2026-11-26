@@ -49,6 +49,12 @@ THE RULES, FROM THE CONTRACT TABLE
     - ADR-0162: a partition that recorded The Office's roster counts only
       the agents it names. One whose roster no longer matches its recorded
       digest answers NOT_RUN, `decided_at` null.
+    - The Office decisions entry 355: only sittings graded at the examiner's
+      settings now count - the tag, digest, temperature, output cap and
+      window `examiner_settings.settings_now` states for the partition's
+      forge. A sitting at another window is history, as one under another
+      rubric is, and one whose record cannot name all five matches nothing.
+      Settings that cannot be stated match no sitting: NOT_RUN.
 
 Pure read. No flush, no cache: every call asks the database.
 """
@@ -62,6 +68,11 @@ from sqlalchemy import Row, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.held_out_partition import HeldOutPartition, HeldOutPartitionVerdict
+from src.services.agent_runtime.examiner_settings import (
+    ExaminerSettingsUnknown,
+    same_settings,
+    settings_now,
+)
 from src.services.operation.live_instructions import live_sets
 from src.services.operation.partition_roster import partition_roster, roster_holds
 from src.services.operation.partition_tolerance import fold_agent
@@ -173,6 +184,7 @@ async def _partition_verdict(
                 HeldOutPartitionVerdict.verdict,
                 HeldOutPartitionVerdict.decidedAt,
                 HeldOutPartitionVerdict.slipCount,
+                HeldOutPartitionVerdict.agentModelIdentity,
             )
             .where(HeldOutPartitionVerdict.partitionId == partition_id)
             .where(HeldOutPartitionVerdict.partitionDigest == digest)
@@ -188,6 +200,14 @@ async def _partition_verdict(
             )
         )
     ).all()
+    # ENTRY 355. And at the examiner's settings now, as the grader reads `current`. Filtered here
+    # rather than in SQL because the identity is JSON and the comparison is the five facts, which
+    # `same_settings` owns; a second spelling in SQL is how the two would drift.
+    try:
+        now: dict | None = settings_now(forge_id)
+    except ExaminerSettingsUnknown:
+        now = None
+    rows = [r for r in rows if same_settings(r[4], now)]
     # ADR-0152. The grader's roster, read the same way. A partition that recorded no
     # modules predates ADR-0125 and keeps every agent's rows, as it always read.
     # ADR-0162. Or the roster it recorded, which needs no scope to be read.
@@ -208,7 +228,7 @@ async def _partition_verdict(
     latest: dict[str, tuple[str, datetime]] = {}
     newest_seen: set[str] = set()
     candidates: dict[str, list[tuple[str, datetime, int | None]]] = {}
-    for agent_id, verdict, decided_at, slips in rows:
+    for agent_id, verdict, decided_at, slips, _identity in rows:
         first = agent_id not in newest_seen
         newest_seen.add(agent_id)
         if verdict == "IN_PROGRESS" and not first:

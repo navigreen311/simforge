@@ -113,6 +113,12 @@ from src.services.agent_runtime.agent_identity import (
     check_agent_identity,
 )
 from src.services.agent_runtime.examiner import check_examiner
+from src.services.agent_runtime.examiner_settings import (
+    ref_segment,
+    settings_digest,
+    settings_of,
+    settings_of_run_ref,
+)
 from src.services.agent_runtime.llm_client import ColdStartFailed, provider_label
 from src.services.agent_runtime.runtime import (
     PROMPT_VERSION,
@@ -229,6 +235,10 @@ SKIP_UNKNOWN_RUN = "no_run_was_opened_under_this_ref"
 #: ADR-0120. The ref names a protocol version this build does not put. Grading it would put
 #: 7.0.0 to a run whose ref says 6.0.0, and the ref would then name an exam nobody sat.
 SKIP_PROTOCOL_MISMATCH = "the_run_ref_names_a_different_protocol_version"
+#: The Office decisions entry 355. The ref names examiner settings (`m` segment) this examiner is
+#: not at. Grading it would put a 16384 exam under a ref The Office minted for 8192, or the
+#: reverse, and the ref would then name an exam nobody sat - ADR-0120's reason, for the model.
+SKIP_EXAMINER_SETTINGS_MISMATCH = "the_run_ref_names_different_examiner_settings"
 
 #: `...:p6.0.0:r0.5.0` - the segment The Office's `mint_run_ref` writes from `/api/version`.
 _REF_PROTOCOL = re.compile(r":p(\d+\.\d+\.\d+)(?=:|$)")
@@ -1728,6 +1738,22 @@ async def battery_for_run(
             detail=verdict.detail,
         )
         return BatterySkipped(run_ref=run_ref, reason=verdict.reason or "examiner_refused")
+
+    # THE OFFICE DECISIONS ENTRY 355. The examiner is the production model at the settings the
+    # ref names, or the run is not graded. Checked against the identity just described, so what
+    # is compared is what would answer, and before any probe is put.
+    named_settings = settings_of_run_ref(run_ref)
+    if named_settings is not None:
+        facts = settings_of(examiner)
+        here = ref_segment(settings_digest(facts)) if facts is not None else None
+        if here != named_settings:
+            log.warning(
+                "battery_examiner_settings_mismatch",
+                run_ref=run_ref,
+                ref_settings=named_settings,
+                examiner_settings=here,
+            )
+            return BatterySkipped(run_ref=run_ref, reason=SKIP_EXAMINER_SETTINGS_MISMATCH)
 
     # ADR-0091 - THE SET THE RUN NAMES, NEVER THE NEWEST.
     #

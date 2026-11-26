@@ -92,6 +92,24 @@ def build_exam_runtime(village_reader: VillageReader) -> AgentRuntime:
     return AgentRuntime(village_reader=village_reader, provider=get_exam_llm())
 
 
+def exam_settings_from(generation: dict | None) -> dict:
+    """The exam's settings for a declared `generation`, with the module defaults filling the rest.
+
+    A function rather than only `AgentRuntime.exam_settings`, so that what an exam WILL run at can
+    be stated without a runtime, a provider or a model call (`examiner_settings.settings_now`,
+    The Office decisions entry 355). One spelling: the method calls this.
+    """
+    supplied = generation or {}
+    return {
+        "temperature": supplied.get("temperature", DEFAULT_TEMPERATURE),
+        "max_tokens": supplied.get("max_tokens", DEFAULT_MAX_TOKENS),
+        # B131. The window is part of what the exam ran under, so it is recorded with the
+        # rest of the settings in the model identity. A Village declaration wins, as for
+        # the other two; today the Village declares none and EXAM_NUM_CTX supplies it.
+        "num_ctx": int(supplied.get("num_ctx", settings.exam_num_ctx)),
+    }
+
+
 @dataclass
 class AgentRuntime:
     village_reader: VillageReader
@@ -222,15 +240,7 @@ class AgentRuntime:
         in rather than rejected: the Village declares `temperature` and `max_tokens` and says
         nothing about a seed.
         """
-        supplied = self.generation or {}
-        return {
-            "temperature": supplied.get("temperature", DEFAULT_TEMPERATURE),
-            "max_tokens": supplied.get("max_tokens", DEFAULT_MAX_TOKENS),
-            # B131. The window is part of what the exam ran under, so it is recorded with the
-            # rest of the settings in the model identity. A Village declaration wins, as for
-            # the other two; today the Village declares none and EXAM_NUM_CTX supplies it.
-            "num_ctx": int(supplied.get("num_ctx", settings.exam_num_ctx)),
-        }
+        return exam_settings_from(self.generation)
 
     def generation_settings(self, seed: int) -> dict:
         """What `turn` sends for ONE attempt: the exam's settings plus that attempt's seed."""

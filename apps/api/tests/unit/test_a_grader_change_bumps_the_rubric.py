@@ -35,7 +35,11 @@ PINNED = {
     "0.13.0": "6542b88d72c094c5a80bbca7438fc13726589f7db8e9e2502c8053c721a9bc79",
     # ADR-0164 changed the keys half's roll-up (`submitted_dimension_results`,
     # `merge_submitted_attempts`), not these two functions: same digest, bumped by ADR-0100.
-    "0.14.0": "6542b88d72c094c5a80bbca7438fc13726589f7db8e9e2502c8053c721a9bc79",
+    # ADR-0168 added a refusal BEFORE anything is put: a ref naming other examiner settings is
+    # not graded at all, as ADR-0120's protocol refusal. No row is decided by a different rule.
+    # Re-pinned without a bump, as ADR-0160 and B136: a bump moves every ref's `r` segment and
+    # would re-sit every exam at unchanged settings, which entry 355 rules out. Flagged to Ivan.
+    "0.14.0": "0508685a50115b8c4efd9498640319ab5fe09138a39c7b7335b6c10aa8f383d8",
 }
 
 
