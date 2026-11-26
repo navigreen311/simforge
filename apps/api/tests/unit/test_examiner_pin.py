@@ -209,6 +209,25 @@ def test_a_task_temperature_that_is_not_a_number_raises(
         read_village_agent_model(path, forge_id=forge)
 
 
+def test_the_task_cap_wins_over_the_mate_block_for_every_forge(tmp_path: Path) -> None:
+    """The Office decisions entry 354 (Ivan Green, 26 November 2026): the exam examines at the
+    cap the operator sends, `agent_tasks.max_tokens`, not MATE's block, which speech reads."""
+    path = _tasks_config(tmp_path, _LIVE_WITH_TASKS.replace(
+        "    cre-forge: 0.0\n", "    cre-forge: 0.0\n  max_tokens: 1000\n"))
+    for forge, temperature in (("cre-forge", 0.0), ("capitalforge", 0.7)):
+        declared = read_village_agent_model(path, forge_id=forge)
+        assert declared.settings == {"temperature": temperature, "max_tokens": 1000}
+
+
+@pytest.mark.parametrize("bad", ["0", "1000.5", "true", "'1000'"])
+def test_a_task_cap_that_is_not_a_positive_whole_number_raises(tmp_path: Path, bad: str) -> None:
+    path = _tasks_config(tmp_path, _LIVE_WITH_TASKS.replace(
+        "    cre-forge: 0.0\n", f"    cre-forge: 0.0\n  max_tokens: {bad}\n"))
+
+    with pytest.raises(VillageConfigError, match=re.escape("agent_tasks.max_tokens")):
+        read_village_agent_model(path, forge_id="cre-forge")
+
+
 def test_the_examiner_is_at_production_for_its_own_forge_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
