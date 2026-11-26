@@ -69,6 +69,10 @@ VENTURE = "greenstone"
 TERMINAL = frozenset({"answered", "refused", "declined", "escalated", "failed"})
 OLLAMA = "http://127.0.0.1:11434"
 PHI4 = "phi4:latest"
+#: The task cap the sandbox Office certifies (SANDBOX_AGENT_MODEL_MAX_TOKENS): the Village's
+#: `agent_tasks.max_tokens`, which its sandbox operator sends and states. The Office decisions
+#: entry 354 (Ivan Green, 26 November 2026); 4000 before it.
+TASK_MAX_TOKENS = 1000
 #: The sandbox Office's broker: 9212 is the runner's, 9213 a throwaway's. The operator
 #: (village-os `sandbox.BROKER_URLS`) and the Office (`broker/sandbox/guards.py`) accept these.
 RUNNER_OFFICE_PORT = 9212
@@ -561,7 +565,7 @@ class ProcessStack:
             "SANDBOX_AGENT_MODEL_TAG": PHI4,
             "SANDBOX_AGENT_MODEL_DIGEST": tag_digest,
             "SANDBOX_AGENT_MODEL_TEMPERATURE": "0.0",
-            "SANDBOX_AGENT_MODEL_MAX_TOKENS": "4000",
+            "SANDBOX_AGENT_MODEL_MAX_TOKENS": str(TASK_MAX_TOKENS),
         }
 
     def _broker(

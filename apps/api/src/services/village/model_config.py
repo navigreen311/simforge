@@ -177,6 +177,11 @@ def read_village_agent_model(
         # B136. The task temperature for this Forge, declared once for the operator and the exam.
         declared = {**declared, "temperature": found[0]}
         temperature_from = found[1]
+    cap = _task_max_tokens(raw.get("agent_tasks"), config_path)
+    if cap is not None:
+        # The Office decisions entry 354. The task cap, declared once for the operator and the
+        # exam, over MATE's block - which speech reads, and the operator never did.
+        declared = {**declared, "max_tokens": cap}
 
     return VillageAgentModel(
         tag=str(tag),
@@ -221,6 +226,24 @@ def _task_temperature(
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise VillageConfigError(f"{config_path}: `{key}` is {value!r}, not a number.")
     return float(value), key
+
+
+def _task_max_tokens(tasks: object, config_path: Path) -> int | None:
+    """`agent_tasks.max_tokens`, the output cap of a task call, or None if it is not declared.
+
+    Ruled by Ivan Green, 26 November 2026 (The Office, decisions entry 354): measured, then a
+    cap with room above the longest answer that passed and was not a loop. One key, as B136's
+    temperature is one: the operator sends it as `num_predict` and states it as `max_tokens`,
+    and the exam examines at it, so a certification records what the work runs at.
+    """
+    if not isinstance(tasks, dict) or tasks.get("max_tokens") is None:
+        return None
+    value = tasks["max_tokens"]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise VillageConfigError(
+            f"{config_path}: `agent_tasks.max_tokens` is {value!r}, not a positive whole number."
+        )
+    return value
 
 
 def _block_named(models: dict, tag: str, *, preferred: dict | None) -> str:
